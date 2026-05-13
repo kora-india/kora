@@ -14,17 +14,39 @@ export default async function AttendancePage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const todayRecords = await prisma.attendance.groupBy({
-    by: ["classId", "status"],
-    where: { schoolId: user.schoolId, date: today },
-    _count: { id: true },
-  });
+  let assignedClassId: string | null = null;
+  let assignedSectionId: string | null = null;
 
-  const classes = await prisma.class.findMany({
-    where: { schoolId: user.schoolId },
-    include: { sections: true },
-    orderBy: { grade: "asc" },
-  });
+  if (user.role === "TEACHER") {
+    const teacher = await prisma.teacher.findFirst({
+      where: { userId: user.id, schoolId: user.schoolId },
+      select: { assignedClassId: true, assignedSectionId: true },
+    });
+    assignedClassId = teacher?.assignedClassId ?? null;
+    assignedSectionId = teacher?.assignedSectionId ?? null;
+  }
 
-  return <AttendanceContent classes={classes} todayRecords={todayRecords} />;
+  const [todayRecords, classes] = await Promise.all([
+    prisma.attendance.groupBy({
+      by: ["classId", "status"],
+      where: { schoolId: user.schoolId, date: today },
+      _count: { id: true },
+    }),
+    prisma.class.findMany({
+      where: { schoolId: user.schoolId },
+      include: { sections: { orderBy: { name: "asc" } } },
+      orderBy: { grade: "asc" },
+    }),
+  ]);
+
+  return (
+    <AttendanceContent
+      classes={classes}
+      todayRecords={todayRecords}
+      userRole={user.role}
+      userId={user.id}
+      assignedClassId={assignedClassId}
+      assignedSectionId={assignedSectionId}
+    />
+  );
 }

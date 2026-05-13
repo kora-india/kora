@@ -11,11 +11,25 @@ export default async function NoticesPage() {
   const user = session.user as any;
   if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
 
-  const notices = await prisma.notice.findMany({
-    where: { schoolId: user.schoolId },
-    include: { publishedBy: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [notices, classes] = await Promise.all([
+    prisma.notice.findMany({
+      where: { schoolId: user.schoolId },
+      include: { publishedBy: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.class.findMany({
+      where: { schoolId: user.schoolId },
+      select: { id: true, name: true },
+      orderBy: { grade: "asc" },
+    }),
+  ]);
 
-  return <NoticesContent notices={notices} />;
+  return (
+    <NoticesContent
+      notices={notices}
+      classes={classes}
+      currentUserId={user.id}
+      userRole={user.role}
+    />
+  );
 }

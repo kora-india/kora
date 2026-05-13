@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, GraduationCap, DollarSign, Calendar,
   Megaphone, BookOpen, Settings, ChevronLeft, GraduationCap as Logo,
-  Building2, BarChart3, Shield,
+  Building2, BarChart3,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -24,6 +24,7 @@ const adminNavItems = [
   { label: "Classes", href: "/classes", icon: BookOpen },
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Fees", href: "/fees", icon: DollarSign },
+  { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
@@ -69,7 +70,7 @@ function getRoleBadge(role: UserRole) {
   }
 }
 
-export function Sidebar({ userRole, schoolName }: SidebarProps) {
+export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const navItems = getNavItems(userRole);
@@ -150,6 +151,7 @@ export function Sidebar({ userRole, schoolName }: SidebarProps) {
       {/* Collapse toggle */}
       <div className="p-2 border-t">
         <button
+          type="button"
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
             "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
