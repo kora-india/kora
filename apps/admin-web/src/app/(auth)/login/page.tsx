@@ -143,11 +143,34 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 p-4 bg-muted/40 rounded-xl border">
-            <p className="text-xs font-medium mb-2 text-muted-foreground">Demo credentials</p>
-            <div className="space-y-1 text-xs">
-              <p><span className="font-medium">Admin:</span> admin@dps.edu.in / admin123</p>
-              <p><span className="font-medium">Teacher:</span> priya@dps.edu.in / teacher123</p>
-              <p><span className="font-medium">Super:</span> super@schoolos.com / admin123</p>
+            <p className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">Try a demo account</p>
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { label: "School Admin", email: "admin@dps.edu.in", password: "admin123", color: "bg-violet-50 hover:bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:hover:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800" },
+                { label: "Teacher", email: "priya@dps.edu.in", password: "teacher123", color: "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800" },
+                { label: "Super Admin", email: "super@schoolos.com", password: "admin123", color: "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800" },
+              ].map((demo) => (
+                <button
+                  key={demo.label}
+                  type="button"
+                  onClick={async () => {
+                    const result = await signIn("credentials", {
+                      email: demo.email,
+                      password: demo.password,
+                      redirect: false,
+                    });
+                    if (!result?.error) {
+                      toast.success(`Signed in as ${demo.label}`);
+                      router.push("/dashboard");
+                      router.refresh();
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${demo.color}`}
+                >
+                  <span>{demo.label}</span>
+                  <span className="opacity-60 font-normal">{demo.email}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>

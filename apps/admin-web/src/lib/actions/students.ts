@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { checkStudentLimit, planLimitMessage } from "@/lib/plan-limits";
 
 const StudentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -34,6 +35,11 @@ export async function createStudent(data: unknown) {
 
   const parsed = StudentSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  const limit = await checkStudentLimit(user.schoolId);
+  if (!limit.allowed) {
+    return { error: planLimitMessage("students", limit.current, limit.max, limit.plan) };
+  }
 
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 

@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { checkClassLimit, planLimitMessage } from "@/lib/plan-limits";
 
 const ClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
@@ -30,6 +31,11 @@ export async function createClass(data: unknown) {
 
   const parsed = ClassSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  const limit = await checkClassLimit(user.schoolId);
+  if (!limit.allowed) {
+    return { error: planLimitMessage("classes", limit.current, limit.max, limit.plan) };
+  }
 
   try {
     const cls = await prisma.class.create({

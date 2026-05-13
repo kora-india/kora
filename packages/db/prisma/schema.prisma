@@ -49,6 +49,14 @@ enum Gender {
   OTHER
 }
 
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
 // ─── School (Tenant) ───────────────────────────────────────────────────────
 
 model School {
@@ -64,18 +72,54 @@ model School {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  users       User[]
-  students    Student[]
-  teachers    Teacher[]
-  classes     Class[]
-  sections    Section[]
-  attendances Attendance[]
-  fees        Fee[]
-  payments    Payment[]
-  notices     Notice[]
-  assignments Assignment[]
+  users         User[]
+  students      Student[]
+  teachers      Teacher[]
+  classes       Class[]
+  sections      Section[]
+  attendances   Attendance[]
+  fees          Fee[]
+  payments      Payment[]
+  notices       Notice[]
+  assignments   Assignment[]
+  subscription  Subscription?
 
   @@map("schools")
+}
+
+// ─── Subscription ──────────────────────────────────────────────────────────
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  schoolId           String             @unique
+  plan               SubscriptionPlan   @default(FREE)
+  status             SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+// ─── PlanLimit ─────────────────────────────────────────────────────────────
+
+model PlanLimit {
+  id                String           @id @default(cuid())
+  plan              SubscriptionPlan @unique
+  maxStudents       Int
+  maxTeachers       Int
+  maxClasses        Int
+  analyticsEnabled  Boolean          @default(false)
+  customBranding    Boolean          @default(false)
+  prioritySupport   Boolean          @default(false)
+
+  @@map("plan_limits")
 }
 
 // ─── User (Auth) ───────────────────────────────────────────────────────────

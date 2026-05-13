@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { checkTeacherLimit, planLimitMessage } from "@/lib/plan-limits";
 
 const TeacherSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -31,6 +32,11 @@ export async function createTeacher(data: unknown) {
 
   const parsed = TeacherSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  const limit = await checkTeacherLimit(user.schoolId);
+  if (!limit.allowed) {
+    return { error: planLimitMessage("teachers", limit.current, limit.max, limit.plan) };
+  }
 
   const { assignedClassId, assignedSectionId, ...rest } = parsed.data;
 
