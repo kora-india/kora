@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, MoreVertical, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { StudentDialog } from "./student-dialog";
@@ -189,8 +189,37 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
             ))}
             {paginated.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 6 : 5} className="h-32 text-center text-xs text-muted-foreground">
-                  No students found
+                <td colSpan={canEdit ? 6 : 5}>
+                  <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <Users className="w-6 h-6 text-muted-foreground opacity-50" />
+                    </div>
+                    <p className="text-sm font-semibold mb-1">
+                      {search || selectedClass ? "No students match your filters" : "No students yet"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                      {search || selectedClass
+                        ? "Try adjusting your search or filter to find what you're looking for."
+                        : "Add your first student to get started tracking enrollment."}
+                    </p>
+                    {(search || selectedClass) ? (
+                      <button
+                        type="button"
+                        onClick={() => { setSearch(""); setSelectedClass(""); }}
+                        className="h-8 px-4 border rounded-lg text-xs hover:bg-muted transition-colors"
+                      >
+                        Clear filters
+                      </button>
+                    ) : canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setDialog("create")}
+                        className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Student
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}

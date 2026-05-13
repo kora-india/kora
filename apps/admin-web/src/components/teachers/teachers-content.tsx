@@ -124,8 +124,35 @@ export function TeachersContent({ teachers, classes }: Readonly<Props>) {
         ))}
 
         {filtered.length === 0 && (
-          <div className="col-span-full h-32 flex items-center justify-center text-xs text-muted-foreground">
-            No teachers found
+          <div className="col-span-full flex flex-col items-center justify-center py-16 px-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+              <GraduationCap className="w-6 h-6 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-sm font-semibold mb-1">
+              {search ? "No teachers match your search" : "No teachers yet"}
+            </p>
+            <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+              {search
+                ? "Try a different name, subject, or email."
+                : "Add your first teacher to get started."}
+            </p>
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="h-8 px-4 border rounded-lg text-xs hover:bg-muted transition-colors"
+              >
+                Clear search
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDialog("create")}
+                className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Teacher
+              </button>
+            )}
           </div>
         )}
       </div>

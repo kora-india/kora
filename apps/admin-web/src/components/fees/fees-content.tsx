@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, TrendingUp, Clock, AlertCircle, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { DollarSign, TrendingUp, Clock, AlertCircle, Plus, Loader2, Pencil, Trash2, FileX } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -221,7 +221,40 @@ export function FeesContent({ fees, summary, students, classes, canEdit }: Reado
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={canEdit ? 7 : 6} className="h-32 text-center text-xs text-muted-foreground">No fee records found</td></tr>
+              <tr>
+                <td colSpan={canEdit ? 7 : 6}>
+                  <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <FileX className="w-6 h-6 text-muted-foreground opacity-50" />
+                    </div>
+                    <p className="text-sm font-semibold mb-1">
+                      {filter ? `No ${filter.toLowerCase()} fee records` : "No fee records yet"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-4 max-w-xs">
+                      {filter
+                        ? "Try selecting a different status filter."
+                        : "Create your first fee record to start tracking collections."}
+                    </p>
+                    {filter ? (
+                      <button
+                        type="button"
+                        onClick={() => setFilter("")}
+                        className="h-8 px-4 border rounded-lg text-xs hover:bg-muted transition-colors"
+                      >
+                        Show all records
+                      </button>
+                    ) : canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => { feeForm.reset(); setFeeDialog(true); }}
+                        className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Create Fee
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

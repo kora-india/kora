@@ -2,6 +2,7 @@ import { auth } from "@schoolos/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { PageTransition } from "@/components/layout/page-transition";
 import { UserRole } from "@schoolos/types";
 
 export default async function DashboardRootLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +17,7 @@ export default async function DashboardRootLayout({ children }: { children: Reac
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar user={user} />
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <PageTransition>{children}</PageTransition>
         </main>
       </div>
     </div>
