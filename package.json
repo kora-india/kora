@@ -1,0 +1,23 @@
+{
+  "name": "schoolos",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "db:generate": "cd packages/db && pnpm prisma generate",
+    "db:push": "cd packages/db && pnpm prisma db push",
+    "db:seed": "cd packages/db && pnpm seed",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": { "node": ">=18.0.0" }
+}

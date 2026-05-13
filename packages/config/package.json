@@ -1,0 +1,15 @@
+{
+  "name": "@schoolos/config",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "tailwindcss": "^3.4.3"
+  },
+  "exports": {
+    "./tsconfig": "./tsconfig.base.json",
+    "./tsconfig/base": "./tsconfig.base.json",
+    "./tsconfig/nextjs": "./tsconfig.nextjs.json",
+    "./tailwind": "./tailwind.config.ts",
+    "./eslint": "./eslint.config.js"
+  }
+}

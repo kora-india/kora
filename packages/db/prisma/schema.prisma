@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  ACCOUNTANT
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum FeeStatus {
+  PAID
+  PENDING
+  OVERDUE
+  WAIVED
+}
+
+enum NoticePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ─── School (Tenant) ───────────────────────────────────────────────────────
+
+model School {
+  id          String           @id @default(cuid())
+  name        String
+  subdomain   String           @unique
+  address     String?
+  phone       String?
+  email       String?
+  logoUrl     String?
+  plan        SubscriptionPlan @default(FREE)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  users       User[]
+  students    Student[]
+  teachers    Teacher[]
+  classes     Class[]
+  sections    Section[]
+  attendances Attendance[]
+  fees        Fee[]
+  payments    Payment[]
+  notices     Notice[]
+  assignments Assignment[]
+
+  @@map("schools")
+}
+
+// ─── User (Auth) ───────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  schoolId  String?
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(TEACHER)
+  image     String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school      School?      @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  teacher     Teacher?
+  attendances Attendance[]
+  notices     Notice[]
+
+  @@index([schoolId])
+  @@index([email])
+  @@map("users")
+}
+
+// ─── Class & Section ───────────────────────────────────────────────────────
+
+model Class {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  grade     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sections    Section[]
+  students    Student[]
+  teachers    Teacher[]
+  attendances Attendance[]
+  assignments Assignment[]
+  fees        Fee[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("classes")
+}
+
+model Section {
+  id        String   @id @default(cuid())
+  schoolId  String
+  classId   String
+  name      String
+  createdAt DateTime @default(now())
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  students    Student[]
+  teachers    Teacher[]
+  attendances Attendance[]
+  assignments Assignment[]
+
+  @@unique([classId, name])
+  @@index([schoolId])
+  @@map("sections")
+}
+
+// ─── Student ───────────────────────────────────────────────────────────────
+
+model Student {
+  id               String   @id @default(cuid())
+  schoolId         String
+  classId          String
+  sectionId        String
+  rollNumber       String
+  admissionNumber  String   @unique
+  name             String
+  dateOfBirth      DateTime?
+  gender           Gender   @default(MALE)
+  parentName       String
+  parentPhone      String
+  parentEmail      String?
+  address          String?
+  photoUrl         String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class       Class        @relation(fields: [classId], references: [id])
+  section     Section      @relation(fields: [sectionId], references: [id])
+  attendances Attendance[]
+  fees        Fee[]
+
+  @@unique([schoolId, rollNumber, classId])
+  @@index([schoolId])
+  @@index([classId])
+  @@map("students")
+}
+
+// ─── Teacher ───────────────────────────────────────────────────────────────
+
+model Teacher {
+  id                String   @id @default(cuid())
+  schoolId          String
+  userId            String   @unique
+  name              String
+  email             String
+  phone             String?
+  subject           String
+  qualification     String?
+  assignedClassId   String?
+  assignedSectionId String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  school          School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedClass   Class?       @relation(fields: [assignedClassId], references: [id])
+  assignedSection Section?     @relation(fields: [assignedSectionId], references: [id])
+  assignments     Assignment[]
+
+  @@index([schoolId])
+  @@index([assignedClassId])
+  @@map("teachers")
+}
+
+// ─── Attendance ────────────────────────────────────────────────────────────
+
+model Attendance {
+  id          String           @id @default(cuid())
+  schoolId    String
+  studentId   String
+  classId     String
+  sectionId   String
+  date        DateTime         @db.Date
+  status      AttendanceStatus @default(PRESENT)
+  markedById  String
+  remarks     String?
+  createdAt   DateTime         @default(now())
+
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class   @relation(fields: [classId], references: [id])
+  section   Section @relation(fields: [sectionId], references: [id])
+  markedBy  User    @relation(fields: [markedById], references: [id])
+
+  @@unique([studentId, date])
+  @@index([schoolId, date])
+  @@index([classId, sectionId, date])
+  @@map("attendances")
+}
+
+// ─── Fee & Payment ─────────────────────────────────────────────────────────
+
+model Fee {
+  id        String    @id @default(cuid())
+  schoolId  String
+  studentId String
+  classId   String
+  feeType   String
+  amount    Decimal   @db.Decimal(10, 2)
+  dueDate   DateTime  @db.Date
+  status    FeeStatus @default(PENDING)
+  paidAt    DateTime?
+  paidAmount Decimal? @db.Decimal(10, 2)
+  remarks   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class    Class     @relation(fields: [classId], references: [id])
+  payments Payment[]
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([status])
+  @@map("fees")
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  schoolId  String
+  feeId     String
+  amount    Decimal  @db.Decimal(10, 2)
+  paidAt    DateTime @default(now())
+  method    String   @default("CASH")
+  receiptNo String   @unique
+  remarks   String?
+  createdAt DateTime @default(now())
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  fee    Fee    @relation(fields: [feeId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("payments")
+}
+
+// ─── Notice ────────────────────────────────────────────────────────────────
+
+model Notice {
+  id             String        @id @default(cuid())
+  schoolId       String
+  title          String
+  content        String
+  priority       NoticePriority @default(MEDIUM)
+  targetClassId  String?
+  publishedById  String
+  isPublished    Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  school       School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  publishedBy  User   @relation(fields: [publishedById], references: [id])
+
+  @@index([schoolId])
+  @@map("notices")
+}
+
+// ─── Assignment ────────────────────────────────────────────────────────────
+
+model Assignment {
+  id          String   @id @default(cuid())
+  schoolId    String
+  classId     String
+  sectionId   String
+  teacherId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  fileUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id])
+  teacher Teacher @relation(fields: [teacherId], references: [id])
+
+  @@index([schoolId])
+  @@index([classId, sectionId])
+  @@map("assignments")
+}
