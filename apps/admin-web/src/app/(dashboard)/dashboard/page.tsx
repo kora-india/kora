@@ -59,7 +59,7 @@ async function getDashboardData(schoolId: string) {
   });
 
   const revenueByMonth: Record<string, number> = {};
-  payments.forEach((p) => {
+  payments.forEach((p: (typeof payments)[number]) => {
     const key = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(p.paidAt);
     revenueByMonth[key] = (revenueByMonth[key] ?? 0) + Number(p.amount);
   });
