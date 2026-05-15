@@ -2,6 +2,7 @@
 
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import type { Prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -57,7 +58,7 @@ export async function createSchool(data: unknown) {
   const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Create school
       const school = await tx.school.create({
         data: {
