@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { prisma } from "@schoolos/db";
 import { UserRole } from "@schoolos/types";
 import type { NextAuthConfig } from "next-auth";
 
@@ -16,6 +15,7 @@ export const authConfig: NextAuthConfig = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        const { prisma } = await import("@schoolos/db");
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
           include: { school: true },

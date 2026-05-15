@@ -1,9 +1,14 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@schoolos/ui", "@schoolos/utils", "@schoolos/types", "@schoolos/db", "@schoolos/auth"],
+
+  // In a monorepo, Prisma lives outside the app folder; set tracing root so Vercel
+  // includes the Prisma query engine in the serverless bundle.
+  outputFileTracingRoot: path.join(__dirname, "../.."),
 
   experimental: {
     serverActions: {
