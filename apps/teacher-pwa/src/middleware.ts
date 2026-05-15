@@ -10,4 +10,6 @@ export default auth((req) => {
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
+  // Next.js 15.2+ supports Node.js middleware runtime (experimental).
+  runtime: "nodejs",
 };

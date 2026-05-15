@@ -42,4 +42,7 @@ export default auth((req) => {
 export const config = {
   // Exclude Next.js internals and common static assets; otherwise CSS/JS can get redirected.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico)$).*)"],
+  // Next.js 15.2+ supports Node.js middleware runtime (experimental).
+  // This avoids Edge runtime limitations when importing Node-only deps.
+  runtime: "nodejs",
 };

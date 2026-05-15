@@ -2,6 +2,7 @@
   "name": "@schoolos/config",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "tailwindcss": "^3.4.3"
   },
