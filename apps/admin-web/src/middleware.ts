@@ -10,6 +10,18 @@ function isPublic(pathname: string) {
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
+  // Redirect Vercel deployment-specific URLs to the canonical domain.
+  // Session cookies are bound to NEXTAUTH_URL's domain, so auth cannot
+  // work on the deployment URL (*.vercel.app deployment hash URLs).
+  const canonicalOrigin = process.env.NEXTAUTH_URL || process.env.AUTH_URL;
+  if (canonicalOrigin) {
+    const canonical = new URL(canonicalOrigin);
+    if (req.nextUrl.hostname !== canonical.hostname) {
+      const target = new URL(req.nextUrl.pathname + req.nextUrl.search, canonical.origin);
+      return NextResponse.redirect(target, { status: 301 });
+    }
+  }
+
   // Always allow public paths
   if (isPublic(pathname)) {
     // Redirect authenticated users away from login
