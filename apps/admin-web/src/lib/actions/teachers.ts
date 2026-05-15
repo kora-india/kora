@@ -2,6 +2,7 @@
 
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import type { Prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -43,7 +44,7 @@ export async function createTeacher(data: unknown) {
   try {
     const hashedPassword = await bcrypt.hash("Welcome@123", 10);
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const newUser = await tx.user.create({
         data: {
           email: rest.email,
@@ -86,7 +87,7 @@ export async function updateTeacher(id: string, data: unknown) {
   const { assignedClassId, assignedSectionId, ...rest } = parsed.data;
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const teacher = await tx.teacher.findFirst({
         where: { id, schoolId: user.schoolId },
       });
