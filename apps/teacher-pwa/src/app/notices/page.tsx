@@ -31,7 +31,7 @@ export default async function NoticesPage() {
         </div>
       </div>
       <div className="p-4 space-y-3">
-        {notices.map((n) => (
+        {notices.map((n: any) => (
           <div key={n.id} className="bg-card border rounded-2xl p-4">
             <div className="flex items-start gap-2">
               <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[n.priority] ?? "bg-muted"}`} />

@@ -17,9 +17,9 @@ export default async function AttendancePage() {
     where: { schoolId: user.schoolId, classId: teacher.assignedClassId ?? undefined },
     _count: { id: true },
     orderBy: { date: "desc" },
-  }).then((rows) => {
+  }).then((rows: any[]) => {
     const byDate: Record<string, { present: number; absent: number }> = {};
-    rows.forEach((r) => {
+    rows.forEach((r: any) => {
       const d = new Date(r.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
       if (!byDate[d]) byDate[d] = { present: 0, absent: 0 };
       if (r.status === "PRESENT") byDate[d].present += r._count.id;
@@ -47,7 +47,7 @@ export default async function AttendancePage() {
         </Link>
       </div>
       <div className="p-4 space-y-3">
-        {records.map((r) => (
+        {records.map((r: any) => (
           <div key={r.date} className="bg-card border rounded-2xl p-4 flex items-center gap-4">
             <div className="text-center w-12">
               <p className="text-lg font-bold">{r.pct}%</p>

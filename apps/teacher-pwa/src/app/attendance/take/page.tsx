@@ -54,7 +54,7 @@ export default async function TakeAttendancePage() {
   });
 
   const existingMap: Record<string, string> = {};
-  existing.forEach((r) => { existingMap[r.studentId] = r.status; });
+  existing.forEach((r: { studentId: string; status: string }) => { existingMap[r.studentId] = r.status; });
 
   return (
     <div className="min-h-screen bg-background pb-20">

@@ -103,7 +103,7 @@ export function HomeContent({ user, teacher, todayAttendanceDone, upcomingAssign
         </div>
 
         <div>
-          <h2 className="text-sm font-semibold mb-3">Today's Timetable</h2>
+          <h2 className="text-sm font-semibold mb-3">Today&apos;s Timetable</h2>
           <div className="bg-card border rounded-2xl overflow-hidden divide-y">
             {timetable.map((t) => (
               <div key={t.time} className={`flex items-center gap-3 px-4 py-3.5 ${t.isNow ? "bg-violet-50 dark:bg-violet-900/20" : ""}`}>

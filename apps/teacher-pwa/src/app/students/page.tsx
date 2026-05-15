@@ -29,7 +29,7 @@ export default async function StudentsPage() {
         </div>
       </div>
       <div className="p-4 space-y-2">
-        {students.map((s) => {
+        {students.map((s: any) => {
           const feeStatus = s.fees?.[0]?.status ?? "PENDING";
           return (
             <div key={s.id} className="bg-card border rounded-2xl p-4 flex items-center gap-3">

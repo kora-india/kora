@@ -36,7 +36,7 @@ export default async function AssignmentsPage() {
             <p className="text-sm text-muted-foreground">No assignments yet</p>
             <p className="text-xs text-muted-foreground mt-1">Tap + to create one</p>
           </div>
-        ) : assignments.map((a) => (
+        ) : assignments.map((a: any) => (
           <div key={a.id} className="bg-card border rounded-2xl p-4">
             <div className="flex items-start justify-between">
               <h3 className="text-sm font-semibold flex-1 mr-2">{a.title}</h3>
