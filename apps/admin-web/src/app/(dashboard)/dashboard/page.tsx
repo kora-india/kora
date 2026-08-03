@@ -10,6 +10,7 @@ async function getDashboardData(schoolId: string) {
   const [
     totalStudents,
     totalTeachers,
+    totalClasses,
     pendingFees,
     todayAttendance,
     recentActivity,
@@ -17,6 +18,7 @@ async function getDashboardData(schoolId: string) {
   ] = await Promise.all([
     prisma.student.count({ where: { schoolId, isActive: true } }),
     prisma.teacher.count({ where: { schoolId, isActive: true } }),
+    prisma.class.count({ where: { schoolId } }),
     prisma.fee.aggregate({
       where: { schoolId, status: { in: ["PENDING", "OVERDUE"] } },
       _sum: { amount: true },
@@ -53,27 +55,41 @@ async function getDashboardData(schoolId: string) {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
-  const payments = await prisma.payment.findMany({
-    where: { schoolId, paidAt: { gte: sixMonthsAgo } },
-    select: { amount: true, paidAt: true },
-  });
+  const [payments, pendingFeeRows] = await Promise.all([
+    prisma.payment.findMany({
+      where: { schoolId, paidAt: { gte: sixMonthsAgo } },
+      select: { amount: true, paidAt: true },
+    }),
+    prisma.fee.findMany({
+      where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
+      select: { amount: true, dueDate: true },
+    }),
+  ]);
+
+  const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
 
   const revenueByMonth: Record<string, number> = {};
   payments.forEach((p: (typeof payments)[number]) => {
-    const key = new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(p.paidAt);
+    const key = monthKey(p.paidAt);
     revenueByMonth[key] = (revenueByMonth[key] ?? 0) + Number(p.amount);
+  });
+
+  const pendingByMonth: Record<string, number> = {};
+  pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
+    const key = monthKey(f.dueDate);
+    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + Number(f.amount);
   });
 
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i));
-    return new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d);
+    return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
   });
 
-  const revenueData = months.map((m) => ({
-    month: m,
-    collected: revenueByMonth[m] ?? Math.floor(Math.random() * 500000 + 800000),
-    pending: Math.floor(Math.random() * 200000 + 100000),
+  const revenueData = months.map(({ label, key }) => ({
+    month: label,
+    collected: revenueByMonth[key] ?? 0,
+    pending: pendingByMonth[key] ?? 0,
   }));
 
   return {
@@ -85,7 +101,7 @@ async function getDashboardData(schoolId: string) {
         ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
         : 0,
       monthlyRevenue: revenueData[revenueData.length - 1]?.collected ?? 0,
-      activeClasses: 21,
+      activeClasses: totalClasses,
     },
     revenueData,
     recentStudents: recentActivity,

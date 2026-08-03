@@ -15,8 +15,25 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = session.user;
   if (!user.schoolId) return NextResponse.json({ error: "No school" }, { status: 403 });
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const schoolId = user.schoolId;
   const data = Schema.parse(await req.json());
+
+  if (user.role === "TEACHER") {
+    const teacher = await prisma.teacher.findFirst({
+      where: { userId: user.id, schoolId },
+    });
+    if (!teacher) return NextResponse.json({ error: "Teacher record not found" }, { status: 403 });
+    if (teacher.assignedClassId !== data.classId || teacher.assignedSectionId !== data.sectionId) {
+      return NextResponse.json(
+        { error: "You can only mark attendance for your assigned class" },
+        { status: 403 }
+      );
+    }
+  }
+
   const date = new Date(data.date);
   date.setHours(0,0,0,0);
 

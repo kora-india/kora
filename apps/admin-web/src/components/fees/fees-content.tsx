@@ -82,7 +82,11 @@ export function FeesContent({ fees, summary, students, classes, canEdit }: Reado
   const onSubmitPayment = async (data: PaymentFormData) => {
     const result = await recordPayment({ feeId: payDialog.id, ...data });
     if (result.error) { toast.error(result.error); return; }
-    toast.success(`Payment recorded · Receipt: ${result.receiptNo}`);
+    toast.success(
+      result.remaining
+        ? `Partial payment recorded · Receipt: ${result.receiptNo} · Balance remaining: ${formatCurrency(result.remaining)}`
+        : `Payment recorded · Receipt: ${result.receiptNo}`
+    );
     setPayDialog(null);
     payForm.reset();
     router.refresh();
@@ -192,7 +196,7 @@ export function FeesContent({ fees, summary, students, classes, canEdit }: Reado
                       {f.status !== "PAID" && f.status !== "WAIVED" && (
                         <button
                           type="button"
-                          onClick={() => { payForm.reset({ method: "CASH", amount: Number(f.amount) }); setPayDialog(f); }}
+                          onClick={() => { payForm.reset({ method: "CASH", amount: Number(f.amount) - Number(f.paidAmount ?? 0) }); setPayDialog(f); }}
                           className="text-xs text-violet-600 hover:underline font-medium"
                         >
                           Mark Paid
@@ -307,6 +311,12 @@ export function FeesContent({ fees, summary, students, classes, canEdit }: Reado
       {/* Record Payment Dialog */}
       <Dialog open={!!payDialog} onOpenChange={(open) => { if (!open) setPayDialog(null); }} title="Record Payment" description={payDialog ? `Paying for: ${payDialog.student?.name} · ${payDialog.feeType}` : ""} className="max-w-sm">
         <form onSubmit={payForm.handleSubmit(onSubmitPayment)} className="space-y-4">
+          {payDialog && Number(payDialog.paidAmount ?? 0) > 0 && (
+            <p className="text-xs text-muted-foreground -mt-1">
+              Already paid {formatCurrency(Number(payDialog.paidAmount))} of {formatCurrency(Number(payDialog.amount))} ·
+              Balance due: {formatCurrency(Number(payDialog.amount) - Number(payDialog.paidAmount))}
+            </p>
+          )}
           <FormField label="Amount Paid (₹)" error={payForm.formState.errors.amount?.message} required>
             <input {...payForm.register("amount")} type="number" min={0} step={0.01} className={inputCls} />
           </FormField>

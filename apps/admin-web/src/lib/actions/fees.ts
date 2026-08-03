@@ -65,6 +65,19 @@ export async function recordPayment(data: unknown) {
       where: { id: parsed.data.feeId, schoolId: user.schoolId },
     });
     if (!fee) return { error: "Fee record not found" };
+    if (fee.status === "PAID") return { error: "This fee is already fully paid" };
+    if (fee.status === "WAIVED") return { error: "This fee has been waived" };
+
+    const alreadyPaid = Number(fee.paidAmount ?? 0);
+    const totalDue = Number(fee.amount);
+    const remaining = totalDue - alreadyPaid;
+
+    if (parsed.data.amount > remaining) {
+      return { error: `Amount exceeds remaining balance of ${remaining.toFixed(2)}` };
+    }
+
+    const totalPaid = alreadyPaid + parsed.data.amount;
+    const isFullyPaid = totalPaid >= totalDue;
 
     const receiptNo = `RCP-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -82,15 +95,15 @@ export async function recordPayment(data: unknown) {
       prisma.fee.update({
         where: { id: parsed.data.feeId },
         data: {
-          status: "PAID",
-          paidAt: new Date(),
-          paidAmount: parsed.data.amount,
+          status: isFullyPaid ? "PAID" : fee.status,
+          paidAt: isFullyPaid ? new Date() : fee.paidAt,
+          paidAmount: totalPaid,
         },
       }),
     ]);
 
     revalidatePath("/fees");
-    return { success: true, receiptNo };
+    return { success: true, receiptNo, remaining: isFullyPaid ? 0 : totalDue - totalPaid };
   } catch (e: any) {
     return { error: e.message };
   }

@@ -37,10 +37,15 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  // SUPER_ADMIN has no schoolId — block them from school-specific pages
+  // SUPER_ADMIN has no schoolId, so school-scoped pages have nothing to show them.
+  // Redirect stray direct navigation to the page built for their role.
   const user = req.auth.user;
-  if (user?.role === "SUPER_ADMIN" && pathname.startsWith("/schools") === false) {
-    // Allow super admin everywhere in the dashboard
+  const SUPER_ADMIN_ALLOWED = ["/dashboard", "/schools", "/analytics", "/settings"];
+  if (
+    user?.role === "SUPER_ADMIN" &&
+    !SUPER_ADMIN_ALLOWED.some((p) => pathname === p || pathname.startsWith(p + "/"))
+  ) {
+    return NextResponse.redirect(new URL("/schools", req.url));
   }
 
   const res = NextResponse.next();

@@ -47,12 +47,17 @@ export async function createAssignment(data: unknown) {
         return { error: "You can only create assignments for your assigned class" };
       }
     } else {
-      teacherId = await resolveTeacherId(user.id, user.schoolId);
-      if (!teacherId) {
-        const anyTeacher = await prisma.teacher.findFirst({ where: { schoolId: user.schoolId } });
-        teacherId = anyTeacher?.id ?? null;
+      const classTeacher = await prisma.teacher.findFirst({
+        where: {
+          schoolId: user.schoolId,
+          assignedClassId: parsed.data.classId,
+          assignedSectionId: parsed.data.sectionId,
+        },
+      });
+      if (!classTeacher) {
+        return { error: "No teacher is assigned to this class and section yet. Assign one first." };
       }
-      if (!teacherId) return { error: "No teacher record found for this school" };
+      teacherId = classTeacher.id;
     }
 
     const assignment = await prisma.assignment.create({

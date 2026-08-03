@@ -27,6 +27,11 @@ async function getAdminSession() {
   return { ...user, schoolId: user.schoolId };
 }
 
+function generateTempPassword(): string {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
 export async function createTeacher(data: unknown) {
   const user = await getAdminSession();
   if (!user) return { error: "Unauthorized" };
@@ -42,7 +47,8 @@ export async function createTeacher(data: unknown) {
   const { assignedClassId, assignedSectionId, ...rest } = parsed.data;
 
   try {
-    const hashedPassword = await bcrypt.hash("Welcome@123", 10);
+    const tempPassword = generateTempPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const newUser = await tx.user.create({
@@ -70,7 +76,7 @@ export async function createTeacher(data: unknown) {
     });
 
     revalidatePath("/teachers");
-    return { success: true, id: result.id };
+    return { success: true, id: result.id, tempPassword };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A user with this email already exists" };
     return { error: e.message };
