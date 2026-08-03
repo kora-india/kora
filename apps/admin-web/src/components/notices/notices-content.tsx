@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls, selectCls, textareaCls } from "@/components/ui/form-field";
@@ -34,9 +35,12 @@ interface Props {
   classes: { id: string; name: string }[];
   currentUserId: string;
   userRole: string;
+  page: number;
+  totalPages: number;
+  totalCount: number;
 }
 
-export function NoticesContent({ notices, classes, currentUserId, userRole }: Readonly<Props>) {
+export function NoticesContent({ notices, classes, currentUserId, userRole, page, totalPages, totalCount }: Readonly<Props>) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"closed" | "create" | "edit">("closed");
   const [editTarget, setEditTarget] = useState<any>(null);
@@ -97,7 +101,7 @@ export function NoticesContent({ notices, classes, currentUserId, userRole }: Re
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Notices</h1>
-          <p className="text-muted-foreground text-sm mt-1">{notices.length} notices</p>
+          <p className="text-muted-foreground text-sm mt-1">{totalCount} notices</p>
         </div>
         <button
           type="button"
@@ -187,6 +191,30 @@ export function NoticesContent({ notices, classes, currentUserId, userRole }: Re
           </div>
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <Link
+            href={`?page=${page - 1}`}
+            aria-disabled={page <= 1}
+            className={`flex items-center gap-1 h-8 px-3 rounded-lg border text-xs font-medium transition-colors ${
+              page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-muted"
+            }`}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Previous
+          </Link>
+          <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+          <Link
+            href={`?page=${page + 1}`}
+            aria-disabled={page >= totalPages}
+            className={`flex items-center gap-1 h-8 px-3 rounded-lg border text-xs font-medium transition-colors ${
+              page >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-muted"
+            }`}
+          >
+            Next <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog

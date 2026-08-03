@@ -32,7 +32,7 @@ function generateTempPassword(): string {
 async function getSuperAdminSession() {
   const session = await auth();
   if (!session?.user) return null;
-  const user = session.user as any;
+  const user = session.user;
   if (user.role !== "SUPER_ADMIN") return null;
   return user;
 }

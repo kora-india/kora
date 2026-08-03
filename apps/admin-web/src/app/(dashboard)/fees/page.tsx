@@ -8,7 +8,7 @@ export const metadata = { title: "Fees" };
 export default async function FeesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
@@ -33,11 +33,13 @@ export default async function FeesPage() {
       where: { schoolId: user.schoolId, isActive: true },
       select: { id: true, name: true, classId: true, rollNumber: true },
       orderBy: { name: "asc" },
+      take: 500,
     }),
     prisma.class.findMany({
       where: { schoolId: user.schoolId },
       select: { id: true, name: true },
       orderBy: { grade: "asc" },
+      take: 200,
     }),
   ]);
 

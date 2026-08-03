@@ -21,10 +21,10 @@ const MarkAttendanceSchema = z.object({
 async function getTeacherSession() {
   const session = await auth();
   if (!session?.user) return null;
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return null;
   if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) return null;
-  return user;
+  return { ...user, schoolId: user.schoolId };
 }
 
 export async function markAttendance(data: unknown) {
@@ -76,7 +76,7 @@ export async function markAttendance(data: unknown) {
 export async function getAttendanceForClass(classId: string, sectionId: string, date: string) {
   const session = await auth();
   if (!session?.user) return { error: "Unauthorized" };
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return { error: "No school" };
 
   try {

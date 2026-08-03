@@ -8,7 +8,7 @@ export const metadata = { title: "Assignments" };
 export default async function AssignmentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
 
   let classFilter: object = { schoolId: user.schoolId };
@@ -32,11 +32,13 @@ export default async function AssignmentsPage() {
         teacher: { select: { name: true, userId: true } },
       },
       orderBy: { dueDate: "asc" },
+      take: 300,
     }),
     prisma.class.findMany({
       where: { schoolId: user.schoolId },
       include: { sections: { select: { id: true, name: true } } },
       orderBy: { grade: "asc" },
+      take: 200,
     }),
   ]);
 

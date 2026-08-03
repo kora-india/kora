@@ -2,7 +2,16 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { UserRole } from "@schoolos/types";
+import type { SessionUser } from "@schoolos/types";
 import type { NextAuthConfig } from "next-auth";
+
+declare module "next-auth" {
+  interface Session {
+    user: SessionUser;
+  }
+
+  interface User extends SessionUser {}
+}
 
 export const authConfig: NextAuthConfig = {
   providers: [
@@ -34,7 +43,9 @@ export const authConfig: NextAuthConfig = {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          // Prisma's generated UserRole enum and @schoolos/types's UserRole
+          // are structurally identical but nominally distinct types.
+          role: user.role as unknown as UserRole,
           schoolId: user.schoolId,
           image: user.image,
         };
@@ -44,17 +55,19 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
-        token.schoolId = (user as any).schoolId;
+        token.id = user.id as string;
+        token.role = user.role;
+        token.schoolId = user.schoolId;
       }
       return token;
     },
     async session({ session, token }) {
+      // token is a loosely-typed Record<string, unknown> by design (next-auth's JWT type);
+      // these fields are the ones we ourselves set in the jwt callback above.
       if (session.user) {
         session.user.id = token.id as string;
-        (session.user as any).role = token.role;
-        (session.user as any).schoolId = token.schoolId;
+        session.user.role = token.role as UserRole;
+        session.user.schoolId = token.schoolId as string | null;
       }
       return session;
     },

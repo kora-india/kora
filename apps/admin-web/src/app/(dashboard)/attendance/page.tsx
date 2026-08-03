@@ -8,7 +8,7 @@ export const metadata = { title: "Attendance" };
 export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
 
   const today = new Date();
@@ -36,6 +36,7 @@ export default async function AttendancePage() {
       where: { schoolId: user.schoolId },
       include: { sections: { orderBy: { name: "asc" } } },
       orderBy: { grade: "asc" },
+      take: 200,
     }),
   ]);
 

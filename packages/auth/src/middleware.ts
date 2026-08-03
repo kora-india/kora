@@ -16,7 +16,7 @@ export function withAuth(
       });
     }
 
-    const userRole = (session.user as any).role as UserRole;
+    const userRole = session.user.role;
 
     if (options.roles && !options.roles.includes(userRole)) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {

@@ -19,10 +19,10 @@ const SectionSchema = z.object({
 async function getAdminSession() {
   const session = await auth();
   if (!session?.user) return null;
-  const user = session.user as any;
+  const user = session.user;
   if (!user.schoolId) return null;
   if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) return null;
-  return user;
+  return { ...user, schoolId: user.schoolId };
 }
 
 export async function createClass(data: unknown) {

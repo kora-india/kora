@@ -97,7 +97,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const user = session.user as any;
+  const user = session.user;
   const schoolId = user.schoolId;
 
   if (!schoolId && user.role !== UserRole.SUPER_ADMIN) {

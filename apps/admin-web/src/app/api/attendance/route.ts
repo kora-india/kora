@@ -19,7 +19,9 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = session.user as any;
+    const user = session.user;
+    if (!user.schoolId) return NextResponse.json({ error: "No school" }, { status: 403 });
+    const schoolId = user.schoolId;
     const body = await req.json();
     const data = MarkAttendanceSchema.parse(body);
 
@@ -32,7 +34,7 @@ export async function POST(req: NextRequest) {
           where: { studentId_date: { studentId: rec.studentId, date } },
           update: { status: rec.status as any, markedById: user.id, remarks: rec.remarks },
           create: {
-            schoolId: user.schoolId,
+            schoolId,
             studentId: rec.studentId,
             classId: data.classId,
             sectionId: data.sectionId,
@@ -52,22 +54,36 @@ export async function POST(req: NextRequest) {
   }
 }
 
+const MAX_PAGE_SIZE = 100;
+
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = session.user as any;
+    const user = session.user;
     const { searchParams } = new URL(req.url);
     const classId = searchParams.get("classId");
     const date = searchParams.get("date");
+    const page = Math.max(1, Number(searchParams.get("page")) || 1);
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || MAX_PAGE_SIZE));
 
     const where: any = { schoolId: user.schoolId };
     if (classId) where.classId = classId;
     if (date) { const d = new Date(date); d.setHours(0,0,0,0); where.date = d; }
 
-    const records = await prisma.attendance.findMany({ where, include: { student: { select: { name: true, rollNumber: true } } } });
-    return NextResponse.json(records);
+    const [records, total] = await Promise.all([
+      prisma.attendance.findMany({
+        where,
+        include: { student: { select: { name: true, rollNumber: true } } },
+        orderBy: { date: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.attendance.count({ where }),
+    ]);
+
+    return NextResponse.json({ records, page, limit, total, totalPages: Math.ceil(total / limit) });
   } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }

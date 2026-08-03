@@ -10,7 +10,8 @@ export default async function TakeAttendancePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const user = session.user as any;
+  const user = session.user;
+  if (!user.schoolId) redirect("/login");
 
   const teacher = await prisma.teacher.findFirst({
     where: { userId: user.id },

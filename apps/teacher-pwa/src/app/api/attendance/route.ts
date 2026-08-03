@@ -13,7 +13,9 @@ const Schema = z.object({
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const user = session.user as any;
+  const user = session.user;
+  if (!user.schoolId) return NextResponse.json({ error: "No school" }, { status: 403 });
+  const schoolId = user.schoolId;
   const data = Schema.parse(await req.json());
   const date = new Date(data.date);
   date.setHours(0,0,0,0);
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest) {
       prisma.attendance.upsert({
         where: { studentId_date: { studentId: rec.studentId, date } },
         update: { status: rec.status as any, markedById: user.id },
-        create: { schoolId: user.schoolId, studentId: rec.studentId, classId: data.classId, sectionId: data.sectionId, date, status: rec.status as any, markedById: user.id },
+        create: { schoolId, studentId: rec.studentId, classId: data.classId, sectionId: data.sectionId, date, status: rec.status as any, markedById: user.id },
       })
     )
   );

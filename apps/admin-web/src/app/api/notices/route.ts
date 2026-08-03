@@ -13,7 +13,8 @@ const NoticeSchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const user = session.user as any;
+  const user = session.user;
+  if (!user.schoolId) return NextResponse.json({ error: "No school" }, { status: 403 });
 
   const body = await req.json();
   const data = NoticeSchema.parse(body);

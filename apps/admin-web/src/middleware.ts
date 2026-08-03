@@ -38,7 +38,7 @@ export default auth((req) => {
   }
 
   // SUPER_ADMIN has no schoolId — block them from school-specific pages
-  const user = req.auth.user as any;
+  const user = req.auth.user;
   if (user?.role === "SUPER_ADMIN" && pathname.startsWith("/schools") === false) {
     // Allow super admin everywhere in the dashboard
   }

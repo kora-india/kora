@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 export default async function NoticesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const user = session.user as any;
+  const user = session.user;
 
   const notices = user.schoolId ? await prisma.notice.findMany({
     where: { schoolId: user.schoolId, isPublished: true },

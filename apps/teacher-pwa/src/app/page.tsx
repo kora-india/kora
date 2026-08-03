@@ -8,7 +8,7 @@ export default async function HomePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const user = session.user as any;
+  const user = session.user;
 
   let teacher = null;
   let todayAttendanceDone = false;
