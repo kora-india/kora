@@ -1,110 +1,155 @@
-"use client";
+import { auth } from "@schoolos/auth";
+import { prisma } from "@schoolos/db";
+import { redirect } from "next/navigation";
+import { AnalyticsContent } from "@/components/analytics/analytics-content";
 
-import { motion } from "framer-motion";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
-import { formatCurrency } from "@schoolos/utils";
+export const metadata = { title: "Analytics" };
 
-const revenueData = [
-  { month: "Nov", collected: 1420000, pending: 180000 },
-  { month: "Dec", collected: 1650000, pending: 120000 },
-  { month: "Jan", collected: 1580000, pending: 200000 },
-  { month: "Feb", collected: 1720000, pending: 90000 },
-  { month: "Mar", collected: 1800000, pending: 150000 },
-  { month: "Apr", collected: 1860000, pending: 240000 },
-];
+const FEE_TYPE_SLICE_LIMIT = 5;
 
-const attendanceData = [
-  { month: "Nov", rate: 88 },
-  { month: "Dec", rate: 85 },
-  { month: "Jan", rate: 91 },
-  { month: "Feb", rate: 93 },
-  { month: "Mar", rate: 89 },
-  { month: "Apr", rate: 91 },
-];
+async function getAnalyticsData(schoolId: string) {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+  sixMonthsAgo.setHours(0, 0, 0, 0);
 
-const feeDistribution = [
-  { name: "Tuition", value: 65, color: "#7c3aed" },
-  { name: "Annual", value: 20, color: "#3b82f6" },
-  { name: "Sports", value: 10, color: "#22c55e" },
-  { name: "Other", value: 5, color: "#f59e0b" },
-];
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
 
-export default function AnalyticsPage() {
-  return (
-    <div className="p-6 space-y-5 max-w-[1400px]">
-      <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-muted-foreground text-sm mt-1">School performance overview — AY 2024-25</p>
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Fee Collection Trend</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(val: number) => [formatCurrency(val), ""]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-              <Legend />
-              <Bar dataKey="collected" name="Collected" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pending" name="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Attendance Rate Trend</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={attendanceData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <YAxis domain={[80, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(val: number) => [`${val}%`, "Attendance"]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-              <Line type="monotone" dataKey="rate" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: "#22c55e" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Fee Distribution by Type</h3>
-          <div className="flex items-center gap-6">
-            <ResponsiveContainer width={200} height={200}>
-              <PieChart>
-                <Pie data={feeDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value">
-                  {feeDistribution.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(val: number) => [`${val}%`, ""]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-3">
-              {feeDistribution.map((f) => (
-                <div key={f.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: f.color }} />
-                  <span className="text-xs text-muted-foreground">{f.name}</span>
-                  <span className="text-xs font-semibold ml-auto">{f.value}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.25 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Key Metrics — April 2025</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Total Revenue", value: "₹18.6L", sub: "+8.4% vs last month", color: "text-green-600" },
-              { label: "Fee Collection Rate", value: "73.2%", sub: "267 paid of 365", color: "text-violet-600" },
-              { label: "Avg Attendance", value: "91.2%", sub: "1,170 avg present/day", color: "text-blue-600" },
-              { label: "New Enrolments", value: "+12", sub: "YTD: 1,284 students", color: "text-amber-600" },
-            ].map((m) => (
-              <div key={m.label} className="bg-muted/40 rounded-xl p-4">
-                <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
-                <p className="text-xs font-medium mt-0.5">{m.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{m.sub}</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
-    </div>
-  );
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const [
+    payments,
+    pendingFeeRows,
+    attendanceRows,
+    feeTypeSums,
+    totalFeeCount,
+    paidFeeCount,
+    activeStudentCount,
+    newStudentCount,
+  ] = await Promise.all([
+    prisma.payment.findMany({
+      where: { schoolId, paidAt: { gte: sixMonthsAgo } },
+      select: { amount: true, paidAt: true },
+    }),
+    prisma.fee.findMany({
+      where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
+      select: { amount: true, dueDate: true },
+    }),
+    prisma.attendance.findMany({
+      where: { schoolId, date: { gte: sixMonthsAgo } },
+      select: { date: true, status: true },
+    }),
+    prisma.fee.groupBy({
+      by: ["feeType"],
+      where: { schoolId },
+      _sum: { amount: true },
+    }),
+    prisma.fee.count({ where: { schoolId } }),
+    prisma.fee.count({ where: { schoolId, status: "PAID" } }),
+    prisma.student.count({ where: { schoolId, isActive: true } }),
+    prisma.student.count({ where: { schoolId, createdAt: { gte: startOfMonth } } }),
+  ]);
+
+  const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - (5 - i));
+    return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
+  });
+
+  // Fee collection trend
+  const collectedByMonth: Record<string, number> = {};
+  payments.forEach((p: (typeof payments)[number]) => {
+    const key = monthKey(p.paidAt);
+    collectedByMonth[key] = (collectedByMonth[key] ?? 0) + Number(p.amount);
+  });
+  const pendingByMonth: Record<string, number> = {};
+  pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
+    const key = monthKey(f.dueDate);
+    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + Number(f.amount);
+  });
+  const revenueData = months.map(({ label, key }) => ({
+    month: label,
+    collected: collectedByMonth[key] ?? 0,
+    pending: pendingByMonth[key] ?? 0,
+  }));
+
+  // Attendance rate trend
+  const presentByMonth: Record<string, number> = {};
+  const totalByMonth: Record<string, number> = {};
+  attendanceRows.forEach((a: (typeof attendanceRows)[number]) => {
+    const key = monthKey(a.date);
+    totalByMonth[key] = (totalByMonth[key] ?? 0) + 1;
+    if (a.status === "PRESENT") presentByMonth[key] = (presentByMonth[key] ?? 0) + 1;
+  });
+  const attendanceData = months.map(({ label, key }) => ({
+    month: label,
+    rate: totalByMonth[key] > 0 ? Math.round(((presentByMonth[key] ?? 0) / totalByMonth[key]) * 100) : 0,
+  }));
+
+  // Fee distribution by type (top N + Other)
+  const sortedFeeTypes = feeTypeSums
+    .map((f: (typeof feeTypeSums)[number]) => ({ name: f.feeType, amount: Number(f._sum.amount ?? 0) }))
+    .filter((f: { name: string; amount: number }) => f.amount > 0)
+    .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+  const totalFeeAmount = sortedFeeTypes.reduce((sum: number, f: { amount: number }) => sum + f.amount, 0);
+  const topFeeTypes = sortedFeeTypes.slice(0, FEE_TYPE_SLICE_LIMIT);
+  const otherAmount = sortedFeeTypes.slice(FEE_TYPE_SLICE_LIMIT).reduce((sum: number, f: { amount: number }) => sum + f.amount, 0);
+  const feeDistribution = [
+    ...topFeeTypes.map((f: { name: string; amount: number }) => ({
+      name: f.name,
+      value: totalFeeAmount > 0 ? Math.round((f.amount / totalFeeAmount) * 100) : 0,
+    })),
+    ...(otherAmount > 0 ? [{ name: "Other", value: totalFeeAmount > 0 ? Math.round((otherAmount / totalFeeAmount) * 100) : 0 }] : []),
+  ];
+
+  // Attendance last 30 days (avg present/day)
+  const last30 = attendanceRows.filter((a: (typeof attendanceRows)[number]) => a.date >= thirtyDaysAgo);
+  const daysSeen = new Set(last30.map((a: (typeof attendanceRows)[number]) => a.date.toDateString()));
+  const presentLast30 = last30.filter((a: (typeof attendanceRows)[number]) => a.status === "PRESENT").length;
+  const avgAttendanceRate = last30.length > 0 ? Math.round((presentLast30 / last30.length) * 100) : 0;
+  const avgPresentPerDay = daysSeen.size > 0 ? Math.round(presentLast30 / daysSeen.size) : 0;
+
+  // Revenue this month vs last month
+  const thisMonthKey = months[months.length - 1].key;
+  const lastMonthKey = months[months.length - 2]?.key;
+  const thisMonthRevenue = collectedByMonth[thisMonthKey] ?? 0;
+  const lastMonthRevenue = lastMonthKey ? collectedByMonth[lastMonthKey] ?? 0 : 0;
+  const revenueChangePct = lastMonthRevenue > 0
+    ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 1000) / 10
+    : null;
+
+  const feeCollectionRate = totalFeeCount > 0 ? Math.round((paidFeeCount / totalFeeCount) * 1000) / 10 : 0;
+
+  return {
+    revenueData,
+    attendanceData,
+    feeDistribution,
+    metrics: {
+      totalRevenue: thisMonthRevenue,
+      revenueChangePct,
+      feeCollectionRate,
+      paidFeeCount,
+      totalFeeCount,
+      avgAttendanceRate,
+      avgPresentPerDay,
+      newEnrolments: newStudentCount,
+      activeStudentCount,
+    },
+  };
+}
+
+export default async function AnalyticsPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const user = session.user;
+  if (!user.schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
+
+  const data = await getAnalyticsData(user.schoolId);
+
+  return <AnalyticsContent {...data} />;
 }

@@ -13,7 +13,7 @@ export default async function FeesPage() {
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
 
-  const [fees, summary, students, classes] = await Promise.all([
+  const [fees, summary, students, classes, feeTypes] = await Promise.all([
     prisma.fee.findMany({
       where: { schoolId: user.schoolId },
       include: {
@@ -41,7 +41,21 @@ export default async function FeesPage() {
       orderBy: { grade: "asc" },
       take: 200,
     }),
+    prisma.feeType.findMany({
+      where: { schoolId: user.schoolId, isActive: true },
+      select: { name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
-  return <FeesContent fees={fees} summary={summary} students={students} classes={classes} canEdit={canEdit} />;
+  return (
+    <FeesContent
+      fees={fees}
+      summary={summary}
+      students={students}
+      classes={classes}
+      feeTypes={feeTypes.map((f) => f.name)}
+      canEdit={canEdit}
+    />
+  );
 }

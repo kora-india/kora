@@ -39,15 +39,19 @@ const PaymentSchema = z.object({
 type FeeFormData = z.infer<typeof FeeSchema>;
 type PaymentFormData = z.infer<typeof PaymentSchema>;
 
+const DEFAULT_FEE_TYPES = ["Tuition Fee", "Transport Fee", "Lab Fee", "Sports Fee", "Library Fee", "Exam Fee", "Other"];
+
 interface Props {
   fees: any[];
   summary: any[];
   students: { id: string; name: string; classId: string; rollNumber: string }[];
   classes: { id: string; name: string }[];
+  feeTypes: string[];
   canEdit: boolean;
 }
 
-export function FeesContent({ fees, summary, students, classes, canEdit }: Readonly<Props>) {
+export function FeesContent({ fees, summary, students, classes, feeTypes, canEdit }: Readonly<Props>) {
+  const feeTypeOptions = feeTypes.length > 0 ? feeTypes : DEFAULT_FEE_TYPES;
   const router = useRouter();
   const [filter, setFilter] = useState("");
   const [feeDialog, setFeeDialog] = useState(false);
@@ -283,7 +287,7 @@ export function FeesContent({ fees, summary, students, classes, canEdit }: Reado
             <FormField label="Fee Type" error={feeForm.formState.errors.feeType?.message} required>
               <select {...feeForm.register("feeType")} className={selectCls}>
                 <option value="">Select type</option>
-                {["Tuition Fee", "Transport Fee", "Lab Fee", "Sports Fee", "Library Fee", "Exam Fee", "Other"].map((t) => (
+                {feeTypeOptions.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>

@@ -81,6 +81,7 @@ model School {
   sections      Section[]
   attendances   Attendance[]
   fees          Fee[]
+  feeTypes      FeeType[]
   payments      Payment[]
   notices       Notice[]
   assignments   Assignment[]
@@ -136,6 +137,8 @@ model User {
   image     String?
   phone     String?
   isActive  Boolean  @default(true)
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -322,6 +325,24 @@ model Payment {
 
   @@index([schoolId])
   @@map("payments")
+}
+
+// ─── FeeType ───────────────────────────────────────────────────────────────
+
+model FeeType {
+  id            String   @id @default(cuid())
+  schoolId      String
+  name          String
+  defaultAmount Decimal? @db.Decimal(10, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("fee_types")
 }
 
 // ─── Notice ────────────────────────────────────────────────────────────────
