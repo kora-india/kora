@@ -58,6 +58,9 @@ export async function createSchool(data: unknown) {
   const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
   try {
+    // Neon's pooled connection is PgBouncer transaction-mode, which can be slow
+    // to hand out a connection to BEGIN a transaction — give it more room than
+    // Prisma's 2s default, especially with seedDefaultClasses' ~21 sequential creates.
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Create school
       const school = await tx.school.create({
@@ -100,7 +103,7 @@ export async function createSchool(data: unknown) {
       }
 
       return { school, adminUser };
-    });
+    }, { maxWait: 10000, timeout: 15000 });
 
     logger.info("School created", { schoolId: result.school.id, subdomain, plan, createdBy: user.id });
 

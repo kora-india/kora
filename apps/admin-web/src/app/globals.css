@@ -59,3 +59,14 @@
 /* Sidebar animation */
 .sidebar-expanded { width: var(--sidebar-width); }
 .sidebar-collapsed { width: var(--sidebar-collapsed); }
+
+/* Hide native number-input spin buttons for a cleaner look */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Plus, Pencil, Trash2, Loader2, FileX } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, FileX } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +11,7 @@ import { formatCurrency } from "@schoolos/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
+import { SettingsCard } from "@/components/settings/settings-card";
 import { createFeeType, updateFeeType, toggleFeeTypeActive, deleteFeeType } from "@/lib/actions/fee-types";
 
 const FeeTypeFormSchema = z.object({
@@ -76,29 +76,22 @@ export function FeeTypesContent({ feeTypes, canEdit }: Readonly<Props>) {
   };
 
   return (
-    <div className="p-6 max-w-2xl space-y-5">
-      <div>
-        <Link href="/settings" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Settings
-        </Link>
-        <div className="flex items-start justify-between mt-2">
-          <div>
-            <h1 className="text-2xl font-bold">Fee Configuration</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage the fee types available when creating fee records</p>
-          </div>
-          {canEdit && (
+    <div className="space-y-5">
+      <SettingsCard
+        title="Fee Configuration"
+        description="Manage the fee types available when creating fee records"
+        action={
+          canEdit ? (
             <button
               type="button"
               onClick={openCreate}
-              className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+              className="flex items-center gap-2 h-8 px-3 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors flex-shrink-0"
             >
-              <Plus className="w-4 h-4" /> Add Fee Type
+              <Plus className="w-3.5 h-3.5" /> Add Fee Type
             </button>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border bg-card overflow-hidden">
+          ) : undefined
+        }
+      >
         {feeTypes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -119,7 +112,7 @@ export function FeeTypesContent({ feeTypes, canEdit }: Readonly<Props>) {
             )}
           </div>
         ) : (
-          <ul className="divide-y">
+          <ul className="-mx-5 -my-5 divide-y">
             {feeTypes.map((ft) => (
               <li key={ft.id} className="flex items-center justify-between px-5 py-3">
                 <div className="flex items-center gap-2.5">
@@ -152,7 +145,7 @@ export function FeeTypesContent({ feeTypes, canEdit }: Readonly<Props>) {
             ))}
           </ul>
         )}
-      </div>
+      </SettingsCard>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title={editTarget ? "Edit Fee Type" : "Add Fee Type"} className="max-w-sm">
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
