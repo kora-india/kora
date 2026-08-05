@@ -81,8 +81,6 @@ model School {
   sections      Section[]
   attendances   Attendance[]
   fees          Fee[]
-  feeTypes      FeeType[]
-  feeStructures FeeStructure[]
   payments      Payment[]
   notices       Notice[]
   assignments   Assignment[]
@@ -156,26 +154,23 @@ model User {
 // ─── Class & Section ───────────────────────────────────────────────────────
 
 model Class {
-  id             String   @id @default(cuid())
-  schoolId       String
-  name           String
-  grade          Int
-  feeStructureId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  grade     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  school       School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  feeStructure FeeStructure? @relation(fields: [feeStructureId], references: [id], onDelete: SetNull)
-  sections     Section[]
-  students     Student[]
-  teachers     Teacher[]
-  attendances  Attendance[]
-  assignments  Assignment[]
-  fees         Fee[]
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  sections    Section[]
+  students    Student[]
+  teachers    Teacher[]
+  attendances Attendance[]
+  assignments Assignment[]
+  fees        Fee[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
-  @@index([feeStructureId])
   @@map("classes")
 }
 
@@ -329,61 +324,6 @@ model Payment {
 
   @@index([schoolId])
   @@map("payments")
-}
-
-// ─── FeeType ───────────────────────────────────────────────────────────────
-
-model FeeType {
-  id            String   @id @default(cuid())
-  schoolId      String
-  name          String
-  defaultAmount Decimal? @db.Decimal(10, 2)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  school         School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  structureItems FeeStructureItem[]
-
-  @@unique([schoolId, name])
-  @@index([schoolId])
-  @@map("fee_types")
-}
-
-// ─── FeeStructure ──────────────────────────────────────────────────────────
-// A reusable, named set of fee-type + amount line items that one or more
-// classes can be assigned to (assigning the same structure to two classes
-// is how they end up with an identical fee structure).
-
-model FeeStructure {
-  id        String   @id @default(cuid())
-  schoolId  String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  school  School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  items   FeeStructureItem[]
-  classes Class[]
-
-  @@unique([schoolId, name])
-  @@index([schoolId])
-  @@map("fee_structures")
-}
-
-model FeeStructureItem {
-  id             String   @id @default(cuid())
-  feeStructureId String
-  feeTypeId      String?
-  name           String
-  amount         Decimal  @db.Decimal(10, 2)
-  createdAt      DateTime @default(now())
-
-  feeStructure FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
-  feeType      FeeType?     @relation(fields: [feeTypeId], references: [id], onDelete: SetNull)
-
-  @@index([feeStructureId])
-  @@map("fee_structure_items")
 }
 
 // ─── Notice ────────────────────────────────────────────────────────────────

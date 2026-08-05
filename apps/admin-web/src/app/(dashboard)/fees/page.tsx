@@ -41,10 +41,11 @@ export default async function FeesPage() {
       orderBy: { grade: "asc" },
       take: 200,
     }),
-    prisma.feeType.findMany({
-      where: { schoolId: user.schoolId, isActive: true },
-      select: { name: true },
-      orderBy: { name: "asc" },
+    prisma.fee.findMany({
+      where: { schoolId: user.schoolId },
+      select: { feeType: true },
+      distinct: ["feeType"],
+      orderBy: { feeType: "asc" },
     }),
   ]);
 
@@ -54,7 +55,7 @@ export default async function FeesPage() {
       summary={summary}
       students={students}
       classes={classes}
-      feeTypes={feeTypes.map((f) => f.name)}
+      feeTypes={feeTypes.map((f: { feeType: string }) => f.feeType)}
       canEdit={canEdit}
     />
   );

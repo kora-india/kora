@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Receipt, Layers, KeyRound, Bell } from "lucide-react";
+import { Building2, KeyRound, Bell } from "lucide-react";
 import { cn } from "@schoolos/utils";
 
 const NAV_ITEMS = [
   { label: "School Profile", href: "/settings/school-profile", icon: Building2 },
-  { label: "Fee Configuration", href: "/settings/fee-types", icon: Receipt },
-  { label: "Fee Structures", href: "/settings/fee-structures", icon: Layers },
   { label: "Change Password", href: "/settings/account", icon: KeyRound },
 ];
 
