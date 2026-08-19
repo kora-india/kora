@@ -138,7 +138,7 @@ export async function processPayment(data: {
       }
 
       return { receiptNo, remainingAdvance: remainingAmount };
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     revalidatePath("/fees");
     return { success: true, ...result };

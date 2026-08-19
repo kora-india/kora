@@ -106,7 +106,7 @@ export async function runLegacyFeeMigration() {
       }
 
       return { migratedCount };
-    });
+    }, { maxWait: 15000, timeout: 60000 });
 
     return { success: true, migratedCount: result.migratedCount };
   } catch (e: any) {
