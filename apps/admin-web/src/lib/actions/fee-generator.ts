@@ -67,7 +67,7 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
 
           let finalAmount = override?.amount !== null && override?.amount !== undefined 
               ? Number(override.amount) 
-              : Number(item.component.amount);
+              : Number(item.amount ?? item.component.amount);
 
           if (override?.discountAmount) {
             finalAmount = Math.max(0, finalAmount - Number(override.discountAmount));

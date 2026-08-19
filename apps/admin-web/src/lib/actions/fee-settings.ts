@@ -68,7 +68,7 @@ export async function createFeeComponent(data: { name: string; amount: number; f
 }
 
 // -- Fee Structures
-export async function createFeeStructure(data: { name: string; sessionId: string; componentIds: string[] }) {
+export async function createFeeStructure(data: { name: string; sessionId: string; components: { componentId: string, amount?: number }[] }) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -79,7 +79,7 @@ export async function createFeeStructure(data: { name: string; sessionId: string
         sessionId: data.sessionId,
         name: data.name,
         items: {
-          create: data.componentIds.map(id => ({ componentId: id }))
+          create: data.components.map(c => ({ componentId: c.componentId, amount: c.amount }))
         }
       }
     });
@@ -219,7 +219,7 @@ export async function updateFeeComponent(id: string, data: { name: string; amoun
 }
 
 // -- Update Fee Structure
-export async function updateFeeStructure(id: string, data: { name: string; sessionId: string; componentIds: string[] }) {
+export async function updateFeeStructure(id: string, data: { name: string; sessionId: string; components: { componentId: string, amount?: number }[] }) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -232,7 +232,7 @@ export async function updateFeeStructure(id: string, data: { name: string; sessi
         name: data.name,
         items: {
           deleteMany: {},
-          create: data.componentIds.map(compId => ({ componentId: compId }))
+          create: data.components.map(c => ({ componentId: c.componentId, amount: c.amount }))
         }
       }
     });

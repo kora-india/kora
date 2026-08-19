@@ -20,8 +20,7 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
 
   const sessionForm = useForm({ defaultValues: { name: "", startDate: "", endDate: "", isCurrent: false } });
   const compForm = useForm({ defaultValues: { name: "", amount: 0, frequency: "MONTHLY", isOptional: false } });
-  const structForm = useForm({ defaultValues: { name: "", sessionId: "", componentIds: [] as string[] } });
-
+  const structForm = useForm({ defaultValues: { name: "", sessionId: "", componentIds: [] as string[], amounts: {} as Record<string, string> } });
   const openSessionDialog = (session?: any) => {
     if (session) {
       setEditSessionId(session.id);
@@ -57,14 +56,19 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
   const openStructureDialog = (struct?: any) => {
     if (struct) {
       setEditStructureId(struct.id);
+      const amounts: Record<string, string> = {};
+      struct.items.forEach((i: any) => {
+        if (i.amount) amounts[i.componentId] = i.amount.toString();
+      });
       structForm.reset({
         name: struct.name,
         sessionId: struct.sessionId,
-        componentIds: struct.items.map((i: any) => i.componentId)
+        componentIds: struct.items.map((i: any) => i.componentId),
+        amounts
       });
     } else {
       setEditStructureId(null);
-      structForm.reset({ name: "", sessionId: "", componentIds: [] });
+      structForm.reset({ name: "", sessionId: "", componentIds: [], amounts: {} });
     }
     setStructureDialog(true);
   };
@@ -86,9 +90,14 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
   };
 
   const onStructSubmit = async (data: any) => {
+    const components = data.componentIds.map((id: string) => ({
+      componentId: id,
+      amount: data.amounts?.[id] ? Number(data.amounts[id]) : undefined
+    }));
+    const payload = { name: data.name, sessionId: data.sessionId, components };
     const res = editStructureId
-      ? await updateFeeStructure(editStructureId, data)
-      : await createFeeStructure(data);
+      ? await updateFeeStructure(editStructureId, payload)
+      : await createFeeStructure(payload);
     if (res.error) toast.error(res.error);
     else { toast.success(editStructureId ? "Structure updated" : "Structure created"); setStructureDialog(false); structForm.reset(); }
   };
@@ -210,14 +219,24 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
           </FormField>
           <div>
             <label className="text-sm font-medium mb-2 block">Select Components</label>
-            <div className="space-y-2 border rounded-lg p-3 max-h-[200px] overflow-y-auto">
-              {components.map((c: any) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer p-1 hover:bg-muted rounded">
-                  <input type="checkbox" value={c.id} {...structForm.register("componentIds")} />
-                  <span className="flex-1">{c.name}</span>
-                  <span className="text-xs text-muted-foreground">{formatCurrency(Number(c.amount))}</span>
-                </label>
-              ))}
+            <div className="space-y-2 border rounded-lg p-3 max-h-[300px] overflow-y-auto">
+              {components.map((c: any) => {
+                const isSelected = structForm.watch("componentIds").includes(c.id);
+                return (
+                <div key={c.id} className={`flex flex-col gap-2 p-2 rounded border transition-colors ${isSelected ? 'bg-violet-50/50 border-violet-200' : 'hover:bg-muted'}`}>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" value={c.id} {...structForm.register("componentIds")} />
+                    <span className="flex-1">{c.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatCurrency(Number(c.amount))}</span>
+                  </label>
+                  {isSelected && (
+                    <div className="pl-6 flex items-center gap-2">
+                       <span className="text-xs text-muted-foreground">Override Amount:</span>
+                       <input type="number" {...structForm.register(`amounts.${c.id}`)} className="h-7 w-24 text-xs rounded border px-2 bg-background" placeholder={c.amount} />
+                    </div>
+                  )}
+                </div>
+              )})}
             </div>
           </div>
           <button className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">{editStructureId ? "Save Changes" : "Save Structure"}</button>

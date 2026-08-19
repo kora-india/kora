@@ -325,6 +325,7 @@ model FeeStructureItem {
   createdAt   DateTime     @default(now())
   componentId String
   structureId String
+  amount      Decimal?     @db.Decimal(10, 2)
   component   FeeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
   structure   FeeStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
 
