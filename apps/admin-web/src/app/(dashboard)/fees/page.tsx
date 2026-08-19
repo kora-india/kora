@@ -20,7 +20,8 @@ export default async function FeesPage() {
     feeStructures,
     classes,
     students,
-    recentCharges
+    recentCharges,
+    transactions
   ] = await Promise.all([
     prisma.academicSession.findMany({ where: { schoolId: user.schoolId }, orderBy: { startDate: 'desc' } }),
     prisma.feeComponent.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' } }),
@@ -47,17 +48,33 @@ export default async function FeesPage() {
       },
       orderBy: { createdAt: 'desc' },
       take: 100
+    }),
+    prisma.paymentTransaction.findMany({
+      where: { schoolId: user.schoolId },
+      include: {
+        student: true,
+        allocations: {
+          include: {
+            chargeItem: {
+              include: { component: true, charge: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
     })
   ]);
 
   return (
     <FeesContent
       sessions={academicSessions}
-      components={feeComponents}
-      structures={feeStructures}
+      components={JSON.parse(JSON.stringify(feeComponents))}
+      structures={JSON.parse(JSON.stringify(feeStructures))}
       classes={classes}
-      students={students}
-      recentCharges={recentCharges}
+      students={JSON.parse(JSON.stringify(students))}
+      recentCharges={JSON.parse(JSON.stringify(recentCharges))}
+      transactions={JSON.parse(JSON.stringify(transactions))}
       canEdit={canEdit}
     />
   );

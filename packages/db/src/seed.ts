@@ -1,269 +1,366 @@
 import {
   PrismaClient, UserRole, SubscriptionPlan,
-  AttendanceStatus, FeeStatus, NoticePriority, Gender,
+  AttendanceStatus, FeeStatus, NoticePriority, Gender, FeeFrequency, PaymentMethod
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-function daysAgo(n: number): Date {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-const MALE_NAMES = [
-  "Aarav Patel", "Arjun Sharma", "Chirag Kumar", "Dev Verma", "Eshan Jain",
-  "Gaurav Singh", "Hrithik Gupta", "Ishaan Mehta", "Kabir Nair", "Lakshman Rao",
-  "Manav Pandey", "Nikhil Kapoor", "Om Prakash", "Pranav Bhat", "Raj Malhotra",
-];
-
-const FEMALE_NAMES = [
-  "Aanya Patel", "Bhavna Sharma", "Diya Mishra", "Fatima Ghazi", "Hina Qureshi",
-  "Ishita Mehta", "Jaya Reddy", "Kavya Nair", "Lakshmi Rao", "Meera Gupta",
-  "Nisha Pandey", "Pooja Kapoor", "Riya Singh", "Shreya Verma", "Tanvi Bhat",
-];
-
-const ALL_NAMES = [...MALE_NAMES, ...FEMALE_NAMES];
-
-const TEACHER_DATA = [
-  { name: "Priya Nair",    email: "priya@dps.edu.in",   subject: "Mathematics",      grade: 8,  section: "A" },
-  { name: "Rahul Verma",   email: "rahul@dps.edu.in",   subject: "Science",          grade: 9,  section: "B" },
-  { name: "Anita Roy",     email: "anita@dps.edu.in",   subject: "English",          grade: 10, section: "B" },
-  { name: "Suresh Kumar",  email: "suresh@dps.edu.in",  subject: "History",          grade: 7,  section: "A" },
-  { name: "Meena Iyer",    email: "meena@dps.edu.in",   subject: "Geography",        grade: 6,  section: "C" },
-  { name: "Deepak Sharma", email: "deepak@dps.edu.in",  subject: "Physics",          grade: 11, section: "A" },
-  { name: "Sunita Reddy",  email: "sunita@dps.edu.in",  subject: "Chemistry",        grade: 12, section: "B" },
-  { name: "Vijay Pillai",  email: "vijay@dps.edu.in",   subject: "Computer Science", grade: 10, section: "A" },
-];
-
 async function main() {
-  console.log("🌱 Seeding database...\n");
+  console.log("🌱 Starting Minimal Test Seed...");
 
-  // ── Passwords (computed once) ─────────────────────────────────────────
-  const [adminPw, teacherPw, accountsPw] = await Promise.all([
-    bcrypt.hash("admin123", 10),
-    bcrypt.hash("teacher123", 10),
-    bcrypt.hash("accounts123", 10),
-  ]);
-
-  // ── Super Admin ───────────────────────────────────────────────────────
-  await prisma.user.upsert({
-    where: { email: "super@schoolos.com" },
-    update: {},
-    create: { email: "super@schoolos.com", password: adminPw, name: "Super Admin", role: UserRole.SUPER_ADMIN },
+  // 1. Cleanup old "Delhi Public School" data
+  const oldSchools = await prisma.school.findMany({
+    where: { OR: [{ name: "Delhi Public School" }, { subdomain: "delhi-public" }, { subdomain: "test-dps" }] }
   });
 
-  // ── School 1: Delhi Public School (PRO) ──────────────────────────────
-  const dps = await prisma.school.upsert({
-    where: { subdomain: "delhi-public" },
-    update: {},
-    create: {
-      name: "Delhi Public School", subdomain: "delhi-public",
-      address: "Sector 15, New Delhi — 110 001", phone: "+91 11 2345 6789",
-      email: "admin@dps.edu.in", plan: SubscriptionPlan.PRO, isActive: true,
-    },
+  for (const school of oldSchools) {
+    console.log(`Cleaning up old school: ${school.name}`);
+    
+    const users = await prisma.user.findMany({ where: { schoolId: school.id } });
+    const userIds = users.map(u => u.id);
+
+    // 1. Unlink Users from School to allow School deletion
+    await prisma.user.updateMany({ where: { schoolId: school.id }, data: { schoolId: null } });
+    
+    // 2. Delete School (this automatically cascade deletes Attendances, Notices, Students, Fees, etc.)
+    await prisma.school.delete({ where: { id: school.id } });
+
+    // 3. Delete the orphaned Users (safe now because Attendances and Notices are gone)
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  }
+
+  // Password for test users
+  const testPassword = await bcrypt.hash("test1234", 10);
+
+  // 2. Create Test School
+  const school = await prisma.school.create({
+    data: {
+      name: "Delhi Public School - Test",
+      subdomain: "test-dps",
+      address: "Test Address",
+      phone: "+91 00000 00000",
+      email: "admin@test-dps.com",
+      plan: SubscriptionPlan.PRO,
+      isActive: true,
+    }
   });
 
-  const [dpsAdmin] = await Promise.all([
-    prisma.user.upsert({
-      where: { email: "admin@dps.edu.in" },
-      update: {},
-      create: { email: "admin@dps.edu.in", password: adminPw, name: "Arjun Dubey", role: UserRole.SCHOOL_ADMIN, schoolId: dps.id },
-    }),
-    prisma.user.upsert({
-      where: { email: "accounts@dps.edu.in" },
-      update: {},
-      create: { email: "accounts@dps.edu.in", password: accountsPw, name: "Rekha Sharma", role: UserRole.ACCOUNTANT, schoolId: dps.id },
-    }),
+  // Admin User
+  const admin = await prisma.user.create({
+    data: {
+      email: "admin@test-dps.com",
+      password: testPassword,
+      name: "Test Admin",
+      role: UserRole.SCHOOL_ADMIN,
+      schoolId: school.id,
+    }
+  });
+
+  // 3. Academic Sessions
+  const prevSession = await prisma.academicSession.create({
+    data: {
+      schoolId: school.id,
+      name: "2025-26",
+      startDate: new Date("2025-04-01"),
+      endDate: new Date("2026-03-31"),
+      isCurrent: false,
+    }
+  });
+
+  const currSession = await prisma.academicSession.create({
+    data: {
+      schoolId: school.id,
+      name: "2026-27",
+      startDate: new Date("2026-04-01"),
+      endDate: new Date("2027-03-31"),
+      isCurrent: true,
+    }
+  });
+
+  // 4. Classes
+  const classes = await Promise.all([
+    prisma.class.create({ data: { schoolId: school.id, name: "Class 2", grade: 2 } }),
+    prisma.class.create({ data: { schoolId: school.id, name: "Class 3", grade: 3 } }),
+    prisma.class.create({ data: { schoolId: school.id, name: "Class 4", grade: 4 } }),
+    prisma.class.create({ data: { schoolId: school.id, name: "Class 5", grade: 5 } }),
   ]);
-  console.log("✓ School + admin + accountant");
+  const c2 = classes[0], c3 = classes[1], c4 = classes[2], c5 = classes[3];
 
-  // ── Classes & Sections ────────────────────────────────────────────────
-  const grades = [6, 7, 8, 9, 10, 11, 12];
-  const dpsClasses: Record<number, { id: string; sections: { id: string; name: string }[] }> = {};
+  // 5. Sections
+  const sections = await Promise.all([
+    prisma.section.create({ data: { schoolId: school.id, classId: c2.id, name: "A" } }),
+    prisma.section.create({ data: { schoolId: school.id, classId: c3.id, name: "A" } }),
+    prisma.section.create({ data: { schoolId: school.id, classId: c3.id, name: "B" } }),
+    prisma.section.create({ data: { schoolId: school.id, classId: c4.id, name: "A" } }),
+    prisma.section.create({ data: { schoolId: school.id, classId: c5.id, name: "A" } }),
+  ]);
+  const s2A = sections[0], s3A = sections[1], s3B = sections[2], s4A = sections[3], s5A = sections[4];
 
-  for (const grade of grades) {
-    const cls = await prisma.class.upsert({
-      where: { schoolId_name: { schoolId: dps.id, name: `Grade ${grade}` } },
-      update: {},
-      create: { schoolId: dps.id, name: `Grade ${grade}`, grade },
-    });
-    const sectionNames = grade >= 11 ? ["A", "B"] : ["A", "B", "C"];
-    const sections: { id: string; name: string }[] = [];
-    for (const sName of sectionNames) {
-      const sec = await prisma.section.upsert({
-        where: { classId_name: { classId: cls.id, name: sName } },
-        update: {},
-        create: { schoolId: dps.id, classId: cls.id, name: sName },
-      });
-      sections.push({ id: sec.id, name: sName });
-    }
-    dpsClasses[grade] = { id: cls.id, sections };
-  }
-  console.log("✓ Classes & sections");
-
-  // ── Teachers ──────────────────────────────────────────────────────────
-  for (const td of TEACHER_DATA) {
-    const u = await prisma.user.upsert({
-      where: { email: td.email },
-      update: {},
-      create: { email: td.email, password: teacherPw, name: td.name, role: UserRole.TEACHER, schoolId: dps.id },
-    });
-    const cls = dpsClasses[td.grade];
-    const sec = cls?.sections.find((s) => s.name === td.section);
-    await prisma.teacher.upsert({
-      where: { userId: u.id },
-      update: {},
-      create: { schoolId: dps.id, userId: u.id, name: td.name, email: td.email, subject: td.subject, assignedClassId: cls?.id ?? null, assignedSectionId: sec?.id ?? null },
-    });
-  }
-  console.log("✓ Teachers");
-
-  // ── Students (upsert individually for IDs, only 2 grades for speed) ──
-  const dpsStudents: { id: string; classId: string; sectionId: string }[] = [];
-  let rollN = 1, admN = 1;
-
-  for (const [grade, names] of [[8, ALL_NAMES.slice(0, 15)], [9, ALL_NAMES.slice(5, 18)]] as [number, string[]][]) {
-    const cls = dpsClasses[grade]!;
-    const sec = cls.sections[0]!;
-    for (const name of names) {
-      const admNo = `DPS-${grade}-${String(admN++).padStart(3, "0")}`;
-      const existing = await prisma.student.findUnique({ where: { admissionNumber: admNo } });
-      if (existing) { dpsStudents.push({ id: existing.id, classId: existing.classId, sectionId: existing.sectionId }); continue; }
-      const s = await prisma.student.create({
-        data: {
-          schoolId: dps.id, classId: cls.id, sectionId: sec.id,
-          rollNumber: String(rollN++).padStart(2, "0"), admissionNumber: admNo,
-          name, gender: FEMALE_NAMES.includes(name) ? Gender.FEMALE : Gender.MALE,
-          parentName: `${name.split(" ")[1]} Family`,
-          parentPhone: `+91 98${String(76500000 + admN).slice(-8)}`,
-        },
-      });
-      dpsStudents.push({ id: s.id, classId: s.classId, sectionId: s.sectionId });
-    }
-  }
-  console.log(`✓ ${dpsStudents.length} students`);
-
-  // ── Attendance — BATCH insert (the key fix) ───────────────────────────
-  const attendanceRows: {
-    schoolId: string; studentId: string; classId: string; sectionId: string;
-    date: Date; status: AttendanceStatus; markedById: string;
-  }[] = [];
-
-  for (let offset = 42; offset >= 0; offset--) {
-    const date = daysAgo(offset);
-    if (date.getDay() === 0 || date.getDay() === 6) continue; // skip weekends
-    for (const s of dpsStudents) {
-      const r = Math.random();
-      attendanceRows.push({
-        schoolId: dps.id, studentId: s.id, classId: s.classId, sectionId: s.sectionId,
-        date,
-        status: r > 0.9 ? AttendanceStatus.ABSENT : r > 0.85 ? AttendanceStatus.LATE : AttendanceStatus.PRESENT,
-        markedById: dpsAdmin.id,
-      });
-    }
-  }
-
-  // Delete existing attendance for these students, then bulk-insert
-  await prisma.attendance.deleteMany({ where: { schoolId: dps.id } });
-  await prisma.attendance.createMany({ data: attendanceRows });
-  console.log(`✓ ${attendanceRows.length} attendance records (batch)`);
-
-  // ── Fees — BATCH insert ───────────────────────────────────────────────
-  const feeTypes = [
-    { type: "Tuition Fee Q1",  amount: 8400  },
-    { type: "Tuition Fee Q2",  amount: 8400  },
-    { type: "Annual Dev Fee",  amount: 24000 },
-    { type: "Sports & Activity", amount: 3000 },
+  // 6. Subjects & Teachers
+  const teacherData = [
+    { name: "Amit Sharma", email: "amit@test-dps.com", subject: "Mathematics" },
+    { name: "Priya Singh", email: "priya@test-dps.com", subject: "Science" },
+    { name: "Rahul Verma", email: "rahul@test-dps.com", subject: "English" },
+    { name: "Neha Gupta", email: "neha@test-dps.com", subject: "Computer" },
+    { name: "Sanjay Kumar", email: "sanjay@test-dps.com", subject: "Social Science" },
   ];
 
-  const feeRows: {
-    schoolId: string; studentId: string; classId: string;
-    feeType: string; amount: number; dueDate: Date; status: FeeStatus;
-    paidAt: Date | null; paidAmount: number | null;
-  }[] = [];
+  const teachers = [];
+  for (const t of teacherData) {
+    const user = await prisma.user.create({
+      data: { email: t.email, password: testPassword, name: t.name, role: UserRole.TEACHER, schoolId: school.id }
+    });
+    const teacher = await prisma.teacher.create({
+      data: { schoolId: school.id, userId: user.id, name: t.name, email: t.email, subject: t.subject }
+    });
+    teachers.push(teacher);
+  }
 
-  for (const s of dpsStudents) {
-    for (const f of feeTypes) {
-      const r = Math.random();
-      const status = r > 0.65 ? FeeStatus.PAID : r > 0.3 ? FeeStatus.PENDING : FeeStatus.OVERDUE;
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + (r > 0.5 ? 20 : -10));
-      feeRows.push({
-        schoolId: dps.id, studentId: s.id, classId: s.classId,
-        feeType: f.type, amount: f.amount, dueDate, status,
-        paidAt: status === FeeStatus.PAID ? new Date(Date.now() - Math.random() * 30 * 86400000) : null,
-        paidAmount: status === FeeStatus.PAID ? f.amount : null,
-      });
+  // 7. Fee Components
+  const fc = {
+    tuition: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Tuition Fee", amount: 1000, frequency: FeeFrequency.MONTHLY } }),
+    lab: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Lab Fee", amount: 500, frequency: FeeFrequency.MONTHLY } }),
+    computer: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Computer Fee", amount: 300, frequency: FeeFrequency.MONTHLY } }),
+    library: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Library Fee", amount: 200, frequency: FeeFrequency.MONTHLY } }),
+    transport: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Transport Fee", amount: 1500, frequency: FeeFrequency.MONTHLY, isOptional: true } }),
+    annual: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Annual Fee", amount: 5000, frequency: FeeFrequency.YEARLY } }),
+    exam: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Examination Fee", amount: 500, frequency: FeeFrequency.QUARTERLY } }),
+    admission: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Admission Fee", amount: 5000, frequency: FeeFrequency.ONE_TIME } }),
+    readmission: await prisma.feeComponent.create({ data: { schoolId: school.id, name: "Readmission Fee", amount: 2000, frequency: FeeFrequency.ONE_TIME } }),
+  };
+
+  // 8. Fee Structures
+  const fsPrimary = await prisma.feeStructure.create({
+    data: { schoolId: school.id, name: "Primary Structure", sessionId: currSession.id, 
+            items: { create: [{ componentId: fc.tuition.id }, { componentId: fc.lab.id }, { componentId: fc.library.id }] } }
+  });
+  const fsStandard = await prisma.feeStructure.create({
+    data: { schoolId: school.id, name: "Standard Structure", sessionId: currSession.id,
+            items: { create: [{ componentId: fc.tuition.id }, { componentId: fc.lab.id }, { componentId: fc.computer.id }, { componentId: fc.library.id }] } }
+  });
+  const fsSenior = await prisma.feeStructure.create({
+    data: { schoolId: school.id, name: "Senior Structure", sessionId: currSession.id,
+            items: { create: [{ componentId: fc.tuition.id }, { componentId: fc.lab.id }, { componentId: fc.computer.id }, { componentId: fc.library.id }, { componentId: fc.exam.id }] } }
+  });
+
+  await prisma.classFeeStructure.createMany({
+    data: [
+      { classId: c2.id, structureId: fsPrimary.id },
+      { classId: c3.id, structureId: fsStandard.id },
+      { classId: c4.id, structureId: fsStandard.id },
+      { classId: c5.id, structureId: fsSenior.id },
+    ]
+  });
+
+  // 9. Students
+  const studentsData = [
+    { name: "Rahul Kumar", class: c3, section: s3A, email: "rahul.test@schoolos.com", parent: "Rajesh Kumar", phone: "9800000001", roll: "1" }, // S1: Normal (Paid)
+    { name: "Aman Kumar", class: c3, section: s3A, email: "aman.test@schoolos.com", parent: "Suresh Kumar", phone: "9800000002", roll: "2" }, // S2: Fee Due
+    { name: "Priya Kumari", class: c3, section: s3A, email: "priya.test@schoolos.com", parent: "Amit Kumari", phone: "9800000003", roll: "3", gender: Gender.FEMALE }, // S3: Partial
+    { name: "Rohit Kumar", class: c3, section: s3B, email: "rohit.test@schoolos.com", parent: "Rajesh Kumar", phone: "9800000001", roll: "4" }, // S4: Advance (Sibling of S1)
+    { name: "Sneha Singh", class: c3, section: s3B, email: "sneha.test@schoolos.com", parent: "Vikas Singh", phone: "9800000004", roll: "5", gender: Gender.FEMALE }, // S5: Multi-comp
+    { name: "Vikas Kumar", class: c4, section: s4A, email: "vikas.test@schoolos.com", parent: "Arun Kumar", phone: "9800000005", roll: "1" }, // S6: Transport
+    { name: "Anjali Kumari", class: c4, section: s4A, email: "anjali.test@schoolos.com", parent: "Ravi Kumar", phone: "9800000006", roll: "2", gender: Gender.FEMALE }, // S7: Concession
+    { name: "Karan Kumar", class: c3, section: s3A, email: "karan.test@schoolos.com", parent: "Pramod Kumar", phone: "9800000007", roll: "6" }, // S8: Promotion
+    { name: "Pooja Kumari", class: c3, section: s3A, email: "pooja.test@schoolos.com", parent: "Mahesh Kumari", phone: "9800000008", roll: "7", gender: Gender.FEMALE }, // S9: Repeated
+    { name: "Arjun Kumar", class: c5, section: s5A, email: "arjun.test@schoolos.com", parent: "Sunil Kumar", phone: "9800000009", roll: "1" }, // S10: New Admission
+  ];
+
+  const students = [];
+  let admIdx = 1000;
+  for (const s of studentsData) {
+    const st = await prisma.student.create({
+      data: {
+        schoolId: school.id, classId: s.class.id, sectionId: s.section.id,
+        name: s.name, rollNumber: s.roll, admissionNumber: `DPS-TEST-${admIdx++}`,
+        gender: s.gender || Gender.MALE, parentName: s.parent, parentPhone: s.phone, parentEmail: s.email
+      }
+    });
+    students.push(st);
+  }
+
+  // Student Overrides & Assignments
+  const [s1, s2, s3, s4, s5, s6, s7, s8, s9, s10] = students;
+
+  await prisma.studentFeeAssignment.createMany({
+    data: [
+      { studentId: s1.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s2.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s3.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s4.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s5.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s6.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s7.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s8.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s9.id, sessionId: currSession.id, structureId: fsStandard.id },
+      { studentId: s10.id, sessionId: currSession.id, structureId: fsSenior.id },
+    ]
+  });
+
+  // S6: Transport
+  await prisma.studentFeeOverride.create({
+    data: { studentId: s6.id, sessionId: currSession.id, componentId: fc.transport.id, amount: 1500 }
+  });
+
+  // S7: Concession
+  await prisma.studentFeeOverride.create({
+    data: { studentId: s7.id, sessionId: currSession.id, componentId: fc.tuition.id, discountAmount: 200 }
+  });
+
+  // Helper to generate charge
+  async function generateCharge(student: any, title: string, dueDate: Date, components: { comp: any, due: number, paid: number, status: FeeStatus }[]) {
+    const allPaid = components.every(c => c.status === FeeStatus.PAID);
+    const anyPaid = components.some(c => c.status === FeeStatus.PAID || c.status === FeeStatus.PARTIAL);
+    const parentStatus = allPaid ? FeeStatus.PAID : anyPaid ? FeeStatus.PARTIAL : FeeStatus.PENDING;
+
+    return await prisma.feeCharge.create({
+      data: {
+        schoolId: school.id, studentId: student.id, sessionId: currSession.id,
+        title, dueDate, status: parentStatus,
+        items: {
+          create: components.map(c => ({
+            componentId: c.comp.id, amount: c.due, paidAmount: c.paid, status: c.status
+          }))
+        }
+      },
+      include: { items: true }
+    });
+  }
+
+  // 10. Test Scenarios Fee Data
+  
+  // S1: Fully Paid (April, May, June)
+  for (const [month, date] of [["April", "2026-04-10"], ["May", "2026-05-10"], ["June", "2026-06-10"]]) {
+    const charge = await generateCharge(s1, `${month} 2026`, new Date(date), [
+      { comp: fc.tuition, due: 1000, paid: 1000, status: FeeStatus.PAID },
+      { comp: fc.lab, due: 500, paid: 500, status: FeeStatus.PAID },
+    ]);
+    const pt = await prisma.paymentTransaction.create({
+      data: { schoolId: school.id, studentId: s1.id, amount: 1500, receiptNo: `RCP-${month}-S1`, status: "SUCCESS" }
+    });
+    await prisma.paymentAllocation.createMany({
+      data: charge.items.map(i => ({ paymentId: pt.id, chargeItemId: i.id, amount: i.amount }))
+    });
+  }
+
+  // S2: Fully Due (April, May, June)
+  for (const [month, date] of [["April", "2026-04-10"], ["May", "2026-05-10"], ["June", "2026-06-10"]]) {
+    await generateCharge(s2, `${month} 2026`, new Date(date), [
+      { comp: fc.tuition, due: 1000, paid: 0, status: FeeStatus.PENDING },
+      { comp: fc.lab, due: 500, paid: 0, status: FeeStatus.PENDING },
+    ]);
+  }
+
+  // S3: Partial Payment
+  const s3Charge = await generateCharge(s3, "April 2026", new Date("2026-04-10"), [
+    { comp: fc.tuition, due: 1000, paid: 500, status: FeeStatus.PARTIAL },
+    { comp: fc.lab, due: 500, paid: 0, status: FeeStatus.PENDING },
+  ]);
+  const pt3 = await prisma.paymentTransaction.create({
+    data: { schoolId: school.id, studentId: s3.id, amount: 500, receiptNo: `RCP-Apr-S3`, status: "SUCCESS" }
+  });
+  await prisma.paymentAllocation.create({
+    data: { paymentId: pt3.id, chargeItemId: s3Charge.items.find(i => i.componentId === fc.tuition.id)!.id, amount: 500 }
+  });
+
+  // S4: Advance Payment
+  const s4Charge = await generateCharge(s4, "April 2026", new Date("2026-04-10"), [
+    { comp: fc.tuition, due: 1000, paid: 1000, status: FeeStatus.PAID },
+    { comp: fc.lab, due: 500, paid: 500, status: FeeStatus.PAID },
+  ]);
+  const pt4 = await prisma.paymentTransaction.create({
+    data: { schoolId: school.id, studentId: s4.id, amount: 2500, receiptNo: `RCP-Apr-S4`, status: "SUCCESS" } // 1500 due, 2500 paid
+  });
+  await prisma.paymentAllocation.createMany({
+    data: s4Charge.items.map(i => ({ paymentId: pt4.id, chargeItemId: i.id, amount: i.amount }))
+  });
+  await prisma.advanceLedger.create({
+    data: { studentId: s4.id, amount: 1000, description: "Advance from overpayment" }
+  });
+
+  // S5: Multiple Component Partial Payment
+  const s5Charge = await generateCharge(s5, "April 2026", new Date("2026-04-10"), [
+    { comp: fc.tuition, due: 1000, paid: 800, status: FeeStatus.PARTIAL },
+    { comp: fc.lab, due: 500, paid: 500, status: FeeStatus.PAID },
+    { comp: fc.computer, due: 300, paid: 0, status: FeeStatus.PENDING },
+  ]);
+  const pt5 = await prisma.paymentTransaction.create({
+    data: { schoolId: school.id, studentId: s5.id, amount: 1300, receiptNo: `RCP-Apr-S5`, status: "SUCCESS" }
+  });
+  await prisma.paymentAllocation.createMany({
+    data: [
+      { paymentId: pt5.id, chargeItemId: s5Charge.items.find(i => i.componentId === fc.tuition.id)!.id, amount: 800 },
+      { paymentId: pt5.id, chargeItemId: s5Charge.items.find(i => i.componentId === fc.lab.id)!.id, amount: 500 },
+    ]
+  });
+
+  // S6: Transport
+  await generateCharge(s6, "April 2026", new Date("2026-04-10"), [
+    { comp: fc.tuition, due: 1000, paid: 0, status: FeeStatus.PENDING },
+    { comp: fc.transport, due: 1500, paid: 0, status: FeeStatus.PENDING }, // Optional fee correctly generated
+  ]);
+
+  // S7: Concession
+  await generateCharge(s7, "April 2026", new Date("2026-04-10"), [
+    { comp: fc.tuition, due: 800, paid: 0, status: FeeStatus.PENDING }, // Reduced from 1000
+    { comp: fc.lab, due: 500, paid: 0, status: FeeStatus.PENDING },
+  ]);
+
+  // S8: Readmission (Promoted)
+  await generateCharge(s8, "Readmission 2026-27", new Date("2026-04-05"), [
+    { comp: fc.readmission, due: 2000, paid: 0, status: FeeStatus.PENDING }
+  ]);
+
+  // S10: Admission (New)
+  await generateCharge(s10, "Initial Admission", new Date("2026-04-01"), [
+    { comp: fc.admission, due: 5000, paid: 0, status: FeeStatus.PENDING },
+    { comp: fc.tuition, due: 1000, paid: 0, status: FeeStatus.PENDING },
+  ]);
+
+
+  // 11. Attendance
+  const dates = [];
+  for(let i=0; i<7; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i); dates.push(d);
+  }
+  const attendanceData = [];
+  for (const d of dates) {
+    for (const student of students) {
+      if (student.classId === c3.id) {
+        attendanceData.push({
+          schoolId: school.id, studentId: student.id, classId: student.classId, sectionId: student.sectionId,
+          date: d, status: Math.random() > 0.8 ? AttendanceStatus.ABSENT : AttendanceStatus.PRESENT,
+          markedById: admin.id
+        });
+      }
     }
   }
+  await prisma.attendance.createMany({ data: attendanceData });
 
-  await prisma.fee.deleteMany({ where: { schoolId: dps.id } });
-  await prisma.fee.createMany({ data: feeRows });
-  console.log(`✓ ${feeRows.length} fee records (batch)`);
+  // 12. Assignments
+  await prisma.assignment.createMany({
+    data: [
+      { schoolId: school.id, classId: c3.id, sectionId: s3A.id, teacherId: teachers[0].id, title: "Algebra Practice", dueDate: new Date(Date.now() + 86400000*3), description: "Solve page 45" },
+      { schoolId: school.id, classId: c3.id, sectionId: s3A.id, teacherId: teachers[1].id, title: "Plants and Photosynthesis", dueDate: new Date(Date.now() + 86400000*5), description: "Draw a diagram" },
+      { schoolId: school.id, classId: c4.id, sectionId: s4A.id, teacherId: teachers[2].id, title: "Essay Writing", dueDate: new Date(Date.now() + 86400000*2), description: "My favorite book" },
+    ]
+  });
 
-  // ── Notices ───────────────────────────────────────────────────────────
-  await prisma.notice.deleteMany({ where: { schoolId: dps.id } });
+  // 13. Notices
   await prisma.notice.createMany({
     data: [
-      { schoolId: dps.id, title: "Annual Sports Day — 20 May 2025", content: "All students required. Report in sports attire by 7:30 AM.", priority: NoticePriority.HIGH, publishedById: dpsAdmin.id },
-      { schoolId: dps.id, title: "Mid-Term Exam Schedule Released", content: "Examinations from June 2–10. Timetable available on portal.", priority: NoticePriority.HIGH, publishedById: dpsAdmin.id },
-      { schoolId: dps.id, title: "Parent-Teacher Meeting", content: "PT Meeting Saturday, May 25 for Grade 10 & 12 parents.", priority: NoticePriority.MEDIUM, publishedById: dpsAdmin.id },
-      { schoolId: dps.id, title: "Library Book Return Reminder", content: "All borrowed books must be returned by May 15.", priority: NoticePriority.LOW, publishedById: dpsAdmin.id },
-    ],
-  });
-  console.log("✓ Notices");
-
-  // ── Assignments ───────────────────────────────────────────────────────
-  const firstTeacher = await prisma.teacher.findFirst({ where: { schoolId: dps.id } });
-  if (firstTeacher) {
-    await prisma.assignment.deleteMany({ where: { schoolId: dps.id } });
-    const cls8 = dpsClasses[8]!;
-    const cls9 = dpsClasses[9]!;
-    await prisma.assignment.createMany({
-      data: [
-        { schoolId: dps.id, classId: cls8.id, sectionId: cls8.sections[0]!.id, teacherId: firstTeacher.id, title: "Chapter 5: Algebraic Expressions", description: "Complete all 25 questions. Show working steps.", dueDate: daysAgo(-7) },
-        { schoolId: dps.id, classId: cls9.id, sectionId: cls9.sections[0]!.id, teacherId: firstTeacher.id, title: "Newton's Laws — Lab Report", description: "Submit 2-page report with observations and conclusions.", dueDate: daysAgo(-10) },
-      ],
-    });
-    console.log("✓ Assignments");
-  }
-
-  // ── School 2 & 3 (light) ──────────────────────────────────────────────
-  const greenfield = await prisma.school.upsert({
-    where: { subdomain: "greenfield-academy" },
-    update: {},
-    create: { name: "Greenfield Academy", subdomain: "greenfield-academy", address: "MG Road, Bangalore", email: "admin@greenfield.edu.in", plan: SubscriptionPlan.BASIC, isActive: true },
-  });
-  await prisma.user.upsert({
-    where: { email: "admin@greenfield.edu.in" },
-    update: {},
-    create: { email: "admin@greenfield.edu.in", password: adminPw, name: "Kavitha Menon", role: UserRole.SCHOOL_ADMIN, schoolId: greenfield.id },
+      { schoolId: school.id, publishedById: admin.id, title: "Parent Teacher Meeting", content: "All parents...", targetClassId: null },
+      { schoolId: school.id, publishedById: admin.id, title: "Independence Day", content: "Flag hoisting...", targetClassId: null },
+      { schoolId: school.id, publishedById: admin.id, title: "Fee Payment Reminder", content: "Due soon.", targetClassId: c3.id },
+      { schoolId: school.id, publishedById: admin.id, title: "Science Exhibition", content: "Prepare projects.", targetClassId: c4.id },
+    ]
   });
 
-  const sunrise = await prisma.school.upsert({
-    where: { subdomain: "sunrise-intl" },
-    update: {},
-    create: { name: "Sunrise International School", subdomain: "sunrise-intl", address: "Andheri West, Mumbai", email: "admin@sunrise.edu.in", plan: SubscriptionPlan.FREE, isActive: false },
-  });
-  await prisma.user.upsert({
-    where: { email: "admin@sunrise.edu.in" },
-    update: {},
-    create: { email: "admin@sunrise.edu.in", password: adminPw, name: "Ramesh Joshi", role: UserRole.SCHOOL_ADMIN, schoolId: sunrise.id },
-  });
-  console.log("✓ Greenfield + Sunrise schools");
-
-  console.log("\n✅ Seed complete!\n");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("  Super Admin  →  super@schoolos.com   / admin123");
-  console.log("  School Admin →  admin@dps.edu.in     / admin123");
-  console.log("  Teacher      →  priya@dps.edu.in     / teacher123");
-  console.log("  Accountant   →  accounts@dps.edu.in  / accounts123");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  console.log("✅ Minimal Comprehensive Test Seed Complete!");
+  console.log("\n📋 Test Credentials:");
+  console.log("  Admin Email: admin@test-dps.com");
+  console.log("  Password:    test1234\n");
 }
 
-main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+main().catch(console.error).finally(() => prisma.$disconnect());

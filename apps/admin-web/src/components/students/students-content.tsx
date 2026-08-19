@@ -149,8 +149,8 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                   <p className="text-[10px] text-muted-foreground">{s.parentPhone}</p>
                 </td>
                 <td className="h-12 px-4">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${FEE_BADGE[s.fees?.[0]?.status] ?? FEE_BADGE.PENDING}`}>
-                    {s.fees?.[0]?.status ?? "PENDING"}
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${FEE_BADGE[s.feeCharges?.[0]?.status] ?? FEE_BADGE.PAID}`}>
+                    {s.feeCharges?.[0]?.status ?? "NO DUES"}
                   </span>
                 </td>
                 {canEdit && (

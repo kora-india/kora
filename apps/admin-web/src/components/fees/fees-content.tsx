@@ -7,6 +7,8 @@ import { CollectionTab } from "./tabs/collection-tab";
 import { SetupTab } from "./tabs/setup-tab";
 import { AssignmentsTab } from "./tabs/assignments-tab";
 import { GeneratorTab } from "./tabs/generator-tab";
+import { LogsTab } from "./tabs/logs-tab";
+import { Activity } from "lucide-react";
 
 interface Props {
   sessions: any[];
@@ -15,6 +17,7 @@ interface Props {
   classes: any[];
   students: any[];
   recentCharges: any[];
+  transactions: any[];
   canEdit: boolean;
 }
 
@@ -24,6 +27,7 @@ export function FeesContent(props: Readonly<Props>) {
   const TABS = [
     { id: "collection", label: "Fee Collection", icon: IndianRupee },
     { id: "generator", label: "Generate Fees", icon: FileText },
+    { id: "logs", label: "Logs & Activities", icon: Activity },
     { id: "assignments", label: "Class & Student Setup", icon: Users },
     { id: "settings", label: "Fee Settings", icon: Settings },
   ];
@@ -74,8 +78,9 @@ export function FeesContent(props: Readonly<Props>) {
             transition={{ duration: 0.2 }}
           >
             {activeTab === "collection" && <CollectionTab {...props} />}
-            {activeTab === "generator" && <GeneratorTab {...props} />}
-            {activeTab === "assignments" && <AssignmentsTab {...props} />}
+            { activeTab === "generator" && <GeneratorTab {...props} /> }
+            { activeTab === "logs" && <LogsTab transactions={props.transactions} /> }
+            { activeTab === "assignments" && <AssignmentsTab {...props} /> }
             {activeTab === "settings" && <SetupTab {...props} />}
           </motion.div>
         </AnimatePresence>

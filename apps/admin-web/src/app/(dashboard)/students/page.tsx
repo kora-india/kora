@@ -19,7 +19,7 @@ export default async function StudentsPage() {
       include: {
         class: { select: { name: true } },
         section: { select: { name: true } },
-        fees: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
       },
       orderBy: { createdAt: "desc" },
       take: 200,

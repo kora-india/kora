@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import { allocatePayment } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
@@ -38,6 +38,7 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
     ? recentCharges.filter((c:any) => c.studentId === selectedStudent.id && c.status !== "WAIVED")
     : [];
 
+
   const pendingCharges = studentCharges.filter((c:any) => c.status === "PENDING" || c.status === "PARTIAL" || c.status === "OVERDUE");
   const advanceBalance = selectedStudent?.advanceLedgers?.reduce((sum:number, l:any) => sum + Number(l.amount), 0) || 0;
 
@@ -51,7 +52,7 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
       // Find component name if not in item
       const compName = item.component?.name || components.find((c:any) => c.id === item.componentId)?.name || "Unknown";
       
-      const due = Number(item.amount) - Number(item.paidAmount);
+      const due = Number(item.amount || 0) - Number(item.paidAmount || 0);
       if (due > 0) {
         if (!componentSummary[item.componentId]) {
           componentSummary[item.componentId] = {
