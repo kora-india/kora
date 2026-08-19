@@ -1,7 +1,7 @@
 import { auth } from "@schoolos/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth", "/api/cron"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));

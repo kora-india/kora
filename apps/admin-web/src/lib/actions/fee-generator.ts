@@ -13,16 +13,17 @@ async function getFinanceSession() {
   return { ...user, schoolId: user.schoolId };
 }
 
-export async function generateMonthlyFees(sessionId: string, classId: string, monthTitle: string, dueDateStr: string) {
-  const user = await getFinanceSession();
-  if (!user) return { error: "Unauthorized" };
-
+export async function processClassFeeGeneration(
+  schoolId: string,
+  sessionId: string,
+  classId: string,
+  monthTitle: string,
+  dueDate: Date
+) {
   try {
-    const dueDate = new Date(dueDateStr);
-    
     // Find all students in the class
     const students = await prisma.student.findMany({
-      where: { classId, schoolId: user.schoolId, isActive: true },
+      where: { classId, schoolId, isActive: true },
     });
 
     if (students.length === 0) return { error: "No active students in this class" };
@@ -57,8 +58,8 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
           where: { studentId: student.id, sessionId }
         });
 
-        // Calculate components
-        const chargeItemsData: any[] = [];
+        // Calculate raw components to charge
+        const rawItems: { componentId: string; amount: number }[] = [];
         
         // Base components
         for (const item of classStructure.structure.items) {
@@ -74,45 +75,123 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
           }
 
           if (finalAmount > 0) {
-            chargeItemsData.push({
-              componentId: item.componentId,
-              amount: finalAmount
-            });
+            rawItems.push({ componentId: item.componentId, amount: finalAmount });
           }
         }
 
         // Add any optional components that are assigned to the student but not in the class structure
         for (const override of overrides) {
           if (override.amount && Number(override.amount) > 0 && !classStructure.structure.items.find(i => i.componentId === override.componentId)) {
-             chargeItemsData.push({
-               componentId: override.componentId,
-               amount: Number(override.amount)
-             });
+             rawItems.push({ componentId: override.componentId, amount: Number(override.amount) });
           }
         }
 
+        if (rawItems.length === 0) continue;
+
+        // Fetch student's current advance ledger balances
+        const ledgers = await tx.advanceLedger.findMany({
+          where: { studentId: student.id }
+        });
+        
+        let totalGeneralAdvance = 0;
+        const componentAdvances: Record<string, number> = {};
+        
+        for (const l of ledgers) {
+          const amt = Number(l.amount);
+          if (l.componentId) {
+            componentAdvances[l.componentId] = (componentAdvances[l.componentId] || 0) + amt;
+          } else {
+            totalGeneralAdvance += amt;
+          }
+        }
+
+        const chargeItemsData: any[] = [];
+        const advancesToDeduct: { componentId?: string, amount: number }[] = [];
+
+        // Try to pay off components using advance balances
+        for (const c of rawItems) {
+          let remainingDue = c.amount;
+          let paidAmount = 0;
+
+          // 1. Try component specific advance
+          if (componentAdvances[c.componentId] && componentAdvances[c.componentId] > 0) {
+             const use = Math.min(remainingDue, componentAdvances[c.componentId]);
+             componentAdvances[c.componentId] -= use;
+             remainingDue -= use;
+             paidAmount += use;
+             advancesToDeduct.push({ componentId: c.componentId, amount: use });
+          }
+
+          // 2. Try general advance
+          if (remainingDue > 0 && totalGeneralAdvance > 0) {
+             const use = Math.min(remainingDue, totalGeneralAdvance);
+             totalGeneralAdvance -= use;
+             remainingDue -= use;
+             paidAmount += use;
+             advancesToDeduct.push({ amount: use });
+          }
+
+          let itemStatus = FeeStatus.PENDING;
+          if (paidAmount >= c.amount) itemStatus = FeeStatus.PAID;
+          else if (paidAmount > 0) itemStatus = FeeStatus.PARTIAL;
+
+          chargeItemsData.push({
+            componentId: c.componentId,
+            amount: c.amount,
+            paidAmount: paidAmount,
+            status: itemStatus
+          });
+        }
+
         if (chargeItemsData.length > 0) {
+          let chargeStatus = FeeStatus.PENDING;
+          if (chargeItemsData.every(i => i.status === FeeStatus.PAID)) chargeStatus = FeeStatus.PAID;
+          else if (chargeItemsData.some(i => i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL)) chargeStatus = FeeStatus.PARTIAL;
+
           await tx.feeCharge.create({
             data: {
-              schoolId: user.schoolId,
+              schoolId,
               studentId: student.id,
               sessionId,
               title: monthTitle,
               dueDate,
-              status: FeeStatus.PENDING,
+              status: chargeStatus,
               items: {
                 create: chargeItemsData
               }
             }
           });
+
+          // Insert negative advance ledger entries to reflect usage
+          for (const deduction of advancesToDeduct) {
+             await tx.advanceLedger.create({
+               data: {
+                 studentId: student.id,
+                 componentId: deduction.componentId || null,
+                 amount: -deduction.amount,
+                 description: `Auto-adjusted against generated fee: ${monthTitle}`
+               }
+             });
+          }
+
           generatedCount++;
         }
       }
     }, { maxWait: 10000, timeout: 30000 });
 
-    revalidatePath("/fees");
     return { success: true, generatedCount };
   } catch (e: any) {
     return { error: e.message };
   }
+}
+
+export async function generateMonthlyFees(sessionId: string, classId: string, monthTitle: string, dueDateStr: string) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  const res = await processClassFeeGeneration(user.schoolId, sessionId, classId, monthTitle, new Date(dueDateStr));
+  if (res.success) {
+    revalidatePath("/fees");
+  }
+  return res;
 }
