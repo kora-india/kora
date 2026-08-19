@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { Plus, Check, X, Calendar, Layers, Receipt, Edit2 } from "lucide-react";
+import { Plus, Check, X, Calendar, Layers, Receipt, Edit2, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
 import { createAcademicSession, createFeeComponent, createFeeStructure, updateAcademicSession, updateFeeComponent, updateFeeStructure } from "@/lib/actions/fee-settings";
@@ -186,7 +186,10 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
           <FormField label="Start Date" required><input type="date" {...sessionForm.register("startDate")} className={inputCls} /></FormField>
           <FormField label="End Date" required><input type="date" {...sessionForm.register("endDate")} className={inputCls} /></FormField>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...sessionForm.register("isCurrent")} /> Set as current active session</label>
-          <button className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">{editSessionId ? "Save Changes" : "Save Session"}</button>
+          <button disabled={sessionForm.formState.isSubmitting} className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center justify-center gap-2 disabled:opacity-60">
+            {sessionForm.formState.isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {editSessionId ? "Save Changes" : "Save Session"}
+          </button>
         </form>
       </Dialog>
 
@@ -204,7 +207,10 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
             </select>
           </FormField>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...compForm.register("isOptional")} /> Is Optional (e.g. Transport)</label>
-          <button className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">{editComponentId ? "Save Changes" : "Save Component"}</button>
+          <button disabled={compForm.formState.isSubmitting} className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center justify-center gap-2 disabled:opacity-60">
+            {compForm.formState.isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {editComponentId ? "Save Changes" : "Save Component"}
+          </button>
         </form>
       </Dialog>
 
@@ -239,7 +245,10 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
               )})}
             </div>
           </div>
-          <button className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">{editStructureId ? "Save Changes" : "Save Structure"}</button>
+          <button disabled={structForm.formState.isSubmitting} className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center justify-center gap-2 disabled:opacity-60">
+            {structForm.formState.isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {editStructureId ? "Save Changes" : "Save Structure"}
+          </button>
         </form>
       </Dialog>
 

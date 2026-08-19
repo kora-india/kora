@@ -5,13 +5,27 @@ import { formatCurrency } from "@schoolos/utils";
 import { assignFeeStructureToClass, setStudentFeeOverride } from "@/lib/actions/fee-settings";
 import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
 export function AssignmentsTab({ classes, structures, sessions, components, students, canEdit }: any) {
   const [classData, setClassData] = useState<any>(null);
   const [studentData, setStudentData] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const activeSession = sessions.find((s: any) => s.isCurrent) || sessions[0];
+
+  const filteredStudents = students.filter((s: any) => {
+    if (!search) return true;
+    const term = search.toLowerCase();
+    return s.name.toLowerCase().includes(term) || s.rollNumber.toLowerCase().includes(term);
+  });
+
+  const totalPages = Math.ceil(filteredStudents.length / PAGE_SIZE);
+  const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const assignClassStructure = async (classId: string, structureId: string) => {
     if (!structureId) return;
@@ -22,6 +36,7 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
 
   const handleOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     const formData = new FormData(e.target as HTMLFormElement);
     const componentId = formData.get("componentId") as string;
     const isExempt = formData.get("isExempt") === "on";
@@ -33,6 +48,7 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
       isExempt, discountAmount, amount
     });
 
+    setIsSubmitting(false);
     if (res.error) toast.error(res.error);
     else {
       toast.success("Student override saved");
@@ -82,7 +98,18 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
 
       {/* Student Overrides */}
       <div>
-        <h2 className="text-lg font-semibold mb-4">Student Individual Overrides (Concessions & Optional Fees)</h2>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+          <h2 className="text-lg font-semibold">Student Individual Overrides (Concessions & Optional Fees)</h2>
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder="Search student..." 
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className={inputCls + " !w-64 !h-9 text-sm"}
+            />
+          </div>
+        </div>
         <div className="bg-card border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
@@ -94,23 +121,53 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
               </tr>
             </thead>
             <tbody className="divide-y">
-              {students.slice(0, 50).map((s: any) => (
-                <tr key={s.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 text-muted-foreground">{s.rollNumber}</td>
-                  <td className="px-4 py-3 font-medium">{s.name}</td>
-                  <td className="px-4 py-3">{classes.find((c: any) => c.id === s.classId)?.name}</td>
-                  {canEdit && (
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => setStudentData(s)} className="text-violet-600 hover:underline font-medium text-xs">
-                        Add Override
-                      </button>
-                    </td>
-                  )}
+              {paginatedStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No students found.</td>
                 </tr>
-              ))}
+              ) : (
+                paginatedStudents.map((s: any) => (
+                  <tr key={s.id} className="hover:bg-muted/30">
+                    <td className="px-4 py-3 text-muted-foreground">{s.rollNumber}</td>
+                    <td className="px-4 py-3 font-medium">{s.name}</td>
+                    <td className="px-4 py-3">{classes.find((c: any) => c.id === s.classId)?.name}</td>
+                    {canEdit && (
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => setStudentData(s)} className="text-violet-600 hover:underline font-medium text-xs">
+                          Add Override
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-          <p className="p-3 text-xs text-muted-foreground text-center border-t">Showing top 50 students. Use search to find specific students.</p>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-3 border-t bg-muted/10">
+              <span className="text-xs text-muted-foreground">
+                Showing {(page - 1) * PAGE_SIZE + 1} - {Math.min(page * PAGE_SIZE, filteredStudents.length)} of {filteredStudents.length}
+              </span>
+              <div className="flex gap-1">
+                <button 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1 text-xs border rounded-md bg-background hover:bg-muted disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <button 
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 text-xs border rounded-md bg-background hover:bg-muted disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -139,7 +196,10 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
             </FormField>
           </div>
           
-          <button type="submit" className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">Save Override</button>
+          <button disabled={isSubmitting} type="submit" className="w-full h-10 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 flex items-center justify-center gap-2 disabled:opacity-60">
+            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            Save Override
+          </button>
         </form>
       </Dialog>
     </div>

@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import { allocatePayment } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
-import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
 export function CollectionTab({ students, recentCharges, components, canEdit }: any) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   
@@ -19,6 +21,7 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
   const [expandedComponents, setExpandedComponents] = useState<Record<string, boolean>>({});
 
   const [showPreview, setShowPreview] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter students based on search
   const filteredStudents = search.length > 2 
@@ -33,49 +36,55 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
     setShowPreview(false);
   };
 
+  // Keep student data fresh by finding it in the latest props
+  const currentStudent = selectedStudent 
+    ? students.find((s:any) => s.id === selectedStudent.id) || selectedStudent 
+    : null;
+
   // Calculate student dues
-  const studentCharges = selectedStudent 
-    ? recentCharges.filter((c:any) => c.studentId === selectedStudent.id && c.status !== "WAIVED")
+  const studentCharges = currentStudent 
+    ? recentCharges.filter((c:any) => c.studentId === currentStudent.id && c.status !== "WAIVED")
     : [];
 
-
-  const pendingCharges = studentCharges.filter((c:any) => c.status === "PENDING" || c.status === "PARTIAL" || c.status === "OVERDUE");
-  const advanceBalance = selectedStudent?.advanceLedgers?.reduce((sum:number, l:any) => sum + Number(l.amount), 0) || 0;
+  const advanceBalance = currentStudent?.advanceLedgers?.reduce((sum:number, l:any) => sum + Number(l.amount), 0) || 0;
 
   // Group by component
   const componentSummary: Record<string, any> = {};
   let totalOutstanding = 0;
 
-  for (const charge of pendingCharges) {
-    // Make sure we have the components populated
+  for (const charge of studentCharges) {
     for (const item of charge.items) {
-      // Find component name if not in item
       const compName = item.component?.name || components.find((c:any) => c.id === item.componentId)?.name || "Unknown";
-      
       const due = Number(item.amount || 0) - Number(item.paidAmount || 0);
+      
+      if (!componentSummary[item.componentId]) {
+        componentSummary[item.componentId] = {
+          id: item.componentId,
+          name: compName,
+          totalDue: 0,
+          items: []
+        };
+      }
+
+      // Add all items (paid and unpaid) to show history inside the dropdown
+      componentSummary[item.componentId].items.push({
+        chargeTitle: charge.title,
+        dueDate: charge.dueDate,
+        amount: Number(item.amount),
+        paidAmount: Number(item.paidAmount),
+        due: due,
+        status: due <= 0 ? "PAID" : (Number(item.paidAmount) > 0 ? "PARTIAL" : "PENDING")
+      });
+
       if (due > 0) {
-        if (!componentSummary[item.componentId]) {
-          componentSummary[item.componentId] = {
-            id: item.componentId,
-            name: compName,
-            totalDue: 0,
-            items: []
-          };
-        }
-        componentSummary[item.componentId].items.push({
-          chargeTitle: charge.title,
-          dueDate: charge.dueDate,
-          amount: Number(item.amount),
-          paidAmount: Number(item.paidAmount),
-          due: due
-        });
         componentSummary[item.componentId].totalDue += due;
         totalOutstanding += due;
       }
     }
   }
 
-  const componentList = Object.values(componentSummary);
+  // Only show components that have some outstanding due in the collection table
+  const componentList = Object.values(componentSummary).filter(c => c.totalDue > 0);
 
   const toggleComponent = (id: string, totalDue: number) => {
     const isSelected = !selectedComponents[id];
@@ -153,25 +162,30 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
       toast.error("Enter payment amounts first.");
       return;
     }
+    
+    setIsSubmitting(true);
 
     const payloadPayments = Object.entries(componentPayments)
       .filter(([id, val]) => selectedComponents[id] && Number(val) > 0)
       .map(([id, val]) => ({ componentId: id, amount: Number(val) }));
 
     const res = await allocatePayment({
-      studentId: selectedStudent.id,
+      studentId: currentStudent.id,
       componentPayments: payloadPayments,
       method: paymentMethod as any,
       reference,
     });
 
-    if (res.error) toast.error(res.error);
-    else {
+    if (res.error) {
+      toast.error(res.error);
+      setIsSubmitting(false);
+    } else {
       toast.success(`Payment successful! Receipt: ${(res as any).receiptNo}`);
       setComponentPayments({});
       setSelectedComponents({});
       setShowPreview(false);
-      window.location.reload();
+      setIsSubmitting(false);
+      router.refresh();
     }
   };
 
@@ -209,12 +223,12 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
           )}
         </div>
 
-        {selectedStudent ? (
+        {currentStudent ? (
           <div className="space-y-6">
             <div className="bg-card border rounded-xl p-5 flex justify-between items-center shadow-sm">
               <div>
-                <h2 className="text-xl font-bold">{selectedStudent.name}</h2>
-                <p className="text-sm text-muted-foreground">Class {selectedStudent.class?.name} • Roll No: {selectedStudent.rollNumber}</p>
+                <h2 className="text-xl font-bold">{currentStudent.name}</h2>
+                <p className="text-sm text-muted-foreground">Class {currentStudent.class?.name} • Roll No: {currentStudent.rollNumber}</p>
                 <p className="text-sm text-muted-foreground mt-2">Total Outstanding: <span className="font-bold text-red-600">{formatCurrency(totalOutstanding)}</span></p>
               </div>
               <div className="text-right bg-green-50/50 dark:bg-green-950/20 p-4 rounded-lg border border-green-100 dark:border-green-900">
@@ -280,8 +294,19 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
                                     <tbody>
                                       {comp.items.map((item:any, idx:number) => (
                                         <tr key={idx} className="border-b last:border-0 border-muted/50">
-                                          <td className="py-2 text-muted-foreground">{item.chargeTitle}</td>
-                                          <td className="py-2 text-right">Due: {formatCurrency(item.due)}</td>
+                                          <td className="py-2 text-muted-foreground flex items-center gap-2">
+                                            <span>{item.chargeTitle}</span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted border">
+                                              {new Date(item.dueDate).toLocaleDateString('en-GB', {month: 'short', year: 'numeric'})}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 text-right">
+                                            {item.status === 'PAID' ? (
+                                              <span className="text-green-600 font-medium flex items-center justify-end gap-1"><CheckCircle2 className="w-3 h-3"/> Paid</span>
+                                            ) : (
+                                              <span>Due: {formatCurrency(item.due)}</span>
+                                            )}
+                                          </td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -299,6 +324,54 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
               </div>
             </div>
             
+            {/* Fee Charge History Table */}
+            <div className="bg-card border rounded-xl overflow-hidden shadow-sm mt-6">
+              <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <History className="w-4 h-4 text-violet-600" /> Fee Charge History
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/10 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Charge Title</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Due Month</th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">Total</th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">Paid</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {studentCharges.map((charge: any) => {
+                       const chargeTotal = charge.items.reduce((sum:number, i:any) => sum + Number(i.amount), 0);
+                       const chargePaid = charge.items.reduce((sum:number, i:any) => sum + Number(i.paidAmount), 0);
+                       return (
+                         <tr key={charge.id} className="hover:bg-muted/30">
+                           <td className="px-4 py-3 font-medium">{charge.title}</td>
+                           <td className="px-4 py-3 text-muted-foreground">
+                             {new Date(charge.dueDate).toLocaleDateString('en-GB', {month: 'short', year: 'numeric'})}
+                           </td>
+                           <td className="px-4 py-3 text-right font-medium">{formatCurrency(chargeTotal)}</td>
+                           <td className="px-4 py-3 text-right text-green-600">{formatCurrency(chargePaid)}</td>
+                           <td className="px-4 py-3">
+                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${charge.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200' : charge.status === 'PARTIAL' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                               {charge.status}
+                             </span>
+                           </td>
+                         </tr>
+                       );
+                    })}
+                    {studentCharges.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-muted-foreground">No fee charges generated yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         ) : (
           <div className="bg-card border border-dashed rounded-xl h-64 flex flex-col items-center justify-center text-muted-foreground">
@@ -310,7 +383,7 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
 
       {/* Right Pane: Payment Collection Form */}
       <div className="space-y-6">
-        <div className={`bg-card border rounded-xl p-6 shadow-sm sticky top-6 ${!selectedStudent ? "opacity-50 pointer-events-none" : ""}`}>
+        <div className={`bg-card border rounded-xl p-6 shadow-sm sticky top-6 ${!currentStudent ? "opacity-50 pointer-events-none" : ""}`}>
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><IndianRupee className="w-5 h-5 text-violet-500" /> Payment Summary</h2>
           
           <div className="space-y-5">
@@ -380,9 +453,11 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
                     Edit
                   </button>
                   <button 
+                    disabled={isSubmitting}
                     onClick={handlePayment}
-                    className="flex-[2] py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-transform active:scale-95 shadow-md shadow-violet-500/20"
+                    className="flex-[2] py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-transform active:scale-95 shadow-md shadow-violet-500/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100"
                   >
+                    {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                     Confirm Payment
                   </button>
                 </div>

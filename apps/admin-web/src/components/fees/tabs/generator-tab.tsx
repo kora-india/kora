@@ -33,7 +33,7 @@ export function GeneratorTab({ sessions, classes, canEdit }: any) {
   };
 
   return (
-    <div className="max-w-2xl mx-auto mt-8">
+    <div className="max-w-2xl mt-8">
       <div className="bg-card border shadow-sm rounded-xl p-6">
         <h2 className="text-xl font-bold mb-1">Generate Periodic Fees</h2>
         <p className="text-muted-foreground text-sm mb-6">
