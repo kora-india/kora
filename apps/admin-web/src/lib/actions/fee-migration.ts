@@ -61,6 +61,9 @@ export async function runLegacyFeeMigration() {
           });
         }
 
+        const totalPaidForOldFee = oldFee.payments.reduce((s: any, p: any) => s + Number(p.amount), 0);
+        const itemStatus = oldFee.status === "PAID" ? FeeStatus.PAID : oldFee.status === "PENDING" ? FeeStatus.PENDING : FeeStatus.PARTIAL;
+
         // Create the FeeCharge equivalent
         const newCharge = await tx.feeCharge.create({
           data: {
@@ -69,14 +72,17 @@ export async function runLegacyFeeMigration() {
             sessionId: legacySession.id,
             title: `Legacy: ${oldFee.feeType} (${oldFee.dueDate.toDateString()})`,
             dueDate: oldFee.dueDate,
-            status: oldFee.status === "PAID" ? FeeStatus.PAID : oldFee.status === "PENDING" ? FeeStatus.PENDING : FeeStatus.PARTIAL,
+            status: itemStatus,
             items: {
               create: {
                 componentId: comp.id,
-                amount: oldFee.amount
+                amount: oldFee.amount,
+                paidAmount: totalPaidForOldFee,
+                status: itemStatus
               }
             }
-          }
+          },
+          include: { items: true }
         });
 
         // Migrate payments for this fee
@@ -96,7 +102,7 @@ export async function runLegacyFeeMigration() {
           await tx.paymentAllocation.create({
             data: {
               paymentId: newPayment.id,
-              chargeId: newCharge.id,
+              chargeItemId: newCharge.items[0].id,
               amount: oldPayment.amount
             }
           });

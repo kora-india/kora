@@ -13,18 +13,19 @@ async function getFinanceSession() {
   return { ...user, schoolId: user.schoolId };
 }
 
-export async function processPayment(data: {
+export async function allocatePayment(data: {
   studentId: string;
-  amount: number;
+  componentPayments: { componentId: string; amount: number }[];
+  generalAdvanceAmount?: number;
   method: PaymentMethod;
   reference?: string;
   remarks?: string;
-  manualAllocations?: { chargeId: string; amount: number }[];
 }) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
-  if (data.amount <= 0) return { error: "Payment amount must be greater than zero." };
+  const totalPayment = data.componentPayments.reduce((sum, cp) => sum + cp.amount, 0) + (data.generalAdvanceAmount || 0);
+  if (totalPayment <= 0) return { error: "Payment amount must be greater than zero." };
 
   try {
     const receiptNo = `RCP-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -35,7 +36,7 @@ export async function processPayment(data: {
         data: {
           schoolId: user.schoolId,
           studentId: data.studentId,
-          amount: data.amount,
+          amount: totalPayment,
           method: data.method,
           reference: data.reference,
           receiptNo,
@@ -44,100 +45,115 @@ export async function processPayment(data: {
         }
       });
 
-      let remainingAmount = Number(data.amount);
       const allocationsCreated = [];
+      const affectedChargeIds = new Set<string>();
 
-      // 2. Consume existing Advance Balance if we are allocating manually? No, payment is new money.
-      // If manual allocations are provided, use them. Otherwise auto-allocate.
-      if (data.manualAllocations && data.manualAllocations.length > 0) {
-        for (const alloc of data.manualAllocations) {
-          if (remainingAmount <= 0) break;
-          const allocAmount = Math.min(alloc.amount, remainingAmount);
-          
-          allocationsCreated.push({
-            paymentId: payment.id,
-            chargeId: alloc.chargeId,
-            amount: allocAmount
-          });
-          remainingAmount -= allocAmount;
-        }
-      } else {
-        // Auto-allocate: Oldest pending/partial charges first
-        const charges = await tx.feeCharge.findMany({
-          where: { 
-            studentId: data.studentId, 
-            status: { in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE] } 
+      // 2. Allocate component-wise payments
+      for (const cp of data.componentPayments) {
+        if (cp.amount <= 0) continue;
+
+        let remainingAmount = cp.amount;
+
+        // Find all outstanding FeeChargeItems for this student and component
+        const items = await tx.feeChargeItem.findMany({
+          where: {
+            componentId: cp.componentId,
+            status: { in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE] },
+            charge: { studentId: data.studentId }
           },
-          include: { items: true, allocations: true },
-          orderBy: { dueDate: 'asc' }
+          include: { charge: true },
+          orderBy: { charge: { dueDate: 'asc' } }
         });
 
-        for (const charge of charges) {
+        for (const item of items) {
           if (remainingAmount <= 0) break;
 
-          const totalChargeAmount = charge.items.reduce((sum, item) => sum + Number(item.amount), 0);
-          const alreadyPaid = charge.allocations.reduce((sum, alloc) => sum + Number(alloc.amount), 0);
-          const due = totalChargeAmount - alreadyPaid;
-
+          const due = Number(item.amount) - Number(item.paidAmount);
           if (due > 0) {
             const allocAmount = Math.min(due, remainingAmount);
+            
             allocationsCreated.push({
               paymentId: payment.id,
-              chargeId: charge.id,
+              chargeItemId: item.id,
               amount: allocAmount
             });
+            
             remainingAmount -= allocAmount;
+
+            // Update item status
+            const newPaidAmount = Number(item.paidAmount) + allocAmount;
+            let newItemStatus = item.status;
+            if (newPaidAmount >= Number(item.amount)) {
+              newItemStatus = FeeStatus.PAID;
+            } else if (newPaidAmount > 0) {
+              newItemStatus = FeeStatus.PARTIAL;
+            }
+
+            await tx.feeChargeItem.update({
+              where: { id: item.id },
+              data: { paidAmount: newPaidAmount, status: newItemStatus }
+            });
+
+            affectedChargeIds.add(item.chargeId);
           }
+        }
+
+        // 3. Create component-specific advance if there's remaining amount
+        if (remainingAmount > 0) {
+          await tx.advanceLedger.create({
+            data: {
+              studentId: data.studentId,
+              componentId: cp.componentId,
+              amount: remainingAmount,
+              description: `Component Advance from payment ${receiptNo}`
+            }
+          });
         }
       }
 
-      // 3. Create Allocations
+      // 4. Create General Advance if explicitly provided
+      if (data.generalAdvanceAmount && data.generalAdvanceAmount > 0) {
+        await tx.advanceLedger.create({
+          data: {
+            studentId: data.studentId,
+            amount: data.generalAdvanceAmount,
+            description: `General Advance from payment ${receiptNo}`
+          }
+        });
+      }
+
+      // 5. Create Allocations
       if (allocationsCreated.length > 0) {
         await tx.paymentAllocation.createMany({
           data: allocationsCreated
         });
       }
 
-      // 4. Update Charge Statuses
-      const affectedChargeIds = allocationsCreated.map(a => a.chargeId);
-      // We need to recalculate status for all affected charges
-      for (const chargeId of new Set(affectedChargeIds)) {
-        const charge = await tx.feeCharge.findUnique({
+      // 6. Update Parent Charge Statuses
+      for (const chargeId of Array.from(affectedChargeIds)) {
+        const items = await tx.feeChargeItem.findMany({
+          where: { chargeId }
+        });
+        
+        let allPaid = true;
+        let anyPaid = false;
+        
+        for (const item of items) {
+          if (item.status !== "PAID") allPaid = false;
+          if (item.status === "PAID" || item.status === "PARTIAL") anyPaid = true;
+        }
+
+        let newChargeStatus = FeeStatus.PENDING;
+        if (allPaid) newChargeStatus = FeeStatus.PAID;
+        else if (anyPaid) newChargeStatus = FeeStatus.PARTIAL;
+
+        await tx.feeCharge.update({
           where: { id: chargeId },
-          include: { items: true, allocations: true }
-        });
-        if (!charge) continue;
-
-        const totalChargeAmount = charge.items.reduce((sum, item) => sum + Number(item.amount), 0);
-        const totalPaid = charge.allocations.reduce((sum, alloc) => sum + Number(alloc.amount), 0);
-
-        let newStatus = charge.status;
-        if (totalPaid >= totalChargeAmount) {
-          newStatus = FeeStatus.PAID;
-        } else if (totalPaid > 0) {
-          newStatus = FeeStatus.PARTIAL;
-        }
-
-        if (newStatus !== charge.status) {
-          await tx.feeCharge.update({
-            where: { id: charge.id },
-            data: { status: newStatus }
-          });
-        }
-      }
-
-      // 5. Add any remaining amount to Advance Ledger
-      if (remainingAmount > 0) {
-        await tx.advanceLedger.create({
-          data: {
-            studentId: data.studentId,
-            amount: remainingAmount,
-            description: `Advance from payment ${receiptNo}`
-          }
+          data: { status: newChargeStatus }
         });
       }
 
-      return { receiptNo, remainingAdvance: remainingAmount };
+      return { receiptNo, allocations: allocationsCreated };
     }, { maxWait: 10000, timeout: 30000 });
 
     revalidatePath("/fees");

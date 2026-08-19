@@ -294,6 +294,7 @@ model FeeComponent {
   school           School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   structureItems   FeeStructureItem[]
   studentOverrides StudentFeeOverride[]
+  AdvanceLedger    AdvanceLedger[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -382,20 +383,19 @@ model StudentFeeOverride {
 }
 
 model FeeCharge {
-  id          String              @id @default(cuid())
-  schoolId    String
-  studentId   String
-  sessionId   String
-  title       String
-  dueDate     DateTime            @db.Date
-  status      FeeStatus           @default(PENDING)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  items       FeeChargeItem[]
-  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  session     AcademicSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  allocations PaymentAllocation[]
+  id        String          @id @default(cuid())
+  schoolId  String
+  studentId String
+  sessionId String
+  title     String
+  dueDate   DateTime        @db.Date
+  status    FeeStatus       @default(PENDING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     FeeChargeItem[]
+  school    School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
   @@index([studentId])
@@ -404,13 +404,16 @@ model FeeCharge {
 }
 
 model FeeChargeItem {
-  id          String       @id @default(cuid())
+  id          String              @id @default(cuid())
   chargeId    String
   componentId String
-  amount      Decimal      @db.Decimal(10, 2)
-  createdAt   DateTime     @default(now())
-  charge      FeeCharge    @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  component   FeeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  amount      Decimal             @db.Decimal(10, 2)
+  paidAmount  Decimal             @default(0) @db.Decimal(10, 2)
+  status      FeeStatus           @default(PENDING)
+  createdAt   DateTime            @default(now())
+  charge      FeeCharge           @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  component   FeeComponent        @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  allocations PaymentAllocation[]
 
   @@unique([chargeId, componentId])
   @@map("fee_charge_items")
@@ -439,28 +442,31 @@ model PaymentTransaction {
 }
 
 model PaymentAllocation {
-  id        String             @id @default(cuid())
-  paymentId String
-  chargeId  String
-  amount    Decimal            @db.Decimal(10, 2)
-  createdAt DateTime           @default(now())
-  charge    FeeCharge          @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  payment   PaymentTransaction @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  id           String             @id @default(cuid())
+  paymentId    String
+  chargeItemId String
+  amount       Decimal            @db.Decimal(10, 2)
+  createdAt    DateTime           @default(now())
+  chargeItem   FeeChargeItem      @relation(fields: [chargeItemId], references: [id], onDelete: Cascade)
+  payment      PaymentTransaction @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@index([paymentId])
-  @@index([chargeId])
+  @@index([chargeItemId])
   @@map("payment_allocations")
 }
 
 model AdvanceLedger {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   studentId   String
-  amount      Decimal  @db.Decimal(10, 2)
+  componentId String?
+  amount      Decimal       @db.Decimal(10, 2)
   description String?
-  createdAt   DateTime @default(now())
-  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  component   FeeComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
 
   @@index([studentId])
+  @@index([componentId])
   @@map("advance_ledgers")
 }
 

@@ -44,7 +44,6 @@ export default async function FeesPage() {
       include: {
         student: true,
         items: true,
-        allocations: true,
       },
       orderBy: { createdAt: 'desc' },
       take: 100
