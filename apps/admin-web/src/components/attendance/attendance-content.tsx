@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Calendar, Users, CheckCircle, XCircle, Clock, AlertCircle, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { markAttendance } from "@/lib/actions/attendance";
+import { markAttendance, getAttendanceForClass } from "@/lib/actions/attendance";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
@@ -69,14 +69,29 @@ export function AttendanceContent({ classes, todayRecords, userRole, assignedCla
     }
     setLoadingStudents(true);
     try {
-      const res = await fetch(
-        `/api/students?classId=${selectedClassId}&sectionId=${selectedSectionId}`
-      );
-      const data = await res.json();
+      const [studentsRes, attendanceRes] = await Promise.all([
+        fetch(`/api/students?classId=${selectedClassId}&sectionId=${selectedSectionId}`),
+        getAttendanceForClass(selectedClassId, selectedSectionId, selectedDate)
+      ]);
+
+      const data = await studentsRes.json();
       const list: Student[] = data.students ?? [];
       setStudents(list);
+      
       const defaults: Record<string, AttendanceStatus> = {};
+      
+      // Default everyone to present
       list.forEach((s) => { defaults[s.id] = "PRESENT"; });
+      
+      // Override with existing records from DB if they exist
+      if (attendanceRes.success && attendanceRes.records) {
+        attendanceRes.records.forEach((record: any) => {
+          if (defaults[record.studentId]) {
+             defaults[record.studentId] = record.status as AttendanceStatus;
+          }
+        });
+      }
+      
       setAttendance(defaults);
     } catch {
       toast.error("Failed to load students");

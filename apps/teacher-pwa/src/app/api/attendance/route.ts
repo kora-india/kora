@@ -35,7 +35,6 @@ export async function POST(req: NextRequest) {
   }
 
   const date = new Date(data.date);
-  date.setHours(0,0,0,0);
 
   await prisma.$transaction(
     data.records.map((rec) =>

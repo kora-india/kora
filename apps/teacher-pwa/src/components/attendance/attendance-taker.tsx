@@ -49,7 +49,7 @@ export function AttendanceTaker({ students, teacher, existingAttendance, teacher
         body: JSON.stringify({
           classId: teacher.assignedClassId,
           sectionId: teacher.assignedSectionId,
-          date: new Date().toISOString(),
+          date: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD format based on local browser timezone
           records,
         }),
       });

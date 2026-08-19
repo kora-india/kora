@@ -21,7 +21,7 @@ export default async function AttendancePage() {
   }).then((rows: any[]) => {
     const byDate: Record<string, { present: number; absent: number }> = {};
     rows.forEach((r: any) => {
-      const d = new Date(r.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      const d = new Date(r.date).toLocaleDateString("en-IN", { timeZone: "UTC", day: "numeric", month: "short" });
       if (!byDate[d]) byDate[d] = { present: 0, absent: 0 };
       if (r.status === "PRESENT") byDate[d].present += r._count.id;
       else byDate[d].absent += r._count.id;

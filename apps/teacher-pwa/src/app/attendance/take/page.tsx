@@ -42,8 +42,8 @@ export default async function TakeAttendancePage() {
     orderBy: { rollNumber: "asc" },
   });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const today = new Date(todayStr);
 
   const existing = await prisma.attendance.findMany({
     where: {

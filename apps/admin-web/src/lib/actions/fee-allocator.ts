@@ -143,7 +143,7 @@ export async function allocatePayment(data: {
           if (item.status === "PAID" || item.status === "PARTIAL") anyPaid = true;
         }
 
-        let newChargeStatus = FeeStatus.PENDING;
+        let newChargeStatus: FeeStatus = FeeStatus.PENDING;
         if (allPaid) newChargeStatus = FeeStatus.PAID;
         else if (anyPaid) newChargeStatus = FeeStatus.PARTIAL;
 

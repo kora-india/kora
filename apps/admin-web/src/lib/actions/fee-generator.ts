@@ -131,7 +131,7 @@ export async function processClassFeeGeneration(
              advancesToDeduct.push({ amount: use });
           }
 
-          let itemStatus = FeeStatus.PENDING;
+          let itemStatus: FeeStatus = FeeStatus.PENDING;
           if (paidAmount >= c.amount) itemStatus = FeeStatus.PAID;
           else if (paidAmount > 0) itemStatus = FeeStatus.PARTIAL;
 
@@ -144,7 +144,7 @@ export async function processClassFeeGeneration(
         }
 
         if (chargeItemsData.length > 0) {
-          let chargeStatus = FeeStatus.PENDING;
+          let chargeStatus: FeeStatus = FeeStatus.PENDING;
           if (chargeItemsData.every(i => i.status === FeeStatus.PAID)) chargeStatus = FeeStatus.PAID;
           else if (chargeItemsData.some(i => i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL)) chargeStatus = FeeStatus.PARTIAL;
 
