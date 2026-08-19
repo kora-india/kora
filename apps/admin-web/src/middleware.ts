@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth", "/api/cron"];
 
 function isPublic(pathname: string) {
+  if (pathname === "/") return true;
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 }
 
@@ -24,8 +25,12 @@ export default auth((req) => {
 
   // Always allow public paths
   if (isPublic(pathname)) {
-    // Redirect authenticated users away from login
-    if (req.auth && pathname.startsWith("/login")) {
+    // Redirect authenticated users away from login and landing page
+    if (req.auth && (pathname.startsWith("/login") || pathname === "/")) {
+      // SUPER_ADMIN goes to /schools, others to /dashboard
+      if (req.auth.user?.role === "SUPER_ADMIN") {
+        return NextResponse.redirect(new URL("/schools", req.url));
+      }
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();

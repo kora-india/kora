@@ -10,8 +10,7 @@ A production-ready, premium School Management Platform built with **Next.js 15**
 schoolos/
 ├── apps/
 │   ├── admin-web       → Admin Dashboard (port 3000)
-│   ├── teacher-pwa     → Mobile Teacher PWA (port 3001)
-│   └── marketing       → Landing page (port 3002)
+│   └── teacher-pwa     → Mobile Teacher PWA (port 3001)
 └── packages/
     ├── ui              → Shared UI components
     ├── db              → Prisma ORM + seed data
@@ -58,10 +57,9 @@ pnpm db:seed        # Seed with demo data
 pnpm dev
 ```
 
-This starts all 3 apps:
+This starts both apps:
 - Admin Dashboard: http://localhost:3000
 - Teacher PWA: http://localhost:3001
-- Marketing: http://localhost:3002
 
 ---
 
