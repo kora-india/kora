@@ -164,3 +164,82 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
     return { error: e.message };
   }
 }
+
+// -- Update Academic Session
+export async function updateAcademicSession(id: string, data: { name: string; startDate: string; endDate: string; isCurrent: boolean }) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    if (data.isCurrent) {
+      await prisma.academicSession.updateMany({
+        where: { schoolId: user.schoolId },
+        data: { isCurrent: false }
+      });
+    }
+
+    await prisma.academicSession.update({
+      where: { id, schoolId: user.schoolId },
+      data: {
+        name: data.name,
+        startDate: new Date(data.startDate),
+        endDate: new Date(data.endDate),
+        isCurrent: data.isCurrent
+      }
+    });
+
+    revalidatePath("/fees/settings");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+// -- Update Fee Component
+export async function updateFeeComponent(id: string, data: { name: string; amount: number; frequency: FeeFrequency; isOptional: boolean }) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    await prisma.feeComponent.update({
+      where: { id, schoolId: user.schoolId },
+      data: {
+        name: data.name,
+        amount: data.amount,
+        frequency: data.frequency,
+        isOptional: data.isOptional
+      }
+    });
+
+    revalidatePath("/fees/settings");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+// -- Update Fee Structure
+export async function updateFeeStructure(id: string, data: { name: string; sessionId: string; componentIds: string[] }) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    // We need to recreate the items relation
+    await prisma.feeStructure.update({
+      where: { id, schoolId: user.schoolId },
+      data: {
+        sessionId: data.sessionId,
+        name: data.name,
+        items: {
+          deleteMany: {},
+          create: data.componentIds.map(compId => ({ componentId: compId }))
+        }
+      }
+    });
+
+    revalidatePath("/fees/settings");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}

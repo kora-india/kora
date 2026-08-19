@@ -83,7 +83,7 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
 
         // Add any optional components that are assigned to the student but not in the class structure
         for (const override of overrides) {
-          if (override.amount && override.amount > 0 && !classStructure.structure.items.find(i => i.componentId === override.componentId)) {
+          if (override.amount && Number(override.amount) > 0 && !classStructure.structure.items.find(i => i.componentId === override.componentId)) {
              chargeItemsData.push({
                componentId: override.componentId,
                amount: Number(override.amount)
@@ -108,7 +108,7 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
           generatedCount++;
         }
       }
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     revalidatePath("/fees");
     return { success: true, generatedCount };

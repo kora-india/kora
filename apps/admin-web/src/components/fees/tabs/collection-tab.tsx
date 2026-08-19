@@ -51,12 +51,13 @@ export function CollectionTab({ students, recentCharges, canEdit }: any) {
 
     if (res.error) toast.error(res.error);
     else {
-      toast.success(`Payment successful! Receipt: ${res.receiptNo}`);
+      toast.success(`Payment successful! Receipt: ${(res as any).receiptNo}`);
       setPaymentAmount("");
       // Ideally refresh the student data here or page refresh
       window.location.reload();
     }
   };
+
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
