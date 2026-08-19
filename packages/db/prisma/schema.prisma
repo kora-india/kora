@@ -37,6 +37,30 @@ enum FeeStatus {
   PENDING
   OVERDUE
   WAIVED
+  PARTIAL
+}
+
+enum FeeFrequency {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+  ONE_TIME
+  CUSTOM
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  NEFT
+  RTGS
+  IMPS
+  CHEQUE
+  DEBIT_CARD
+  CREDIT_CARD
+  ONLINE
+  OTHER
 }
 
 enum NoticePriority {
@@ -85,6 +109,12 @@ model School {
   notices       Notice[]
   assignments   Assignment[]
   subscription  Subscription?
+  
+  academicSessions AcademicSession[]
+  feeComponents    FeeComponent[]
+  feeStructures    FeeStructure[]
+  feeCharges       FeeCharge[]
+  paymentTxs       PaymentTransaction[]
 
   @@map("schools")
 }
@@ -168,6 +198,8 @@ model Class {
   attendances Attendance[]
   assignments Assignment[]
   fees        Fee[]
+  
+  classFeeStructures ClassFeeStructure[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -219,6 +251,12 @@ model Student {
   section     Section      @relation(fields: [sectionId], references: [id])
   attendances Attendance[]
   fees        Fee[]
+  
+  feeAssignments StudentFeeAssignment[]
+  feeOverrides   StudentFeeOverride[]
+  feeCharges     FeeCharge[]
+  paymentTxs     PaymentTransaction[]
+  advanceLedgers AdvanceLedger[]
 
   @@unique([schoolId, rollNumber, classId])
   @@index([schoolId])
@@ -324,6 +362,225 @@ model Payment {
 
   @@index([schoolId])
   @@map("payments")
+}
+
+// ─── New Fee Management (V2) ───────────────────────────────────────────────
+
+model AcademicSession {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String   // e.g., "2026-27"
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school              School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  feeStructures       FeeStructure[]
+  studentAssignments  StudentFeeAssignment[]
+  studentOverrides    StudentFeeOverride[]
+  feeCharges          FeeCharge[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("academic_sessions")
+}
+
+model FeeComponent {
+  id          String       @id @default(cuid())
+  schoolId    String
+  name        String
+  description String?
+  category    String?
+  amount      Decimal      @db.Decimal(10, 2)
+  frequency   FeeFrequency @default(MONTHLY)
+  isOptional  Boolean      @default(false)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  school            School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  structureItems    FeeStructureItem[]
+  studentOverrides  StudentFeeOverride[]
+  chargeItems       FeeChargeItem[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("fee_components")
+}
+
+model FeeStructure {
+  id          String   @id @default(cuid())
+  schoolId    String
+  sessionId   String
+  name        String
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  school            School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  session           AcademicSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items             FeeStructureItem[]
+  classAssignments  ClassFeeStructure[]
+  studentAssignments StudentFeeAssignment[]
+
+  @@index([schoolId])
+  @@index([sessionId])
+  @@map("fee_structures")
+}
+
+model FeeStructureItem {
+  id          String   @id @default(cuid())
+  structureId String
+  componentId String
+  createdAt   DateTime @default(now())
+
+  structure FeeStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  component FeeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([structureId, componentId])
+  @@map("fee_structure_items")
+}
+
+model ClassFeeStructure {
+  id          String   @id @default(cuid())
+  classId     String
+  structureId String
+  createdAt   DateTime @default(now())
+
+  class     Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  structure FeeStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, structureId])
+  @@map("class_fee_structures")
+}
+
+model StudentFeeAssignment {
+  id          String   @id @default(cuid())
+  studentId   String
+  sessionId   String
+  structureId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  structure FeeStructure    @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sessionId])
+  @@index([studentId])
+  @@map("student_fee_assignments")
+}
+
+model StudentFeeOverride {
+  id             String   @id @default(cuid())
+  studentId      String
+  sessionId      String
+  componentId    String
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  isExempt       Boolean  @default(false)
+  amount         Decimal? @db.Decimal(10, 2)
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  component FeeComponent    @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sessionId, componentId])
+  @@index([studentId])
+  @@map("student_fee_overrides")
+}
+
+model FeeCharge {
+  id          String    @id @default(cuid())
+  schoolId    String
+  studentId   String
+  sessionId   String
+  title       String
+  dueDate     DateTime  @db.Date
+  status      FeeStatus @default(PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  school      School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session     AcademicSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  items       FeeChargeItem[]
+  allocations PaymentAllocation[]
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@index([sessionId])
+  @@map("fee_charges")
+}
+
+model FeeChargeItem {
+  id          String   @id @default(cuid())
+  chargeId    String
+  componentId String
+  amount      Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+
+  charge    FeeCharge    @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  component FeeComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([chargeId, componentId])
+  @@map("fee_charge_items")
+}
+
+model PaymentTransaction {
+  id          String        @id @default(cuid())
+  schoolId    String
+  studentId   String
+  amount      Decimal       @db.Decimal(10, 2)
+  method      PaymentMethod @default(CASH)
+  reference   String?
+  receiptNo   String        @unique
+  date        DateTime      @default(now())
+  status      String        @default("SUCCESS") // SUCCESS, REVERSED
+  remarks     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  school      School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  allocations PaymentAllocation[]
+
+  @@index([schoolId])
+  @@index([studentId])
+  @@map("payment_transactions")
+}
+
+model PaymentAllocation {
+  id            String   @id @default(cuid())
+  paymentId     String
+  chargeId      String
+  amount        Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+
+  payment PaymentTransaction @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  charge  FeeCharge          @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([chargeId])
+  @@map("payment_allocations")
+}
+
+model AdvanceLedger {
+  id          String   @id @default(cuid())
+  studentId   String
+  amount      Decimal  @db.Decimal(10, 2)
+  description String?
+  createdAt   DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("advance_ledgers")
 }
 
 // ─── Notice ────────────────────────────────────────────────────────────────

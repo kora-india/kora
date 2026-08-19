@@ -3,7 +3,7 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { FeesContent } from "@/components/fees/fees-content";
 
-export const metadata = { title: "Fees" };
+export const metadata = { title: "Fees Management" };
 
 export default async function FeesPage() {
   const session = await auth();
@@ -13,49 +13,52 @@ export default async function FeesPage() {
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
 
-  const [fees, summary, students, classes, feeTypes] = await Promise.all([
-    prisma.fee.findMany({
+  // Fetch V2 configuration data
+  const [
+    academicSessions,
+    feeComponents,
+    feeStructures,
+    classes,
+    students,
+    recentCharges
+  ] = await Promise.all([
+    prisma.academicSession.findMany({ where: { schoolId: user.schoolId }, orderBy: { startDate: 'desc' } }),
+    prisma.feeComponent.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' } }),
+    prisma.feeStructure.findMany({ 
       where: { schoolId: user.schoolId },
-      include: {
-        student: { select: { name: true, rollNumber: true } },
-        class: { select: { name: true } },
-      },
-      orderBy: { dueDate: "desc" },
-      take: 100,
+      include: { items: { include: { component: true } } },
+      orderBy: { createdAt: 'desc' }
     }),
-    prisma.fee.groupBy({
-      by: ["status"],
+    prisma.class.findMany({ 
       where: { schoolId: user.schoolId },
-      _sum: { amount: true },
-      _count: { id: true },
+      include: { classFeeStructures: true },
+      orderBy: { grade: 'asc' }
     }),
     prisma.student.findMany({
       where: { schoolId: user.schoolId, isActive: true },
-      select: { id: true, name: true, classId: true, rollNumber: true },
-      orderBy: { name: "asc" },
-      take: 500,
+      select: { id: true, name: true, rollNumber: true, classId: true, advanceLedgers: true },
+      orderBy: { name: 'asc' }
     }),
-    prisma.class.findMany({
+    prisma.feeCharge.findMany({
       where: { schoolId: user.schoolId },
-      select: { id: true, name: true },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-    prisma.fee.findMany({
-      where: { schoolId: user.schoolId },
-      select: { feeType: true },
-      distinct: ["feeType"],
-      orderBy: { feeType: "asc" },
-    }),
+      include: {
+        student: true,
+        items: true,
+        allocations: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
   ]);
 
   return (
     <FeesContent
-      fees={fees}
-      summary={summary}
-      students={students}
+      sessions={academicSessions}
+      components={feeComponents}
+      structures={feeStructures}
       classes={classes}
-      feeTypes={feeTypes.map((f: { feeType: string }) => f.feeType)}
+      students={students}
+      recentCharges={recentCharges}
       canEdit={canEdit}
     />
   );
