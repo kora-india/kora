@@ -77,7 +77,7 @@ export function FeesContent(props: Readonly<Props>) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "collection" && <CollectionTab {...props} />}
+            {activeTab === "collection" && <CollectionTab {...props} onNavigate={setActiveTab} />}
             { activeTab === "generator" && <GeneratorTab {...props} /> }
             { activeTab === "logs" && <LogsTab transactions={props.transactions} /> }
             { activeTab === "assignments" && <AssignmentsTab {...props} /> }

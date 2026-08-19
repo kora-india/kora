@@ -5,10 +5,10 @@ import { formatCurrency } from "@schoolos/utils";
 import { allocatePayment } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2 } from "lucide-react";
+import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2, Activity, ArrowUpRight } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
-export function CollectionTab({ students, recentCharges, components, canEdit }: any) {
+export function CollectionTab({ students, recentCharges, components, canEdit, transactions, onNavigate }: any) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
@@ -379,6 +379,55 @@ export function CollectionTab({ students, recentCharges, components, canEdit }: 
             <p>Search and select a student to view their component-wise dues</p>
           </div>
         )}
+
+        {/* Global Recent Payments (shows regardless of selected student) */}
+        <div className="bg-card border rounded-xl overflow-hidden shadow-sm mt-8">
+          <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-green-600" /> Recent Payments Activity
+            </h3>
+            <button 
+              onClick={() => onNavigate?.("logs")}
+              className="text-sm font-medium text-violet-600 hover:text-violet-700 flex items-center gap-1"
+            >
+              View All <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/10 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Receipt No</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Student</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Amount</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Method</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {transactions?.slice(0, 5).map((txn: any) => (
+                  <tr key={txn.id} className="hover:bg-muted/30">
+                    <td className="px-4 py-3 font-medium text-violet-600">{txn.receiptNo}</td>
+                    <td className="px-4 py-3">{txn.student?.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{new Date(txn.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right font-bold text-green-600">{formatCurrency(Number(txn.amount))}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted">
+                        {txn.paymentMethod}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {(!transactions || transactions.length === 0) && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground">No recent payments.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
       </div>
 
       {/* Right Pane: Payment Collection Form */}

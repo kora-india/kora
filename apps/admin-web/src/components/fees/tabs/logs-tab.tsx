@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { formatCurrency, formatDate } from "@schoolos/utils";
-import { Search, Filter, ArrowUpRight, ArrowDownRight, IndianRupee, History } from "lucide-react";
+import { Search, Filter, ArrowUpRight, ArrowDownRight, IndianRupee, History, FileText, CheckCircle2 } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
 
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 export function LogsTab({ transactions }: Readonly<Props>) {
   const [subTab, setSubTab] = useState<"transactions" | "activities">("transactions");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTx, setSelectedTx] = useState<any>(null);
 
   const filteredTransactions = transactions.filter(tx => {
     if (!searchTerm) return true;
@@ -93,7 +95,11 @@ export function LogsTab({ transactions }: Readonly<Props>) {
                     </tr>
                   ) : (
                     filteredTransactions.map((tx: any) => (
-                      <tr key={tx.id} className="hover:bg-muted/30 transition-colors">
+                      <tr 
+                        key={tx.id} 
+                        className="hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => setSelectedTx(tx)}
+                      >
                         <td className="px-4 py-3 font-medium text-violet-600">{tx.receiptNo}</td>
                         <td className="px-4 py-3 text-muted-foreground">{formatDate(tx.date)}</td>
                         <td className="px-4 py-3">
@@ -133,6 +139,105 @@ export function LogsTab({ transactions }: Readonly<Props>) {
           </p>
         </div>
       )}
+
+      {/* Transaction Details Modal */}
+      <Dialog 
+        open={!!selectedTx} 
+        onOpenChange={(open) => !open && setSelectedTx(null)}
+        title="Transaction Details"
+      >
+        {selectedTx && (
+          <div className="space-y-6">
+            
+            {/* Header / Summary */}
+            <div className="bg-violet-50/50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/50 p-4 rounded-xl flex justify-between items-center">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Total Amount Paid</p>
+                <p className="text-3xl font-bold text-violet-600 flex items-center gap-2">
+                  {formatCurrency(Number(selectedTx.amount))} 
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold">{selectedTx.receiptNo}</p>
+                <p className="text-sm text-muted-foreground">{formatDate(selectedTx.createdAt)}</p>
+              </div>
+            </div>
+
+            {/* Student Info */}
+            <div className="grid grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-xl border">
+              <div>
+                <p className="text-muted-foreground mb-0.5">Student Name</p>
+                <p className="font-medium">{selectedTx.student?.name}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Roll Number</p>
+                <p className="font-medium">{selectedTx.student?.rollNumber}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Payment Method</p>
+                <p className="font-medium capitalize">{selectedTx.method?.toLowerCase().replace('_', ' ')}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Reference / Notes</p>
+                <p className="font-medium">{selectedTx.reference || selectedTx.remarks || "-"}</p>
+              </div>
+            </div>
+
+            {/* Allocations Breakdown */}
+            <div>
+              <h4 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+                <FileText className="w-4 h-4 text-muted-foreground" /> Payment Allocation Breakdown
+              </h4>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Fee Component</th>
+                      <th className="px-3 py-2 text-left font-medium">Month / Charge</th>
+                      <th className="px-3 py-2 text-right font-medium">Allocated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {selectedTx.allocations?.map((alloc: any) => (
+                      <tr key={alloc.id} className="bg-card">
+                        <td className="px-3 py-2">{alloc.chargeItem?.component?.name || "Unknown"}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{alloc.chargeItem?.charge?.title || "-"}</td>
+                        <td className="px-3 py-2 text-right font-medium text-emerald-600">{formatCurrency(Number(alloc.amount))}</td>
+                      </tr>
+                    ))}
+                    {(!selectedTx.allocations || selectedTx.allocations.length === 0) && (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">
+                          No specific components allocated (likely Advance payment).
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Derived Advance Calculation */}
+              {selectedTx.allocations && (
+                (() => {
+                  const totalAllocated = selectedTx.allocations.reduce((sum:number, a:any) => sum + Number(a.amount), 0);
+                  const advance = Number(selectedTx.amount) - totalAllocated;
+                  if (advance > 0) {
+                    return (
+                      <div className="mt-3 flex justify-between items-center p-3 bg-green-50/50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/50 rounded-lg text-sm">
+                        <span className="font-medium text-green-700 dark:text-green-400">Added to Advance Ledger</span>
+                        <span className="font-bold text-green-600">+{formatCurrency(advance)}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()
+              )}
+            </div>
+            
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 }
