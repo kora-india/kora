@@ -12,23 +12,22 @@ export default async function TeachersPage() {
   if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
   if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) redirect("/dashboard");
 
-  const [teachers, classes] = await Promise.all([
-    prisma.teacher.findMany({
-      where: { schoolId: user.schoolId, isActive: true },
-      include: {
-        assignedClass: { select: { name: true } },
-        assignedSection: { select: { name: true } },
-      },
-      orderBy: { name: "asc" },
-      take: 500,
-    }),
-    prisma.class.findMany({
-      where: { schoolId: user.schoolId },
-      include: { sections: { select: { id: true, name: true } } },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-  ]);
+  const teachers = await prisma.teacher.findMany({
+    where: { schoolId: user.schoolId, isActive: true },
+    include: {
+      assignedClass: { select: { name: true } },
+      assignedSection: { select: { name: true } },
+    },
+    orderBy: { name: "asc" },
+    take: 500,
+  });
+
+  const classes = await prisma.class.findMany({
+    where: { schoolId: user.schoolId },
+    include: { sections: { select: { id: true, name: true } } },
+    orderBy: { grade: "asc" },
+    take: 200,
+  });
 
   return <TeachersContent teachers={teachers} classes={classes} />;
 }

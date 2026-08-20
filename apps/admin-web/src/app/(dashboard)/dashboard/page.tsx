@@ -8,47 +8,36 @@ import { UserRole } from "@schoolos/types";
 export const metadata = { title: "Dashboard" };
 
 async function getDashboardData(schoolId: string) {
-  const [
-    totalStudents,
-    totalTeachers,
-    totalClasses,
-    pendingFees,
-    todayAttendance,
-    recentActivity,
-    notices,
-  ] = await Promise.all([
-    prisma.student.count({ where: { schoolId, isActive: true } }),
-    prisma.teacher.count({ where: { schoolId, isActive: true } }),
-    prisma.class.count({ where: { schoolId } }),
-    prisma.fee.aggregate({
-      where: { schoolId, status: { in: ["PENDING", "OVERDUE"] } },
-      _sum: { amount: true },
-    }),
-    (async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const [present, total] = await Promise.all([
-        prisma.attendance.count({ where: { schoolId, date: today, status: "PRESENT" } }),
-        prisma.attendance.count({ where: { schoolId, date: today } }),
-      ]);
-      return { present, total };
-    })(),
-    prisma.student.findMany({
-      where: { schoolId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      include: {
-        class: { select: { name: true } },
-        section: { select: { name: true } },
-        fees: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
-      },
-    }),
-    prisma.notice.findMany({
-      where: { schoolId, isPublished: true },
-      orderBy: { createdAt: "desc" },
-      take: 3,
-    }),
-  ]);
+  const totalStudents = await prisma.student.count({ where: { schoolId, isActive: true } });
+  const totalTeachers = await prisma.teacher.count({ where: { schoolId, isActive: true } });
+  const totalClasses = await prisma.class.count({ where: { schoolId } });
+  const pendingFees = await prisma.fee.aggregate({
+    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] } },
+    _sum: { amount: true },
+  });
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const present = await prisma.attendance.count({ where: { schoolId, date: today, status: "PRESENT" } });
+  const total = await prisma.attendance.count({ where: { schoolId, date: today } });
+  const todayAttendance = { present, total };
+
+  const recentActivity = await prisma.student.findMany({
+    where: { schoolId },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      fees: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+
+  const notices = await prisma.notice.findMany({
+    where: { schoolId, isPublished: true },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
 
   // Revenue by month (last 6 months)
   const sixMonthsAgo = new Date();
@@ -56,16 +45,15 @@ async function getDashboardData(schoolId: string) {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
-  const [payments, pendingFeeRows] = await Promise.all([
-    prisma.payment.findMany({
-      where: { schoolId, paidAt: { gte: sixMonthsAgo } },
-      select: { amount: true, paidAt: true },
-    }),
-    prisma.fee.findMany({
-      where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
-      select: { amount: true, dueDate: true },
-    }),
-  ]);
+  const payments = await prisma.payment.findMany({
+    where: { schoolId, paidAt: { gte: sixMonthsAgo } },
+    select: { amount: true, paidAt: true },
+  });
+
+  const pendingFeeRows = await prisma.fee.findMany({
+    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
+    select: { amount: true, dueDate: true },
+  });
 
   const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
 

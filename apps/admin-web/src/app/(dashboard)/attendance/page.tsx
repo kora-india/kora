@@ -26,19 +26,18 @@ export default async function AttendancePage() {
     assignedSectionId = teacher?.assignedSectionId ?? null;
   }
 
-  const [todayRecords, classes] = await Promise.all([
-    prisma.attendance.groupBy({
-      by: ["classId", "status"],
-      where: { schoolId: user.schoolId, date: today },
-      _count: { id: true },
-    }),
-    prisma.class.findMany({
-      where: { schoolId: user.schoolId },
-      include: { sections: { orderBy: { name: "asc" } } },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-  ]);
+  const todayRecords = await prisma.attendance.groupBy({
+    by: ["classId", "status"],
+    where: { schoolId: user.schoolId, date: today },
+    _count: { id: true },
+  });
+
+  const classes = await prisma.class.findMany({
+    where: { schoolId: user.schoolId },
+    include: { sections: { orderBy: { name: "asc" } } },
+    orderBy: { grade: "asc" },
+    take: 200,
+  });
 
   return (
     <AttendanceContent

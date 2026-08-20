@@ -21,38 +21,31 @@ async function getAnalyticsData(schoolId: string) {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const [
-    payments,
-    pendingFeeRows,
-    attendanceRows,
-    feeTypeSums,
-    totalFeeCount,
-    paidFeeCount,
-    activeStudentCount,
-    newStudentCount,
-  ] = await Promise.all([
-    prisma.payment.findMany({
-      where: { schoolId, paidAt: { gte: sixMonthsAgo } },
-      select: { amount: true, paidAt: true },
-    }),
-    prisma.fee.findMany({
-      where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
-      select: { amount: true, dueDate: true },
-    }),
-    prisma.attendance.findMany({
-      where: { schoolId, date: { gte: sixMonthsAgo } },
-      select: { date: true, status: true },
-    }),
-    prisma.fee.groupBy({
-      by: ["feeType"],
-      where: { schoolId },
-      _sum: { amount: true },
-    }),
-    prisma.fee.count({ where: { schoolId } }),
-    prisma.fee.count({ where: { schoolId, status: "PAID" } }),
-    prisma.student.count({ where: { schoolId, isActive: true } }),
-    prisma.student.count({ where: { schoolId, createdAt: { gte: startOfMonth } } }),
-  ]);
+  const payments = await prisma.payment.findMany({
+    where: { schoolId, paidAt: { gte: sixMonthsAgo } },
+    select: { amount: true, paidAt: true },
+  });
+
+  const pendingFeeRows = await prisma.fee.findMany({
+    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
+    select: { amount: true, dueDate: true },
+  });
+
+  const attendanceRows = await prisma.attendance.findMany({
+    where: { schoolId, date: { gte: sixMonthsAgo } },
+    select: { date: true, status: true },
+  });
+
+  const feeTypeSums = await prisma.fee.groupBy({
+    by: ["feeType"],
+    where: { schoolId },
+    _sum: { amount: true },
+  });
+
+  const totalFeeCount = await prisma.fee.count({ where: { schoolId } });
+  const paidFeeCount = await prisma.fee.count({ where: { schoolId, status: "PAID" } });
+  const activeStudentCount = await prisma.student.count({ where: { schoolId, isActive: true } });
+  const newStudentCount = await prisma.student.count({ where: { schoolId, createdAt: { gte: startOfMonth } } });
 
   const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
   const months = Array.from({ length: 6 }, (_, i) => {

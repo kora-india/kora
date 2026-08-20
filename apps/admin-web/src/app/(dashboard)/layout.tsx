@@ -16,20 +16,25 @@ export default async function DashboardRootLayout({ children }: Readonly<{ child
     redirect("/setup");
   }
 
-  // Check school suspension — SUPER_ADMIN is always allowed
-  if (user.schoolId && user.role !== "SUPER_ADMIN") {
+  let schoolName = "";
+
+  if (user.schoolId) {
     const school = await prisma.school.findUnique({
       where: { id: user.schoolId },
       select: { isActive: true, name: true },
     });
-    if (school && !school.isActive) {
-      redirect("/suspended");
+    
+    if (school) {
+      schoolName = school.name;
+      if (user.role !== "SUPER_ADMIN" && !school.isActive) {
+        redirect("/suspended");
+      }
     }
   }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar userRole={user.role} schoolName="Delhi Public School" />
+      <Sidebar userRole={user.role} schoolName={schoolName} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Topbar user={user} />
         <main className="flex-1 overflow-y-auto">

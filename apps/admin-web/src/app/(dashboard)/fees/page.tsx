@@ -14,57 +14,47 @@ export default async function FeesPage() {
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
 
   // Fetch V2 configuration data
-  const [
-    academicSessions,
-    feeComponents,
-    feeStructures,
-    classes,
-    students,
-    recentCharges,
-    transactions
-  ] = await Promise.all([
-    prisma.academicSession.findMany({ where: { schoolId: user.schoolId }, orderBy: { startDate: 'desc' } }),
-    prisma.feeComponent.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' } }),
-    prisma.feeStructure.findMany({ 
-      where: { schoolId: user.schoolId },
-      include: { items: { include: { component: true } } },
-      orderBy: { createdAt: 'desc' }
-    }),
-    prisma.class.findMany({ 
-      where: { schoolId: user.schoolId },
-      include: { classFeeStructures: true },
-      orderBy: { grade: 'asc' }
-    }),
-    prisma.student.findMany({
-      where: { schoolId: user.schoolId, isActive: true },
-      select: { id: true, name: true, rollNumber: true, classId: true, advanceLedgers: true },
-      orderBy: { name: 'asc' }
-    }),
-    prisma.feeCharge.findMany({
-      where: { schoolId: user.schoolId },
-      include: {
-        student: true,
-        items: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100
-    }),
-    prisma.paymentTransaction.findMany({
-      where: { schoolId: user.schoolId },
-      include: {
-        student: true,
-        allocations: {
-          include: {
-            chargeItem: {
-              include: { component: true, charge: true }
-            }
+  const academicSessions = await prisma.academicSession.findMany({ where: { schoolId: user.schoolId }, orderBy: { startDate: 'desc' } });
+  const feeComponents = await prisma.feeComponent.findMany({ where: { schoolId: user.schoolId }, orderBy: { name: 'asc' } });
+  const feeStructures = await prisma.feeStructure.findMany({ 
+    where: { schoolId: user.schoolId },
+    include: { items: { include: { component: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  const classes = await prisma.class.findMany({ 
+    where: { schoolId: user.schoolId },
+    include: { classFeeStructures: true },
+    orderBy: { grade: 'asc' }
+  });
+  const students = await prisma.student.findMany({
+    where: { schoolId: user.schoolId, isActive: true },
+    select: { id: true, name: true, rollNumber: true, classId: true, advanceLedgers: true },
+    orderBy: { name: 'asc' }
+  });
+  const recentCharges = await prisma.feeCharge.findMany({
+    where: { schoolId: user.schoolId },
+    include: {
+      student: true,
+      items: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100
+  });
+  const transactions = await prisma.paymentTransaction.findMany({
+    where: { schoolId: user.schoolId },
+    include: {
+      student: true,
+      allocations: {
+        include: {
+          chargeItem: {
+            include: { component: true, charge: true }
           }
         }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100
-    })
-  ]);
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100
+  });
 
   return (
     <FeesContent

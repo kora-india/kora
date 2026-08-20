@@ -23,24 +23,23 @@ export default async function AssignmentsPage() {
     }
   }
 
-  const [assignments, classes] = await Promise.all([
-    prisma.assignment.findMany({
-      where: classFilter,
-      include: {
-        class: { select: { name: true } },
-        section: { select: { name: true } },
-        teacher: { select: { name: true, userId: true } },
-      },
-      orderBy: { dueDate: "asc" },
-      take: 300,
-    }),
-    prisma.class.findMany({
-      where: { schoolId: user.schoolId },
-      include: { sections: { select: { id: true, name: true } } },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-  ]);
+  const assignments = await prisma.assignment.findMany({
+    where: classFilter,
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      teacher: { select: { name: true, userId: true } },
+    },
+    orderBy: { dueDate: "asc" },
+    take: 300,
+  });
+
+  const classes = await prisma.class.findMany({
+    where: { schoolId: user.schoolId },
+    include: { sections: { select: { id: true, name: true } } },
+    orderBy: { grade: "asc" },
+    take: 200,
+  });
 
   return (
     <AssignmentsContent

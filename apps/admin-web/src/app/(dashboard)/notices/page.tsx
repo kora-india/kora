@@ -20,22 +20,24 @@ export default async function NoticesPage({
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const [notices, totalNotices, classes] = await Promise.all([
-    prisma.notice.findMany({
-      where: { schoolId: user.schoolId },
-      include: { publishedBy: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.notice.count({ where: { schoolId: user.schoolId } }),
-    prisma.class.findMany({
-      where: { schoolId: user.schoolId },
-      select: { id: true, name: true },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-  ]);
+  const notices = await prisma.notice.findMany({
+    where: { schoolId: user.schoolId },
+    include: { publishedBy: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+  });
+
+  const totalNotices = await prisma.notice.count({
+    where: { schoolId: user.schoolId },
+  });
+
+  const classes = await prisma.class.findMany({
+    where: { schoolId: user.schoolId },
+    select: { id: true, name: true },
+    orderBy: { grade: "asc" },
+    take: 200,
+  });
 
   return (
     <NoticesContent

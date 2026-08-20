@@ -13,24 +13,23 @@ export default async function StudentsPage() {
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role);
 
-  const [students, classes] = await Promise.all([
-    prisma.student.findMany({
-      where: { schoolId: user.schoolId, isActive: true },
-      include: {
-        class: { select: { name: true } },
-        section: { select: { name: true } },
-        feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
-    prisma.class.findMany({
-      where: { schoolId: user.schoolId },
-      include: { sections: { select: { id: true, name: true } } },
-      orderBy: { grade: "asc" },
-      take: 200,
-    }),
-  ]);
+  const students = await prisma.student.findMany({
+    where: { schoolId: user.schoolId, isActive: true },
+    include: {
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+      feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+
+  const classes = await prisma.class.findMany({
+    where: { schoolId: user.schoolId },
+    include: { sections: { select: { id: true, name: true } } },
+    orderBy: { grade: "asc" },
+    take: 200,
+  });
 
   return <StudentsContent students={students} classes={classes} canEdit={canEdit} />;
 }
