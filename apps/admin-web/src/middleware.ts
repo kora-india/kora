@@ -1,7 +1,7 @@
 import { auth } from "@schoolos/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth", "/api/cron"];
+const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth", "/api/cron"];
 
 function isPublic(pathname: string) {
   if (pathname === "/") return true;
@@ -25,8 +25,8 @@ export default auth((req) => {
 
   // Always allow public paths
   if (isPublic(pathname)) {
-    // Redirect authenticated users away from login and landing page
-    if (req.auth && (pathname.startsWith("/login") || pathname === "/")) {
+    // Redirect authenticated users away from login, register, and landing page
+    if (req.auth && (pathname.startsWith("/login") || pathname.startsWith("/register") || pathname === "/")) {
       // SUPER_ADMIN goes to /schools, others to /dashboard
       if (req.auth.user?.role === "SUPER_ADMIN") {
         return NextResponse.redirect(new URL("/schools", req.url));

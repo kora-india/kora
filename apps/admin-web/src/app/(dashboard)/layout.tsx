@@ -11,6 +11,11 @@ export default async function DashboardRootLayout({ children }: Readonly<{ child
 
   const user = session.user;
 
+  // Redirect to setup if SCHOOL_ADMIN doesn't have a school
+  if (user.role === "SCHOOL_ADMIN" && !user.schoolId) {
+    redirect("/setup");
+  }
+
   // Check school suspension — SUPER_ADMIN is always allowed
   if (user.schoolId && user.role !== "SUPER_ADMIN") {
     const school = await prisma.school.findUnique({

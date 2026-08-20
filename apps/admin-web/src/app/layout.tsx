@@ -10,12 +10,16 @@ export const metadata: Metadata = {
   description: "Premium multi-tenant School Management SaaS",
 };
 
+import { Providers } from "@/components/providers";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          {children}
+          <Providers>
+            {children}
+          </Providers>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>

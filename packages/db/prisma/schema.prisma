@@ -13,6 +13,12 @@ model School {
   name             String
   subdomain        String               @unique
   address          String?
+  pincode          String?
+  city             String?
+  state            String?
+  country          String?
+  expectedStudents Int?
+  expectedStaff    Int?
   phone            String?
   email            String?
   logoUrl          String?
@@ -580,4 +586,15 @@ enum SubscriptionStatus {
   PAST_DUE
   CANCELLED
   EXPIRED
+}
+
+model Otp {
+  id        String   @id @default(cuid())
+  email     String
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("otps")
 }

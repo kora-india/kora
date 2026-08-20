@@ -120,6 +120,7 @@ export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
           return (
             <Link
               key={item.href}
+              id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
               href={item.href}
               title={collapsed ? item.label : undefined}
               className={cn(

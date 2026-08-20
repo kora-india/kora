@@ -53,11 +53,22 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id as string;
         token.role = user.role;
         token.schoolId = user.schoolId;
+      }
+      if (trigger === "update") {
+        const { prisma } = await import("@schoolos/db");
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, schoolId: true }
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.schoolId = dbUser.schoolId;
+        }
       }
       return token;
     },

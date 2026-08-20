@@ -2,6 +2,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
+import { DashboardTour } from "@/components/layout/dashboard-tour";
 import { UserRole } from "@schoolos/types";
 
 export const metadata = { title: "Dashboard" };
@@ -122,5 +123,10 @@ export default async function DashboardPage() {
 
   const data = schoolId ? await getDashboardData(schoolId) : null;
 
-  return <DashboardContent data={data} userRole={user.role} userName={user.name} />;
+  return (
+    <>
+      <DashboardTour />
+      <DashboardContent data={data} userRole={user.role} userName={user.name} />
+    </>
+  );
 }
