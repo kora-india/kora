@@ -101,3 +101,40 @@ export async function deleteStudent(id: string) {
     return { error: e.message };
   }
 }
+
+export async function getStudentDetails(id: string) {
+  const user = await getAdminSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id, schoolId: user.schoolId },
+      include: {
+        class: true,
+        section: true,
+        fees: {
+          orderBy: { dueDate: "desc" },
+        },
+        feeCharges: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            items: {
+              include: {
+                component: true
+              }
+            },
+          },
+        },
+        paymentTxs: {
+          orderBy: { date: "desc" },
+        },
+        advanceLedgers: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+    return { success: true, student };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}

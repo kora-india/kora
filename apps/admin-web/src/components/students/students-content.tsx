@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { StudentDialog } from "./student-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { deleteStudent } from "@/lib/actions/students";
+import { deleteStudent, getStudentDetails } from "@/lib/actions/students";
+import { Modal, Tabs, ConfigProvider, Spin } from "antd";
 
 const FEE_BADGE: Record<string, string> = {
   PAID: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
@@ -32,6 +33,8 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [expandedChargeId, setExpandedChargeId] = useState<string | null>(null);
+  const [detailsModal, setDetailsModal] = useState<{ open: boolean; loading: boolean; student: any }>({ open: false, loading: false, student: null });
 
   const filtered = students.filter((s) => {
     const q = search.toLowerCase();
@@ -59,6 +62,18 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
     } else {
       toast.success("Student removed");
       router.refresh();
+    }
+  };
+
+  const handleRowClick = async (studentId: string) => {
+    setDetailsModal({ open: true, loading: true, student: null });
+    setExpandedChargeId(null);
+    const result = await getStudentDetails(studentId);
+    if (result.success) {
+      setDetailsModal({ open: true, loading: false, student: result.student });
+    } else {
+      setDetailsModal({ open: false, loading: false, student: null });
+      toast.error(result.error || "Failed to load student details");
     }
   };
 
@@ -129,7 +144,8 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                 key={s.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: { delay: i * 0.02 } }}
-                className="border-b hover:bg-muted/30 transition-colors"
+                className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => handleRowClick(s.id)}
               >
                 <td className="h-12 px-5">
                   <div className="flex items-center gap-2.5">
@@ -154,12 +170,15 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                   </span>
                 </td>
                 {canEdit && (
-                  <td className="h-12 px-4">
+                  <td className="h-12 px-4" onClick={(e) => e.stopPropagation()}>
                     <div className="relative">
                       <button
                         type="button"
                         aria-label="Student actions"
-                        onClick={() => setOpenMenuId(openMenuId === s.id ? null : s.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === s.id ? null : s.id);
+                        }}
                         className="p-1.5 rounded-lg hover:bg-muted transition-colors"
                       >
                         <MoreVertical className="w-3.5 h-3.5" />
@@ -261,6 +280,211 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
         confirmLabel="Remove"
         onConfirm={handleDelete}
       />
+
+      <ConfigProvider theme={{ token: { colorPrimary: '#7c3aed' } }}>
+        <Modal
+          open={detailsModal.open}
+          onCancel={() => setDetailsModal({ open: false, loading: false, student: null })}
+          footer={null}
+          width={800}
+          destroyOnClose
+          title={
+            detailsModal.student ? (
+              <div>
+                <h2 className="text-xl font-bold m-0">{detailsModal.student.name}</h2>
+                <p className="text-sm text-muted-foreground font-normal">
+                  {detailsModal.student.class?.name} · {detailsModal.student.section?.name} | Roll No: {detailsModal.student.rollNumber}
+                </p>
+              </div>
+            ) : "Student Details"
+          }
+        >
+          {detailsModal.loading ? (
+            <div className="flex justify-center items-center py-20">
+              <Spin size="large" />
+            </div>
+          ) : detailsModal.student ? (
+            <Tabs
+              defaultActiveKey="1"
+              items={[
+                {
+                  key: '1',
+                  label: 'Details',
+                  children: (
+                    <div className="grid grid-cols-2 gap-4 py-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Admission No.</p>
+                        <p className="text-sm font-medium">{detailsModal.student.admissionNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Gender</p>
+                        <p className="text-sm font-medium">{detailsModal.student.gender}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Date of Birth</p>
+                        <p className="text-sm font-medium">
+                          {detailsModal.student.dateOfBirth 
+                            ? new Date(detailsModal.student.dateOfBirth).toLocaleDateString() 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Status</p>
+                        <p className="text-sm font-medium">{detailsModal.student.isActive ? 'Active' : 'Inactive'}</p>
+                      </div>
+                      <div className="col-span-2 pt-4 border-t mt-2">
+                        <h4 className="text-sm font-bold mb-3">Parent Details</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Name</p>
+                            <p className="text-sm font-medium">{detailsModal.student.parentName}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Phone</p>
+                            <p className="text-sm font-medium">{detailsModal.student.parentPhone}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-muted-foreground font-medium uppercase mb-1">Address</p>
+                            <p className="text-sm font-medium">{detailsModal.student.address || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  key: '2',
+                  label: 'Fee History',
+                  children: (
+                    <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
+                      {(() => {
+                        let outstanding = 0;
+                        if (detailsModal.student?.feeCharges) {
+                          detailsModal.student.feeCharges.forEach((c: any) => {
+                            c.items?.forEach((i: any) => {
+                              outstanding += (parseFloat(i.amount) - parseFloat(i.paidAmount));
+                            });
+                          });
+                        }
+                        return (
+                          <div className="flex justify-between items-center p-4 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 rounded-lg mb-6">
+                            <span className="font-semibold text-violet-800 dark:text-violet-300">Total Outstanding Due</span>
+                            <span className="text-lg font-bold text-violet-900 dark:text-violet-200">₹{outstanding.toLocaleString()}</span>
+                          </div>
+                        );
+                      })()}
+
+                      {detailsModal.student.advanceLedgers && detailsModal.student.advanceLedgers.length > 0 && (
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-100 dark:border-emerald-900 mb-6">
+                          <h4 className="text-sm font-bold text-emerald-800 dark:text-emerald-300 mb-2">Advance Payments</h4>
+                          <div className="space-y-2">
+                            {detailsModal.student.advanceLedgers.map((ledger: any) => (
+                              <div key={ledger.id} className="flex justify-between items-center text-sm">
+                                <span className="text-emerald-700 dark:text-emerald-400">{ledger.description || 'Advance Paid'}</span>
+                                <span className="font-semibold text-emerald-800 dark:text-emerald-300">₹{parseFloat(ledger.amount).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <h4 className="text-sm font-bold">Recent Fee Dues</h4>
+                      {detailsModal.student.feeCharges && detailsModal.student.feeCharges.length > 0 ? (
+                        <div className="space-y-3">
+                          {detailsModal.student.feeCharges.map((charge: any) => {
+                            const totalAmount = charge.items?.reduce((sum: number, item: any) => sum + parseFloat(item.amount), 0) || 0;
+                            const isExpanded = expandedChargeId === charge.id;
+                            return (
+                              <div key={charge.id} className="border rounded-lg overflow-hidden">
+                                <div 
+                                  className="flex justify-between items-center p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                                  onClick={() => setExpandedChargeId(isExpanded ? null : charge.id)}
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">{charge.title}</p>
+                                    <p className="text-xs text-muted-foreground">Due: {new Date(charge.dueDate).toLocaleDateString('default', { month: 'short', year: 'numeric' })}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-bold">₹{totalAmount.toLocaleString()}</p>
+                                    <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[10px] font-medium border ${FEE_BADGE[charge.status] ?? FEE_BADGE.PAID}`}>
+                                      {charge.status}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isExpanded && charge.items && charge.items.length > 0 && (
+                                  <div className="bg-muted/20 p-3 border-t text-sm">
+                                    <table className="w-full">
+                                      <thead>
+                                        <tr className="text-xs text-muted-foreground border-b border-muted">
+                                          <th className="text-left font-medium pb-2">Component</th>
+                                          <th className="text-right font-medium pb-2">Amount</th>
+                                          <th className="text-right font-medium pb-2">Paid</th>
+                                          <th className="text-right font-medium pb-2">Due</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {charge.items.map((item: any) => {
+                                          const amt = parseFloat(item.amount);
+                                          const paid = parseFloat(item.paidAmount);
+                                          const due = amt - paid;
+                                          return (
+                                            <tr key={item.id} className="border-b border-muted/50 last:border-0">
+                                              <td className="py-2 text-muted-foreground">{item.component?.name || 'Fee'}</td>
+                                              <td className="py-2 text-right">₹{amt.toLocaleString()}</td>
+                                              <td className="py-2 text-right text-emerald-600">₹{paid.toLocaleString()}</td>
+                                              <td className={`py-2 text-right font-medium ${due > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                                                ₹{due.toLocaleString()}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20">No fee dues found.</p>
+                      )}
+
+                      <h4 className="text-sm font-bold mt-6">Recent Transactions</h4>
+                      {detailsModal.student.paymentTxs && detailsModal.student.paymentTxs.length > 0 ? (
+                        <div className="space-y-3 mt-3">
+                          {detailsModal.student.paymentTxs.map((tx: any) => (
+                            <div key={tx.id} className="flex justify-between items-center p-3 border rounded-lg">
+                              <div>
+                                <p className="text-sm font-medium">{tx.receiptNo}</p>
+                                <p className="text-xs text-muted-foreground">{new Date(tx.date).toLocaleDateString()} · {tx.method}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{parseFloat(tx.amount).toLocaleString()}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-8 border rounded-lg bg-muted/20 mt-3">No recent transactions found.</p>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: '3',
+                  label: 'Performance',
+                  children: (
+                    <div className="flex items-center justify-center py-20 text-muted-foreground text-sm max-h-[60vh] overflow-y-auto scrollbar-hide">
+                      Performance details are not available at this time.
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          ) : null}
+        </Modal>
+      </ConfigProvider>
     </div>
   );
 }
