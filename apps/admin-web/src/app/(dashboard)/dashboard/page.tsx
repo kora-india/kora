@@ -12,10 +12,11 @@ async function getDashboardData(schoolId: string) {
   const totalStudents = await prisma.student.count({ where: { schoolId, isActive: true } });
   const totalTeachers = await prisma.teacher.count({ where: { schoolId, isActive: true } });
   const totalClasses = await prisma.class.count({ where: { schoolId } });
-  const pendingFees = await prisma.fee.aggregate({
-    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] } },
-    _sum: { amount: true },
+  const pendingFeeItems = await prisma.feeChargeItem.findMany({
+    where: { charge: { schoolId }, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+    select: { amount: true, paidAmount: true },
   });
+  const totalPendingFees = pendingFeeItems.reduce((acc, item) => acc + (Number(item.amount) - Number(item.paidAmount)), 0);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -46,14 +47,14 @@ async function getDashboardData(schoolId: string) {
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
-  const payments = await prisma.payment.findMany({
-    where: { schoolId, paidAt: { gte: sixMonthsAgo } },
-    select: { amount: true, paidAt: true },
+  const payments = await prisma.paymentTransaction.findMany({
+    where: { schoolId, date: { gte: sixMonthsAgo }, status: "SUCCESS" },
+    select: { amount: true, date: true },
   });
 
-  const pendingFeeRows = await prisma.fee.findMany({
-    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
-    select: { amount: true, dueDate: true },
+  const pendingFeeRows = await prisma.feeChargeItem.findMany({
+    where: { charge: { schoolId, dueDate: { gte: sixMonthsAgo } }, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+    select: { amount: true, paidAmount: true, charge: { select: { dueDate: true } } },
   });
 
   const expensesList = await prisma.expense.findMany({
@@ -65,14 +66,14 @@ async function getDashboardData(schoolId: string) {
 
   const revenueByMonth: Record<string, number> = {};
   payments.forEach((p: (typeof payments)[number]) => {
-    const key = monthKey(p.paidAt);
+    const key = monthKey(p.date);
     revenueByMonth[key] = (revenueByMonth[key] ?? 0) + Number(p.amount);
   });
 
   const pendingByMonth: Record<string, number> = {};
   pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
-    const key = monthKey(f.dueDate);
-    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + Number(f.amount);
+    const key = monthKey(f.charge.dueDate);
+    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + (Number(f.amount) - Number(f.paidAmount));
   });
 
   const expenseByMonth: Record<string, number> = {};
@@ -98,7 +99,7 @@ async function getDashboardData(schoolId: string) {
     stats: {
       totalStudents,
       totalTeachers,
-      pendingFees: Number(pendingFees._sum.amount ?? 0),
+      pendingFees: totalPendingFees,
       attendancePercentage: todayAttendance.total > 0
         ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
         : 0,
