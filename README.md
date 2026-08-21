@@ -65,12 +65,12 @@ This starts both apps:
 
 ## 🔐 Demo Credentials
 
-| Role         | Email                    | Password     |
-|--------------|--------------------------|--------------|
-| Super Admin  | super@schoolos.com       | admin123     |
-| School Admin | admin@dps.edu.in         | admin123     |
-| Teacher      | priya@dps.edu.in         | teacher123   |
-| Accountant   | accounts@dps.edu.in      | accounts123  |
+| Role         | Email                       | Password      |
+|--------------|-----------------------------|---------------|
+| Super Admin  | superadmin@schoolos.com     | superadmin123 |
+| School Admin | admin@dps.schoolos.com      | admin123      |
+| Teacher      | priya.nair@dps.schoolos.com | teacher123    |
+| Accountant   | accounts@dps.schoolos.com   | accountant123 |
 
 ---
 

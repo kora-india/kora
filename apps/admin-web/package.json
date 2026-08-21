@@ -23,6 +23,7 @@
     "@schoolos/types": "workspace:*",
     "@schoolos/ui": "workspace:*",
     "@schoolos/utils": "workspace:*",
+    "antd": "^6.6.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",

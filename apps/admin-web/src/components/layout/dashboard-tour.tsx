@@ -1,11 +1,11 @@
-// @ts-nocheck
 "use client";
 
 import { useEffect, useState } from "react";
-import { Joyride, STATUS, Step } from "react-joyride";
+import { Tour, ConfigProvider } from "antd";
+import type { TourProps } from "antd";
 
 export function DashboardTour() {
-  const [run, setRun] = useState(false);
+  const [open, setOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -13,66 +13,59 @@ export function DashboardTour() {
     const hasSeenTour = localStorage.getItem("hasSeenOnboarding");
     if (!hasSeenTour) {
       // Delay slightly to ensure UI is rendered
-      setTimeout(() => setRun(true), 1500);
+      setTimeout(() => setOpen(true), 1500);
     }
   }, []);
 
-  const steps: Step[] = [
+  const steps: TourProps["steps"] = [
     {
-      target: "body",
-      content: "Welcome to SchoolOS! Let's take a quick tour to help you get started.",
-      placement: "center",
+      title: "Welcome to SchoolOS!",
+      description: "Let's take a quick tour to help you get started.",
+      target: null, // Will center on screen
     },
     {
-      target: "#tour-nav-classes",
-      content: "First, you'll want to create Classes and Sections. This is the foundation of your school structure.",
-      placement: "right",
+      title: "Classes & Sections",
+      description: "First, you'll want to create Classes and Sections. This is the foundation of your school structure.",
+      target: () => document.getElementById("tour-nav-classes") as HTMLElement,
     },
     {
-      target: "#tour-nav-students",
-      content: "Once classes are ready, you can start admitting Students and assigning them to their respective sections.",
-      placement: "right",
+      title: "Students",
+      description: "Once classes are ready, you can start admitting Students and assigning them to their respective sections.",
+      target: () => document.getElementById("tour-nav-students") as HTMLElement,
     },
     {
-      target: "#tour-nav-fees",
-      content: "Set up Fee Components (e.g. Tuition, Transport) and Fee Structures to manage collections.",
-      placement: "right",
+      title: "Fees",
+      description: "Set up Fee Components (e.g. Tuition, Transport) and Fee Structures to manage collections.",
+      target: () => document.getElementById("tour-nav-fees") as HTMLElement,
     },
     {
-      target: "#tour-nav-teachers",
-      content: "Add your teaching staff and assign them to classes here.",
-      placement: "right",
+      title: "Teachers",
+      description: "Add your teaching staff and assign them to classes here.",
+      target: () => document.getElementById("tour-nav-teachers") as HTMLElement,
     },
   ];
 
-  const handleJoyrideCallback = (data: any) => {
-    const { status } = data;
-    const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
-
-    if (finishedStatuses.includes(status)) {
-      setRun(false);
-      localStorage.setItem("hasSeenOnboarding", "true");
-    }
+  const handleClose = () => {
+    setOpen(false);
+    localStorage.setItem("hasSeenOnboarding", "true");
   };
 
   if (!isClient) return null;
 
   return (
-    // @ts-ignore
-    <Joyride
-      steps={steps}
-      run={run}
-      continuous={true}
-      callback={handleJoyrideCallback}
-      styles={{
-        options: {
-          primaryColor: "#7c3aed", // violet-600
-          zIndex: 1000,
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: "#7c3aed", // violet-600
         },
-        buttonClose: {
-          display: "none",
-        },
-      } as any}
-    />
+      }}
+    >
+      <Tour
+        open={open}
+        onClose={handleClose}
+        steps={steps}
+        mask={{ color: "rgba(0, 0, 0, 0.4)" }}
+      />
+    </ConfigProvider>
   );
 }
