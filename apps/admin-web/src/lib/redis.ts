@@ -61,7 +61,7 @@ export async function invalidateCache(pattern: string) {
         await redis.del(...keys);
         totalDeleted += keys.length;
       }
-    } while (cursor !== 0);
+    } while (cursor !== 0 && cursor !== "0");
 
     console.log(`[Cache Invalidation] Pattern: ${pattern} - Deleted ${totalDeleted} keys`);
   } catch (error) {

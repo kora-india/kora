@@ -79,7 +79,7 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
         variants={stagger.container}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4"
+        className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4"
       >
         <StatCard
           title="Total Students"
@@ -113,8 +113,13 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
           title="Monthly Revenue"
           value={formatCurrency(stats?.monthlyRevenue ?? 1860000)}
           icon={TrendingUp}
+          color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+        />
+        <StatCard
+          title="Monthly Expenses"
+          value={formatCurrency(stats?.monthlyExpenses ?? 120000)}
+          icon={TrendingUp}
           color="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400"
-          trend={{ up: true, label: "+8.4% vs last month" }}
         />
       </motion.div>
 
@@ -140,6 +145,10 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
                   <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="#7c3aed" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
@@ -149,6 +158,7 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
                 contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
               />
               <Area type="monotone" dataKey="collected" name="Collected" stroke="#7c3aed" strokeWidth={2} fill="url(#collected)" />
+              <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2} fill="url(#expenses)" />
             </AreaChart>
           </ResponsiveContainer>
         </motion.div>
@@ -278,12 +288,12 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
 }
 
 const mockRevenue = [
-  { month: "Nov", collected: 1420000, pending: 180000 },
-  { month: "Dec", collected: 1650000, pending: 120000 },
-  { month: "Jan", collected: 1580000, pending: 200000 },
-  { month: "Feb", collected: 1720000, pending: 90000 },
-  { month: "Mar", collected: 1800000, pending: 150000 },
-  { month: "Apr", collected: 1860000, pending: 240000 },
+  { month: "Nov", collected: 1420000, pending: 180000, expenses: 80000 },
+  { month: "Dec", collected: 1650000, pending: 120000, expenses: 95000 },
+  { month: "Jan", collected: 1580000, pending: 200000, expenses: 110000 },
+  { month: "Feb", collected: 1720000, pending: 90000, expenses: 100000 },
+  { month: "Mar", collected: 1800000, pending: 150000, expenses: 125000 },
+  { month: "Apr", collected: 1860000, pending: 240000, expenses: 120000 },
 ];
 
 const mockStudents = [

@@ -56,6 +56,11 @@ async function getDashboardData(schoolId: string) {
     select: { amount: true, dueDate: true },
   });
 
+  const expensesList = await prisma.expense.findMany({
+    where: { schoolId, date: { gte: sixMonthsAgo } },
+    select: { amount: true, date: true },
+  });
+
   const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
 
   const revenueByMonth: Record<string, number> = {};
@@ -70,6 +75,12 @@ async function getDashboardData(schoolId: string) {
     pendingByMonth[key] = (pendingByMonth[key] ?? 0) + Number(f.amount);
   });
 
+  const expenseByMonth: Record<string, number> = {};
+  expensesList.forEach((e: (typeof expensesList)[number]) => {
+    const key = monthKey(e.date);
+    expenseByMonth[key] = (expenseByMonth[key] ?? 0) + Number(e.amount);
+  });
+
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i));
@@ -80,6 +91,7 @@ async function getDashboardData(schoolId: string) {
     month: label,
     collected: revenueByMonth[key] ?? 0,
     pending: pendingByMonth[key] ?? 0,
+    expenses: expenseByMonth[key] ?? 0,
   }));
 
   return {
@@ -91,6 +103,7 @@ async function getDashboardData(schoolId: string) {
         ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
         : 0,
       monthlyRevenue: revenueData[revenueData.length - 1]?.collected ?? 0,
+      monthlyExpenses: revenueData[revenueData.length - 1]?.expenses ?? 0,
       activeClasses: totalClasses,
     },
     revenueData,

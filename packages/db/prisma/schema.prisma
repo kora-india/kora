@@ -42,6 +42,8 @@ model School {
   subscription     Subscription?
   teachers         Teacher[]
   users            User[]
+  expenseCategories ExpenseCategory[]
+  expenses         Expense[]
 
   @@map("schools")
 }
@@ -93,6 +95,7 @@ model User {
   attendances      Attendance[]
   notices          Notice[]
   teacher          Teacher?
+  recordedExpenses Expense[]
   school           School?      @relation(fields: [schoolId], references: [id])
 
   @@index([schoolId])
@@ -598,3 +601,41 @@ model Otp {
   @@index([email])
   @@map("otps")
 }
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  schoolId    String
+  school      School    @relation(fields: [schoolId], references: [id])
+  name        String    
+  description String?
+  expenses    Expense[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([schoolId, name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id              String          @id @default(cuid())
+  schoolId        String
+  school          School          @relation(fields: [schoolId], references: [id])
+  categoryId      String
+  category        ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount          Decimal         @db.Decimal(10, 2)
+  date            DateTime        @default(now())
+  title           String          
+  description     String?         
+  paymentMethod   PaymentMethod   
+  referenceNo     String?         
+  receiptUrl      String?         
+  recordedById    String?
+  recordedBy      User?           @relation(fields: [recordedById], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([schoolId])
+  @@index([categoryId])
+  @@map("expenses")
+}
+
