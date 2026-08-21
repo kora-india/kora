@@ -23,6 +23,7 @@
     "@schoolos/types": "workspace:*",
     "@schoolos/ui": "workspace:*",
     "@schoolos/utils": "workspace:*",
+    "@upstash/redis": "^1.38.2",
     "antd": "^6.6.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",

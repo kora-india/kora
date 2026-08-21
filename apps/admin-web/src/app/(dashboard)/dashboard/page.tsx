@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { DashboardTour } from "@/components/layout/dashboard-tour";
 import { UserRole } from "@schoolos/types";
+import { getCache } from "@/lib/redis";
 
 export const metadata = { title: "Dashboard" };
 
@@ -109,7 +110,9 @@ export default async function DashboardPage() {
     return <div className="p-6 text-muted-foreground">No school assigned.</div>;
   }
 
-  const data = schoolId ? await getDashboardData(schoolId) : null;
+  const data = schoolId 
+    ? await getCache(`cache:${schoolId}:dashboard`, () => getDashboardData(schoolId), 300) // 5 minutes TTL
+    : null;
 
   return (
     <>

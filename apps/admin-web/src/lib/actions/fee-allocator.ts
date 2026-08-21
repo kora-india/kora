@@ -3,6 +3,7 @@
 import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
+import { invalidateFeesCache } from "@/lib/redis";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -157,6 +158,9 @@ export async function allocatePayment(data: {
     }, { maxWait: 10000, timeout: 30000 });
 
     revalidatePath("/fees");
+    revalidatePath(`/students/${data.studentId}`);
+    await invalidateFeesCache(user.schoolId);
+    
     return { success: true, ...result };
   } catch (e: any) {
     return { error: e.message };

@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkStudentLimit, planLimitMessage } from "@/lib/plan-limits";
+import { getCache, invalidateCache } from "@/lib/redis";
 
 const StudentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -53,6 +54,7 @@ export async function createStudent(data: unknown) {
       },
     });
     revalidatePath("/students");
+    await invalidateCache(`cache:${user.schoolId}:students:*`);
     return { success: true, id: student.id };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
@@ -79,6 +81,7 @@ export async function updateStudent(id: string, data: unknown) {
       },
     });
     revalidatePath("/students");
+    await invalidateCache(`cache:${user.schoolId}:students:*`);
     return { success: true };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "Roll number already exists in this class" };
@@ -96,6 +99,7 @@ export async function deleteStudent(id: string) {
       data: { isActive: false },
     });
     revalidatePath("/students");
+    await invalidateCache(`cache:${user.schoolId}:students:*`);
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -107,32 +111,34 @@ export async function getStudentDetails(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    const student = await prisma.student.findUnique({
-      where: { id, schoolId: user.schoolId },
-      include: {
-        class: true,
-        section: true,
-        fees: {
-          orderBy: { dueDate: "desc" },
-        },
-        feeCharges: {
-          orderBy: { createdAt: "desc" },
-          include: {
-            items: {
-              include: {
-                component: true
-              }
+    const student = await getCache(`cache:${user.schoolId}:students:details:${id}`, () => 
+      prisma.student.findUnique({
+        where: { id, schoolId: user.schoolId },
+        include: {
+          class: true,
+          section: true,
+          fees: {
+            orderBy: { dueDate: "desc" },
+          },
+          feeCharges: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              items: {
+                include: {
+                  component: true
+                }
+              },
             },
           },
+          paymentTxs: {
+            orderBy: { date: "desc" },
+          },
+          advanceLedgers: {
+            orderBy: { createdAt: "desc" },
+          },
         },
-        paymentTxs: {
-          orderBy: { date: "desc" },
-        },
-        advanceLedgers: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
+      })
+    );
     return { success: true, student };
   } catch (e: any) {
     return { error: e.message };
