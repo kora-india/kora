@@ -10,21 +10,22 @@ export default async function ExpensesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
   if (!canEdit) redirect("/dashboard");
 
-  const categories = await getCache(`cache:${user.schoolId}:expenses:categories`, () => 
+  const categories = await getCache(`cache:${schoolId}:expenses:categories`, () => 
     prisma.expenseCategory.findMany({
-      where: { schoolId: user.schoolId },
+      where: { schoolId },
       orderBy: { name: "asc" },
     })
   );
 
-  const expenses = await getCache(`cache:${user.schoolId}:expenses:list`, () => 
+  const expenses = await getCache(`cache:${schoolId}:expenses:list`, () => 
     prisma.expense.findMany({
-      where: { schoolId: user.schoolId },
+      where: { schoolId },
       include: {
         category: true,
         recordedBy: { select: { name: true } },
