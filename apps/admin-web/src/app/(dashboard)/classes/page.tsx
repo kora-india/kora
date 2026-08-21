@@ -9,11 +9,12 @@ export default async function ClassesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
   if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) redirect("/dashboard");
 
   const classes = await prisma.class.findMany({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
     include: {
       sections: { orderBy: { name: "asc" } },
       _count: { select: { students: true } },

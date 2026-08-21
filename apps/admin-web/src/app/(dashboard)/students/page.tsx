@@ -11,13 +11,14 @@ export default async function StudentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role);
 
-  const students = await getCache(`cache:${user.schoolId}:students:list`, () => 
+  const students = await getCache(`cache:${schoolId}:students:list`, () => 
     prisma.student.findMany({
-      where: { schoolId: user.schoolId, isActive: true },
+      where: { schoolId: schoolId, isActive: true },
       include: {
         class: { select: { name: true } },
         section: { select: { name: true } },
@@ -28,9 +29,9 @@ export default async function StudentsPage() {
     })
   );
 
-  const classes = await getCache(`cache:${user.schoolId}:classes:list`, () => 
+  const classes = await getCache(`cache:${schoolId}:classes:list`, () => 
     prisma.class.findMany({
-      where: { schoolId: user.schoolId },
+      where: { schoolId: schoolId },
       include: { sections: { select: { id: true, name: true } } },
       orderBy: { grade: "asc" },
       take: 200,

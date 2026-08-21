@@ -15,13 +15,14 @@ export default async function NoticesPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 
   const notices = await prisma.notice.findMany({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
     include: { publishedBy: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
     skip: (page - 1) * PAGE_SIZE,
@@ -29,11 +30,11 @@ export default async function NoticesPage({
   });
 
   const totalNotices = await prisma.notice.count({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
   });
 
   const classes = await prisma.class.findMany({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
     select: { id: true, name: true },
     orderBy: { grade: "asc" },
     take: 200,

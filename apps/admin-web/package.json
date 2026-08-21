@@ -28,6 +28,8 @@
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "date-fns": "^3.6.0",
+    "dayjs": "^1.11.23",
     "framer-motion": "^11.1.0",
     "geist": "^1.3.0",
     "lucide-react": "^0.378.0",

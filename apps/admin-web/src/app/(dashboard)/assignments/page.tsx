@@ -9,17 +9,18 @@ export default async function AssignmentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
-  let classFilter: object = { schoolId: user.schoolId };
+  let classFilter: object = { schoolId: schoolId };
 
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
-      where: { userId: user.id, schoolId: user.schoolId },
+      where: { userId: user.id, schoolId: schoolId },
       select: { assignedClassId: true },
     });
     if (teacher?.assignedClassId) {
-      classFilter = { schoolId: user.schoolId, classId: teacher.assignedClassId };
+      classFilter = { schoolId: schoolId, classId: teacher.assignedClassId };
     }
   }
 
@@ -35,7 +36,7 @@ export default async function AssignmentsPage() {
   });
 
   const classes = await prisma.class.findMany({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
     include: { sections: { select: { id: true, name: true } } },
     orderBy: { grade: "asc" },
     take: 200,

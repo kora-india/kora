@@ -9,12 +9,13 @@ export default async function SchoolProfilePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role);
 
   const school = await prisma.school.findUnique({
-    where: { id: user.schoolId },
+    where: { id: schoolId },
     select: { id: true, name: true, address: true, phone: true, email: true, subdomain: true, plan: true },
   });
   if (!school) return <div className="p-6">School not found.</div>;

@@ -9,7 +9,8 @@ export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -19,7 +20,7 @@ export default async function AttendancePage() {
 
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
-      where: { userId: user.id, schoolId: user.schoolId },
+      where: { userId: user.id, schoolId: schoolId },
       select: { assignedClassId: true, assignedSectionId: true },
     });
     assignedClassId = teacher?.assignedClassId ?? null;
@@ -28,12 +29,12 @@ export default async function AttendancePage() {
 
   const todayRecords = await prisma.attendance.groupBy({
     by: ["classId", "status"],
-    where: { schoolId: user.schoolId, date: today },
+    where: { schoolId: schoolId, date: today },
     _count: { id: true },
   });
 
   const classes = await prisma.class.findMany({
-    where: { schoolId: user.schoolId },
+    where: { schoolId: schoolId },
     include: { sections: { orderBy: { name: "asc" } } },
     orderBy: { grade: "asc" },
     take: 200,

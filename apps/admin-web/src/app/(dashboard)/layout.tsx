@@ -11,16 +11,18 @@ export default async function DashboardRootLayout({ children }: Readonly<{ child
 
   const user = session.user;
 
+  const schoolId = user.schoolId;
+
   // Redirect to setup if SCHOOL_ADMIN doesn't have a school
-  if (user.role === "SCHOOL_ADMIN" && !user.schoolId) {
+  if (user.role === "SCHOOL_ADMIN" && !schoolId) {
     redirect("/setup");
   }
 
   let schoolName = "";
 
-  if (user.schoolId) {
+  if (schoolId) {
     const school = await prisma.school.findUnique({
-      where: { id: user.schoolId },
+      where: { id: schoolId },
       select: { isActive: true, name: true },
     });
     

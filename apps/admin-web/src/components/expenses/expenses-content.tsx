@@ -19,7 +19,7 @@ interface ExpenseCategory {
 
 interface Expense {
   id: string;
-  amount: string | number;
+  amount: any; // Prisma returns Decimal, which may not match string | number
   date: string | Date;
   title: string;
   description: string | null;

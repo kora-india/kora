@@ -49,12 +49,12 @@ export async function getCache<T>(
  */
 export async function invalidateCache(pattern: string) {
   try {
-    let cursor = 0;
+    let cursor: string | number = 0;
     let totalDeleted = 0;
     
     do {
       // scan returns [new_cursor, keys]
-      const [newCursor, keys] = await redis.scan(cursor, { match: pattern, count: 100 });
+      const [newCursor, keys] = (await redis.scan(cursor, { match: pattern, count: 100 })) as [string | number, string[]];
       cursor = newCursor;
       
       if (keys.length > 0) {

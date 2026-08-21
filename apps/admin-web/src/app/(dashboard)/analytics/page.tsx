@@ -140,9 +140,10 @@ export default async function AnalyticsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
-  if (!user.schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
+  const schoolId = user.schoolId;
+  if (!schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
 
-  const data = await getAnalyticsData(user.schoolId);
+  const data = await getAnalyticsData(schoolId);
 
   return <AnalyticsContent {...data} />;
 }
