@@ -63,6 +63,7 @@ export function DashboardTour() {
       <Tour
         open={open}
         onClose={handleClose}
+        onFinish={handleClose}
         steps={steps}
         mask={{ color: "rgba(0, 0, 0, 0.4)" }}
       />
