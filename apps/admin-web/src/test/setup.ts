@@ -25,3 +25,15 @@ vi.mock('@schoolos/auth', () => ({
 vi.mock('@/lib/redis', () => ({
   invalidateFeesCache: vi.fn(),
 }));
+
+// Mock Nodemailer (prevent real emails from being sent during tests).
+// Tests that need to assert on send behavior can import `nodemailer` and use
+// `vi.mocked(...)` against these same mock functions.
+vi.mock('nodemailer', () => {
+  const sendMail = vi.fn().mockResolvedValue({ messageId: 'test-message-id' });
+  const createTransport = vi.fn(() => ({ sendMail }));
+  return {
+    default: { createTransport },
+    createTransport,
+  };
+});

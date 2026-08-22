@@ -69,6 +69,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: "OTP sent successfully" });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Invalid input data" }, { status: 400 });
+    }
     console.error("Error sending OTP:", error);
     return NextResponse.json(
       { error: "Failed to send OTP" },
