@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Pencil, Trash2, MoreVertical, Users } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, MoreVertical, Users, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { StudentDialog } from "./student-dialog";
+import { ImportStudentsDialog } from "./import-students-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteStudent, getStudentDetails } from "@/lib/actions/students";
 import { Modal, Tabs, ConfigProvider, Spin } from "antd";
@@ -29,7 +30,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [page, setPage] = useState(1);
-  const [dialog, setDialog] = useState<"closed" | "create" | "edit">("closed");
+  const [dialog, setDialog] = useState<"closed" | "create" | "edit" | "import">("closed");
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -85,14 +86,24 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
           <p className="text-muted-foreground text-sm mt-1">{students.length} students enrolled</p>
         </div>
         {canEdit && (
-          <button
-            type="button"
-            onClick={() => setDialog("create")}
-            className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Student
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDialog("import")}
+              className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </button>
+            <button
+              type="button"
+              onClick={() => setDialog("create")}
+              className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Student
+            </button>
+          </div>
         )}
       </div>
 
@@ -266,9 +277,15 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
       )}
 
       <StudentDialog
-        open={dialog !== "closed"}
+        open={dialog === "create" || dialog === "edit"}
         onOpenChange={(open) => { if (!open) { setDialog("closed"); setEditTarget(null); } }}
         student={editTarget}
+        classes={classes}
+      />
+
+      <ImportStudentsDialog
+        open={dialog === "import"}
+        onOpenChange={(open) => { if (!open) setDialog("closed"); }}
         classes={classes}
       />
 
@@ -287,7 +304,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
           onCancel={() => setDetailsModal({ open: false, loading: false, student: null })}
           footer={null}
           width={800}
-          destroyOnClose
+          destroyOnHidden
           title={
             detailsModal.student ? (
               <div>
