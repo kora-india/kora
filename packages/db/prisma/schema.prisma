@@ -159,6 +159,10 @@ model Student {
   parentPhone     String
   parentEmail     String?
   address         String?
+  bloodGroup      String?
+  pincode         String?
+  city            String?
+  state           String?
   photoUrl        String?
   isActive        Boolean                @default(true)
   createdAt       DateTime               @default(now())

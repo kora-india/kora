@@ -21,6 +21,7 @@
     "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tooltip": "^1.0.7",
+    "@react-google-maps/api": "^2.20.8",
     "@schoolos/auth": "workspace:*",
     "@schoolos/db": "workspace:*",
     "@schoolos/types": "workspace:*",

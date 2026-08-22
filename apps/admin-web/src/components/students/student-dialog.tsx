@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
 import { createStudent, updateStudent } from "@/lib/actions/students";
+import { useLoadScript, Autocomplete } from "@react-google-maps/api";
 
 const Schema = z.object({
   name: z.string().min(2, "Required"),
@@ -23,6 +24,10 @@ const Schema = z.object({
   parentEmail: z.string().email().optional().or(z.literal("")),
   dateOfBirth: z.string().optional(),
   address: z.string().optional(),
+  bloodGroup: z.string().optional(),
+  pincode: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
 });
 
 type FormData = z.infer<typeof Schema>;
@@ -34,11 +39,13 @@ interface Props {
   classes: { id: string; name: string; sections: { id: string; name: string }[] }[];
 }
 
+const libraries: ("places")[] = ["places"];
+
 export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
   const router = useRouter();
   const isEdit = !!student;
 
-  const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, reset, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(Schema),
     defaultValues: {
       gender: "MALE",
@@ -55,6 +62,43 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
   const selectedClassId = watch("classId");
   const sections = classes.find((c) => c.id === selectedClassId)?.sections ?? [];
 
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries,
+  });
+
+  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+
+  const onPlaceChanged = () => {
+    if (autocomplete !== null) {
+      const place = autocomplete.getPlace();
+      const addressComponents = place.address_components;
+
+      if (addressComponents) {
+        let city = "";
+        let state = "";
+        let pincode = "";
+
+        addressComponents.forEach((component) => {
+          if (component.types.includes("locality")) {
+            city = component.long_name;
+          }
+          if (component.types.includes("administrative_area_level_1")) {
+            state = component.long_name;
+          }
+          if (component.types.includes("postal_code")) {
+            pincode = component.long_name;
+          }
+        });
+
+        setValue("address", place.formatted_address || "");
+        setValue("city", city);
+        setValue("state", state);
+        setValue("pincode", pincode);
+      }
+    }
+  };
+
   useEffect(() => {
     if (student) {
       reset({
@@ -69,6 +113,10 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
         parentEmail: student.parentEmail ?? "",
         dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split("T")[0] : "",
         address: student.address ?? "",
+        bloodGroup: student.bloodGroup ?? "",
+        pincode: student.pincode ?? "",
+        city: student.city ?? "",
+        state: student.state ?? "",
       });
     } else {
       reset({
@@ -83,6 +131,10 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
         parentEmail: "",
         dateOfBirth: "",
         address: "",
+        bloodGroup: "",
+        pincode: "",
+        city: "",
+        state: "",
       });
     }
   }, [student, open, reset]);
@@ -104,7 +156,7 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
       onOpenChange={onOpenChange}
       title={isEdit ? "Edit Student" : "Add New Student"}
       description={isEdit ? "Update student details" : "Fill in the details to enroll a new student"}
-      className="max-w-2xl"
+      className="max-w-3xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -146,6 +198,20 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
             </select>
           </FormField>
 
+          <FormField label="Blood Group" error={errors.bloodGroup?.message}>
+            <select {...register("bloodGroup")} className={selectCls}>
+              <option value="">Select blood group</option>
+              <option value="A+">A+</option>
+              <option value="A-">A-</option>
+              <option value="B+">B+</option>
+              <option value="B-">B-</option>
+              <option value="AB+">AB+</option>
+              <option value="AB-">AB-</option>
+              <option value="O+">O+</option>
+              <option value="O-">O-</option>
+            </select>
+          </FormField>
+
           <FormField label="Date of Birth" error={errors.dateOfBirth?.message}>
             <input {...register("dateOfBirth")} type="date" className={inputCls} />
           </FormField>
@@ -163,7 +229,25 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
           </FormField>
 
           <FormField label="Address" error={errors.address?.message} className="col-span-2">
-            <input {...register("address")} className={inputCls} placeholder="Home address" />
+            {isLoaded ? (
+              <Autocomplete onLoad={setAutocomplete} onPlaceChanged={onPlaceChanged}>
+                <input {...register("address")} className={inputCls} placeholder="Search address using Google Maps" />
+              </Autocomplete>
+            ) : (
+              <input {...register("address")} className={inputCls} placeholder="Home address" />
+            )}
+          </FormField>
+
+          <FormField label="City" error={errors.city?.message}>
+            <input {...register("city")} className={inputCls} placeholder="City" />
+          </FormField>
+
+          <FormField label="State" error={errors.state?.message}>
+            <input {...register("state")} className={inputCls} placeholder="State" />
+          </FormField>
+
+          <FormField label="Pincode" error={errors.pincode?.message}>
+            <input {...register("pincode")} className={inputCls} placeholder="Pincode" />
           </FormField>
         </div>
 

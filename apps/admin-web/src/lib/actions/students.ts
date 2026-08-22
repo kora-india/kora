@@ -19,6 +19,10 @@ const StudentSchema = z.object({
   parentEmail: z.string().email().optional().or(z.literal("")),
   dateOfBirth: z.string().optional(),
   address: z.string().optional(),
+  bloodGroup: z.string().optional(),
+  pincode: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
 });
 
 async function getAdminSession() {
