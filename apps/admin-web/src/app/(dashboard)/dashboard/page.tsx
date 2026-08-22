@@ -95,7 +95,10 @@ async function getDashboardData(schoolId: string) {
     expenses: expenseByMonth[key] ?? 0,
   }));
 
+  const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { name: true } });
+
   return {
+    schoolName: school?.name ?? "School",
     stats: {
       totalStudents,
       totalTeachers,

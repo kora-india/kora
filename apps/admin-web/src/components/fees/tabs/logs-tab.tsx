@@ -114,9 +114,16 @@ export function LogsTab({ transactions }: Readonly<Props>) {
                         <td className="px-4 py-3 text-muted-foreground">
                           {tx.reference || "-"}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-emerald-600 flex items-center justify-end gap-1">
-                          <ArrowDownRight className="w-3 h-3" />
-                          {formatCurrency(Number(tx.amount))}
+                        <td className="px-4 py-3 text-right">
+                          <div className="font-semibold text-emerald-600 flex items-center justify-end gap-1">
+                            <ArrowDownRight className="w-3 h-3" />
+                            {formatCurrency(Number(tx.amount))}
+                          </div>
+                          {tx.allocations?.some((a:any) => a.chargeItem?.component?.category === 'LATE_FEE') && (
+                            <span className="inline-block mt-1 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 uppercase font-bold tracking-wider">
+                              Includes Late Fee
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -199,13 +206,19 @@ export function LogsTab({ transactions }: Readonly<Props>) {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {selectedTx.allocations?.map((alloc: any) => (
-                      <tr key={alloc.id} className="bg-card">
-                        <td className="px-3 py-2">{alloc.chargeItem?.component?.name || "Unknown"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{alloc.chargeItem?.charge?.title || "-"}</td>
-                        <td className="px-3 py-2 text-right font-medium text-emerald-600">{formatCurrency(Number(alloc.amount))}</td>
-                      </tr>
-                    ))}
+                    {selectedTx.allocations?.map((alloc: any) => {
+                      const isLateFee = alloc.chargeItem?.component?.category === 'LATE_FEE';
+                      return (
+                        <tr key={alloc.id} className={isLateFee ? "bg-red-50/50 dark:bg-red-900/10" : "bg-card"}>
+                          <td className="px-3 py-2 flex items-center gap-2">
+                            {alloc.chargeItem?.component?.name || "Unknown"}
+                            {isLateFee && <span className="text-[9px] bg-red-100 text-red-600 px-1.5 rounded border border-red-200">Late Fee</span>}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">{alloc.chargeItem?.charge?.title || "-"}</td>
+                          <td className="px-3 py-2 text-right font-medium text-emerald-600">{formatCurrency(Number(alloc.amount))}</td>
+                        </tr>
+                      );
+                    })}
                     {(!selectedTx.allocations || selectedTx.allocations.length === 0) && (
                       <tr>
                         <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">

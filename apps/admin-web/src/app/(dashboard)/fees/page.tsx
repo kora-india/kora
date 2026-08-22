@@ -17,6 +17,10 @@ export default async function FeesPage() {
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role);
 
   // Fetch V2 configuration data
+  const school = await getCache(`cache:${schoolId}:school:details`, () => 
+    prisma.school.findUnique({ where: { id: schoolId } })
+  );
+
   const academicSessions = await getCache(`cache:${schoolId}:academicSessions:list`, () => 
     prisma.academicSession.findMany({ where: { schoolId: schoolId }, orderBy: { startDate: 'desc' } })
   );
@@ -88,6 +92,7 @@ export default async function FeesPage() {
       students={JSON.parse(JSON.stringify(students))}
       recentCharges={JSON.parse(JSON.stringify(recentCharges))}
       transactions={JSON.parse(JSON.stringify(transactions))}
+      school={JSON.parse(JSON.stringify(school))}
       canEdit={canEdit}
     />
   );

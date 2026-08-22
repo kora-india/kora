@@ -32,6 +32,14 @@ export async function sendMail(options: { to: string; subject: string; html: str
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
+  if (process.env.NODE_ENV === "development") {
+    console.log("\n==============================================");
+    console.log("🔒 Password Reset Link (Development Mode)");
+    console.log("==============================================");
+    console.log(`URL: ${resetUrl}`);
+    console.log("==============================================\n");
+  }
+
   return sendMail({
     to,
     subject: "Reset your SchoolOS password",

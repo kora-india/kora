@@ -5,6 +5,8 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import Link from "next/link";
 import { ArrowLeft, Plus } from "lucide-react";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");

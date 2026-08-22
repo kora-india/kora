@@ -18,6 +18,7 @@ interface Props {
   students: any[];
   recentCharges: any[];
   transactions: any[];
+  school?: any;
   canEdit: boolean;
 }
 
@@ -81,7 +82,7 @@ export function FeesContent(props: Readonly<Props>) {
             { activeTab === "generator" && <GeneratorTab {...props} /> }
             { activeTab === "logs" && <LogsTab transactions={props.transactions} /> }
             { activeTab === "assignments" && <AssignmentsTab {...props} /> }
-            {activeTab === "settings" && <SetupTab {...props} />}
+            {activeTab === "settings" && <SetupTab {...props} school={props.school} />}
           </motion.div>
         </AnimatePresence>
       </div>

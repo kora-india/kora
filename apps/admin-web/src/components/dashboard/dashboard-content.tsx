@@ -61,7 +61,7 @@ export function DashboardContent({ data, userRole, userName }: DashboardContentP
             animate={{ opacity: 1, transition: { delay: 0.1 } }}
             className="text-muted-foreground text-sm mt-1"
           >
-            Delhi Public School · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            {data?.schoolName ?? "School"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </motion.p>
         </div>
         <motion.button

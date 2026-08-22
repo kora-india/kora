@@ -243,3 +243,49 @@ export async function updateFeeStructure(id: string, data: { name: string; sessi
     return { error: e.message };
   }
 }
+
+// -- Late Fee Settings
+export async function saveLateFeeSettings(data: { lateFeeEnabled: boolean; lateFeeAmount?: number; lateFeeFrequency?: string }) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    await prisma.school.update({
+      where: { id: user.schoolId },
+      data: {
+        lateFeeEnabled: data.lateFeeEnabled,
+        lateFeeAmount: data.lateFeeAmount !== undefined ? data.lateFeeAmount : null,
+        lateFeeFrequency: data.lateFeeFrequency || "MONTHLY",
+      }
+    });
+
+    // If enabled, ensure the "Late Fee" FeeComponent exists
+    if (data.lateFeeEnabled) {
+      const existing = await prisma.feeComponent.findFirst({
+        where: { schoolId: user.schoolId, category: "LATE_FEE" }
+      });
+      if (!existing) {
+        await prisma.feeComponent.create({
+          data: {
+            schoolId: user.schoolId,
+            name: "Late Fee",
+            category: "LATE_FEE",
+            amount: data.lateFeeAmount || 0,
+            frequency: "MONTHLY",
+            isOptional: false,
+          }
+        });
+      } else if (existing.amount && Number(existing.amount) !== data.lateFeeAmount) {
+         await prisma.feeComponent.update({
+           where: { id: existing.id },
+           data: { amount: data.lateFeeAmount || 0 }
+         });
+      }
+    }
+
+    revalidatePath("/fees");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}

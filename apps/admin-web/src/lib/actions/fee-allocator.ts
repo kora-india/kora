@@ -166,3 +166,20 @@ export async function allocatePayment(data: {
     return { error: e.message };
   }
 }
+
+export async function waiveFeeChargeItem(itemId: string) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    await prisma.feeChargeItem.update({
+      where: { id: itemId },
+      data: { status: "WAIVED" }
+    });
+    revalidatePath("/fees");
+    await invalidateFeesCache(user.schoolId);
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}

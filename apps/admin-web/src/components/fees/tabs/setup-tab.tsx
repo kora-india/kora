@@ -5,11 +5,11 @@ import { formatCurrency } from "@schoolos/utils";
 import { Plus, Check, X, Calendar, Layers, Receipt, Edit2, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
-import { createAcademicSession, createFeeComponent, createFeeStructure, updateAcademicSession, updateFeeComponent, updateFeeStructure } from "@/lib/actions/fee-settings";
+import { createAcademicSession, createFeeComponent, createFeeStructure, updateAcademicSession, updateFeeComponent, updateFeeStructure, saveLateFeeSettings } from "@/lib/actions/fee-settings";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 
-export function SetupTab({ sessions, components, structures, canEdit }: any) {
+export function SetupTab({ sessions, components, structures, school, canEdit }: any) {
   const [sessionDialog, setSessionDialog] = useState(false);
   const [componentDialog, setComponentDialog] = useState(false);
   const [structureDialog, setStructureDialog] = useState(false);
@@ -21,6 +21,7 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
   const sessionForm = useForm({ defaultValues: { name: "", startDate: "", endDate: "", isCurrent: false } });
   const compForm = useForm({ defaultValues: { name: "", amount: 0, frequency: "MONTHLY", isOptional: false } });
   const structForm = useForm({ defaultValues: { name: "", sessionId: "", componentIds: [] as string[], amounts: {} as Record<string, string> } });
+  const lateFeeForm = useForm({ defaultValues: { lateFeeEnabled: school?.lateFeeEnabled || false, lateFeeAmount: Number(school?.lateFeeAmount) || undefined, lateFeeFrequency: school?.lateFeeFrequency || "MONTHLY" } });
   const openSessionDialog = (session?: any) => {
     if (session) {
       setEditSessionId(session.id);
@@ -102,6 +103,13 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
     else { toast.success(editStructureId ? "Structure updated" : "Structure created"); setStructureDialog(false); structForm.reset(); }
   };
 
+  const onLateFeeSubmit = async (data: any) => {
+    const payload = { ...data, lateFeeAmount: data.lateFeeAmount ? Number(data.lateFeeAmount) : undefined };
+    const res = await saveLateFeeSettings(payload);
+    if (res.error) toast.error(res.error);
+    else toast.success("Late fee settings updated");
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       
@@ -176,6 +184,39 @@ export function SetupTab({ sessions, components, structures, canEdit }: any) {
             </div>
           ))}
           {structures.length === 0 && <p className="p-4 text-sm text-muted-foreground text-center">No structures defined</p>}
+        </div>
+      </div>
+
+      {/* Late Fees */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold flex items-center gap-2"><Settings className="w-5 h-5 text-red-500" /> Late Fee Policy</h2>
+        </div>
+        <div className="bg-card border rounded-xl p-4">
+          <form onSubmit={lateFeeForm.handleSubmit(onLateFeeSubmit)} className="space-y-4">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" {...lateFeeForm.register("lateFeeEnabled")} />
+              Enable Late Fees
+            </label>
+            {lateFeeForm.watch("lateFeeEnabled") && (
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Monthly Flat Fee" required>
+                  <input type="number" {...lateFeeForm.register("lateFeeAmount")} className={inputCls} placeholder="e.g. 500" />
+                </FormField>
+                <FormField label="Frequency" required>
+                  <select {...lateFeeForm.register("lateFeeFrequency")} className={selectCls}>
+                    <option value="MONTHLY">Monthly</option>
+                  </select>
+                </FormField>
+              </div>
+            )}
+            {canEdit && (
+              <button disabled={lateFeeForm.formState.isSubmitting} className="h-9 px-4 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center justify-center gap-2 disabled:opacity-60 text-sm">
+                {lateFeeForm.formState.isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Policy
+              </button>
+            )}
+          </form>
         </div>
       </div>
 

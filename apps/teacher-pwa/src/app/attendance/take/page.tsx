@@ -5,6 +5,7 @@ import { AttendanceTaker } from "@/components/attendance/attendance-taker";
 import { BottomNav } from "@/components/layout/bottom-nav";
 
 export const metadata = { title: "Take Attendance" };
+export const dynamic = 'force-dynamic';
 
 export default async function TakeAttendancePage() {
   const session = await auth();

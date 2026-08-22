@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { allocatePayment } from "@/lib/actions/fee-allocator";
+import { allocatePayment, waiveFeeChargeItem } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2, Activity, ArrowUpRight } from "lucide-react";
@@ -55,7 +55,8 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
   for (const charge of studentCharges) {
     for (const item of charge.items) {
       const compName = item.component?.name || components.find((c:any) => c.id === item.componentId)?.name || "Unknown";
-      const due = Number(item.amount || 0) - Number(item.paidAmount || 0);
+      const due = item.status === "WAIVED" ? 0 : (Number(item.amount || 0) - Number(item.paidAmount || 0));
+      const category = item.component?.category || components.find((c:any) => c.id === item.componentId)?.category;
       
       if (!componentSummary[item.componentId]) {
         componentSummary[item.componentId] = {
@@ -68,12 +69,14 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
 
       // Add all items (paid and unpaid) to show history inside the dropdown
       componentSummary[item.componentId].items.push({
+        id: item.id,
         chargeTitle: charge.title,
         dueDate: charge.dueDate,
         amount: Number(item.amount),
         paidAmount: Number(item.paidAmount),
         due: due,
-        status: due <= 0 ? "PAID" : (Number(item.paidAmount) > 0 ? "PARTIAL" : "PENDING")
+        status: item.status === "WAIVED" ? "WAIVED" : (due <= 0 ? "PAID" : (Number(item.paidAmount) > 0 ? "PARTIAL" : "PENDING")),
+        isLateFee: category === "LATE_FEE"
       });
 
       if (due > 0) {
@@ -303,8 +306,24 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
                                           <td className="py-2 text-right">
                                             {item.status === 'PAID' ? (
                                               <span className="text-green-600 font-medium flex items-center justify-end gap-1"><CheckCircle2 className="w-3 h-3"/> Paid</span>
+                                            ) : item.status === 'WAIVED' ? (
+                                              <span className="text-muted-foreground font-medium flex items-center justify-end gap-1">Waived</span>
                                             ) : (
-                                              <span>Due: {formatCurrency(item.due)}</span>
+                                              <div className="flex justify-end items-center gap-2">
+                                                <span>Due: {formatCurrency(item.due)}</span>
+                                                {item.isLateFee && canEdit && (
+                                                  <button 
+                                                    onClick={async () => {
+                                                      const res = await waiveFeeChargeItem(item.id);
+                                                      if(res.error) toast.error(res.error); 
+                                                      else { toast.success("Late fee waived"); router.refresh(); }
+                                                    }} 
+                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium"
+                                                  >
+                                                    Waive
+                                                  </button>
+                                                )}
+                                              </div>
                                             )}
                                           </td>
                                         </tr>
