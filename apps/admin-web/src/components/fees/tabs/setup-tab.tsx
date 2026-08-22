@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { Plus, Check, X, Calendar, Layers, Receipt, Edit2, Loader2 } from "lucide-react";
+import { Plus, Check, X, Calendar, Layers, Receipt, Edit2, Loader2, Settings } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
 import { createAcademicSession, createFeeComponent, createFeeStructure, updateAcademicSession, updateFeeComponent, updateFeeStructure, saveLateFeeSettings } from "@/lib/actions/fee-settings";

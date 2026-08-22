@@ -79,7 +79,46 @@ Mobile-optimized experience featuring:
 
 ---
 
-## 🚀 3. Future Scope (V2 & Beyond)
+## 🏭 3. Production Readiness
+
+SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo with shared packages and a single Postgres database), not microservices — appropriate for its current stage, but the assessment below covers how close the system is to being production-grade.
+
+### Architecture Classification
+- **Type:** Modular monolith (multiple Next.js apps — `admin-web`, `teacher-pwa`, `marketing` — sharing one database via `packages/db` and one auth layer via `packages/auth`).
+- **Not microservices:** all domains (Students, Fees, Payments, Attendance, etc.) live in one Prisma schema (28 models) and are accessed via direct DB calls / Server Actions, not internal service APIs.
+- Splitting into true microservices would be a large effort (roughly 8–12 weeks for one engineer), mainly due to breaking apart the tightly-related Fee/Payment/Ledger data model, introducing an inter-service communication layer, and handling distributed transactions that are currently single DB transactions. Not recommended until there's a concrete scaling or team-ownership reason to do so — a tighter modular monolith (enforced domain boundaries inside `packages/`) gets most of the benefit at a fraction of the cost.
+
+### ✅ Already in place
+- Health check endpoint with DB latency check (`/api/health`)
+- Cron endpoints (`/api/cron/generate-fees`, `/api/cron/apply-late-fees`) protected by a `CRON_SECRET` bearer token
+- Zod schema validation (`packages/types`) and NextAuth v5 for authentication
+- Prisma for typed, injection-safe DB access
+- Sensible, normalized domain modeling across 28 tables
+- `.env` correctly gitignored — no secrets committed to the repo
+
+### ⚠️ Gaps to close before calling this production-grade
+1. **No automated tests** — no `.test.ts`/`.spec.ts` files anywhere in the repo. No safety net for regressions, especially in the fee/payment logic, which is the highest-risk domain.
+2. **No CI/CD pipeline** — no `.github/workflows`; nothing gates merges on lint, type-check, or tests. Deploys rely solely on the Vercel build succeeding.
+3. **No error tracking / observability** — no Sentry, Datadog, or structured logging (pino/winston). Errors currently only go to `console.error`, so production failures are invisible until a user reports them.
+4. **No rate limiting** — auth, OTP, and payment endpoints have no throttling and are open to brute-force/abuse.
+5. **Schema managed via `prisma db push`, not migrations** — no `packages/db/prisma/migrations` folder exists. `db push` is fine for prototyping but is destructive/unsafe for a live production database (no migration history, no safe rollback path). `DEPLOYMENT.md` itself flags this as a recommended-but-not-yet-done step.
+6. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
+7. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
+8. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
+9. **No documented backup/DR strategy** — single database, single region, with no backup or disaster-recovery process written down.
+
+### Recommended order of work
+1. Switch to Prisma migrations for schema changes (`prisma migrate dev` / `migrate deploy`).
+2. Add a CI pipeline (lint + type-check + tests) gating merges to `master`.
+3. Add error tracking (e.g. Sentry) and structured logging.
+4. Add rate limiting to auth/OTP/payment endpoints.
+5. Add automated tests for the Fee/Payment/Ledger module first, since it's the highest-risk domain.
+6. Harden cron auth to fail closed, and batch/parallelize the cron job queries.
+7. Document a backup/DR strategy and add idempotency handling to payment flows.
+
+---
+
+## 🚀 4. Future Scope (V2 & Beyond)
 
 While the core functionality is robust, several modules are planned for future development to make SchoolOS a complete end-to-end educational ecosystem:
 
