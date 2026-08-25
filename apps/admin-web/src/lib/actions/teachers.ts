@@ -12,11 +12,13 @@ import { invalidateCache } from "@/lib/redis";
 const TeacherSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Valid email is required"),
-  phone: z.string().optional(),
+  phone: z.string().optional().nullable(),
   subject: z.string().min(1, "Subject is required"),
-  qualification: z.string().optional(),
-  assignedClassId: z.string().optional(),
-  assignedSectionId: z.string().optional(),
+  qualification: z.string().optional().nullable(),
+  salary: z.coerce.number().min(0).optional().nullable(),
+  joiningDate: z.string().optional().nullable(),
+  assignedClassId: z.string().optional().nullable(),
+  assignedSectionId: z.string().optional().nullable(),
 });
 
 async function getAdminSession() {
@@ -45,7 +47,7 @@ export async function createTeacher(data: unknown) {
     return { error: planLimitMessage("teachers", limit.current, limit.max, limit.plan) };
   }
 
-  const { assignedClassId, assignedSectionId, ...rest } = parsed.data;
+  const { assignedClassId, assignedSectionId, salary, joiningDate, ...rest } = parsed.data;
 
   try {
     const tempPassword = generateTempPassword();
@@ -58,7 +60,7 @@ export async function createTeacher(data: unknown) {
           name: rest.name,
           password: hashedPassword,
           role: "TEACHER",
-          phone: rest.phone,
+          phone: rest.phone || null,
           schoolId: user.schoolId,
         },
       });
@@ -66,6 +68,10 @@ export async function createTeacher(data: unknown) {
       const teacher = await tx.teacher.create({
         data: {
           ...rest,
+          phone: rest.phone || null,
+          qualification: rest.qualification || null,
+          salary: salary ? salary : null,
+          joiningDate: joiningDate ? new Date(joiningDate) : null,
           schoolId: user.schoolId,
           userId: newUser.id,
           assignedClassId: assignedClassId || null,
@@ -93,7 +99,7 @@ export async function updateTeacher(id: string, data: unknown) {
   const parsed = TeacherSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { assignedClassId, assignedSectionId, ...rest } = parsed.data;
+  const { assignedClassId, assignedSectionId, salary, joiningDate, ...rest } = parsed.data;
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -104,13 +110,17 @@ export async function updateTeacher(id: string, data: unknown) {
 
       await tx.user.update({
         where: { id: teacher.userId },
-        data: { name: rest.name, email: rest.email, phone: rest.phone },
+        data: { name: rest.name, email: rest.email, phone: rest.phone || null },
       });
 
       await tx.teacher.update({
         where: { id },
         data: {
           ...rest,
+          phone: rest.phone || null,
+          qualification: rest.qualification || null,
+          salary: salary ? salary : null,
+          joiningDate: joiningDate ? new Date(joiningDate) : null,
           assignedClassId: assignedClassId || null,
           assignedSectionId: assignedSectionId || null,
         },

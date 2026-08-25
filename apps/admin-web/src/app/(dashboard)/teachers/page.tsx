@@ -3,7 +3,7 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { TeachersContent } from "@/components/teachers/teachers-content";
 
-export const metadata = { title: "Teachers" };
+export const metadata = { title: "Teachers & Staff" };
 
 export default async function TeachersPage() {
   const session = await auth();
@@ -23,6 +23,14 @@ export default async function TeachersPage() {
     take: 500,
   });
 
+  const staffList = (prisma as any).staff
+    ? await prisma.staff.findMany({
+        where: { schoolId: schoolId, isActive: true },
+        orderBy: { name: "asc" },
+        take: 500,
+      })
+    : [];
+
   const classes = await prisma.class.findMany({
     where: { schoolId: schoolId },
     include: { sections: { select: { id: true, name: true } } },
@@ -30,5 +38,5 @@ export default async function TeachersPage() {
     take: 200,
   });
 
-  return <TeachersContent teachers={teachers} classes={classes} />;
+  return <TeachersContent teachers={teachers} staffList={staffList} classes={classes} />;
 }

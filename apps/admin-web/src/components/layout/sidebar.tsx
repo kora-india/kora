@@ -20,7 +20,7 @@ interface SidebarProps {
 const adminNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Students", href: "/students", icon: Users },
-  { label: "Teachers", href: "/teachers", icon: GraduationCap },
+  { label: "Teachers / Staff", href: "/teachers", icon: GraduationCap },
   { label: "Classes", href: "/classes", icon: BookOpen },
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Fees", href: "/fees", icon: DollarSign },

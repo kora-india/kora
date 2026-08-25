@@ -44,6 +44,7 @@ model School {
   students         Student[]
   subscription     Subscription?
   teachers         Teacher[]
+  staff            Staff[]
   users            User[]
   expenseCategories ExpenseCategory[]
   expenses         Expense[]
@@ -193,6 +194,8 @@ model Teacher {
   phone             String?
   subject           String
   qualification     String?
+  salary            Decimal?     @db.Decimal(10, 2)
+  joiningDate       DateTime?
   assignedClassId   String?
   assignedSectionId String?
   isActive          Boolean      @default(true)
@@ -207,6 +210,26 @@ model Teacher {
   @@index([schoolId])
   @@index([assignedClassId])
   @@map("teachers")
+}
+
+model Staff {
+  id            String    @id @default(cuid())
+  schoolId      String
+  name          String
+  phone         String
+  occupation    String
+  qualification String?
+  email         String?
+  address       String?
+  salary        Decimal?  @db.Decimal(10, 2)
+  joiningDate   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("staff")
 }
 
 model Attendance {

@@ -17,6 +17,8 @@ const Schema = z.object({
   phone: z.string().optional(),
   subject: z.string().min(1, "Subject is required"),
   qualification: z.string().optional(),
+  salary: z.coerce.number().min(0).optional().nullable(),
+  joiningDate: z.string().optional().nullable(),
   assignedClassId: z.string().optional(),
   assignedSectionId: z.string().optional(),
 });
@@ -51,11 +53,23 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
         phone: teacher.phone ?? "",
         subject: teacher.subject,
         qualification: teacher.qualification ?? "",
+        salary: teacher.salary ? Number(teacher.salary) : undefined,
+        joiningDate: teacher.joiningDate ? new Date(teacher.joiningDate).toISOString().split("T")[0] : "",
         assignedClassId: teacher.assignedClassId ?? "",
         assignedSectionId: teacher.assignedSectionId ?? "",
       });
     } else {
-      reset({ name: "", email: "", phone: "", subject: "", qualification: "", assignedClassId: "", assignedSectionId: "" });
+      reset({
+        name: "",
+        email: "",
+        phone: "",
+        subject: "",
+        qualification: "",
+        salary: undefined,
+        joiningDate: new Date().toISOString().split("T")[0],
+        assignedClassId: "",
+        assignedSectionId: "",
+      });
     }
   }, [teacher, open, reset]);
 
@@ -160,6 +174,14 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
 
           <FormField label="Qualification" error={errors.qualification?.message}>
             <input {...register("qualification")} className={inputCls} placeholder="e.g. M.Sc, B.Ed" />
+          </FormField>
+
+          <FormField label="Monthly Salary (₹)" error={errors.salary?.message}>
+            <input {...register("salary")} type="number" min="0" className={inputCls} placeholder="e.g. 35000" />
+          </FormField>
+
+          <FormField label="Joining Date" error={errors.joiningDate?.message}>
+            <input {...register("joiningDate")} type="date" className={inputCls} />
           </FormField>
 
           <FormField label="Assigned Class" error={errors.assignedClassId?.message}>
