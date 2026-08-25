@@ -2,11 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Pencil, Trash2, MoreVertical, Users, Upload, ArrowUpDown, X, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, MoreVertical, Users, Upload, ArrowUpDown, X, CheckCircle2, Clock, AlertCircle, XCircle, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
+import { StudentFeeCollection } from "./student-fee-collection";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteStudent, getStudentDetails } from "@/lib/actions/students";
 import { Modal, Tabs, ConfigProvider, Spin, Select } from "antd";
@@ -51,7 +53,12 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [expandedChargeId, setExpandedChargeId] = useState<string | null>(null);
-  const [detailsModal, setDetailsModal] = useState<{ open: boolean; loading: boolean; student: any }>({ open: false, loading: false, student: null });
+  const [detailsModal, setDetailsModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    student: any;
+    activeTab: string;
+  }>({ open: false, loading: false, student: null, activeTab: "1" });
 
   // Get available sections based on selected class (from classes data and students records)
   const availableSections = useMemo(() => {
@@ -197,16 +204,28 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
     }
   };
 
-  const handleRowClick = async (studentId: string) => {
-    setDetailsModal({ open: true, loading: true, student: null });
+  const handleOpenStudentModal = async (studentId: string, initialTab: string = "1") => {
+    setDetailsModal({ open: true, loading: true, student: null, activeTab: initialTab });
     setExpandedChargeId(null);
     const result = await getStudentDetails(studentId);
     if (result.success) {
-      setDetailsModal({ open: true, loading: false, student: result.student });
+      setDetailsModal({ open: true, loading: false, student: result.student, activeTab: initialTab });
     } else {
-      setDetailsModal({ open: false, loading: false, student: null });
+      setDetailsModal({ open: false, loading: false, student: null, activeTab: "1" });
       toast.error(result.error || "Failed to load student details");
     }
+  };
+
+  const refreshStudentDetails = async (studentId: string) => {
+    const result = await getStudentDetails(studentId);
+    if (result.success) {
+      setDetailsModal((prev) => ({ ...prev, student: result.student }));
+    }
+    router.refresh();
+  };
+
+  const handleRowClick = (studentId: string) => {
+    handleOpenStudentModal(studentId, "1");
   };
 
   return (
@@ -430,13 +449,23 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                           <MoreVertical className="w-3.5 h-3.5" />
                         </button>
                         {openMenuId === s.id && (
-                          <div className="absolute right-0 top-full mt-1 z-10 w-36 rounded-xl border bg-card shadow-lg py-1">
+                          <div className="absolute right-0 top-full mt-1 z-10 w-40 rounded-xl border bg-card shadow-lg py-1">
                             <button
                               type="button"
                               onClick={() => handleEdit(s)}
                               className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-muted transition-colors"
                             >
                               <Pencil className="w-3 h-3" /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                handleOpenStudentModal(s.id, "2");
+                              }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors font-medium"
+                            >
+                              <CreditCard className="w-3 h-3" /> Collect Fee
                             </button>
                             <button
                               type="button"
@@ -536,28 +565,70 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
 
       <Modal
         open={detailsModal.open}
-          onCancel={() => setDetailsModal({ open: false, loading: false, student: null })}
-          footer={null}
-          width={800}
-          destroyOnHidden
-          title={
-            detailsModal.student ? (
-              <div>
-                <h2 className="text-xl font-bold m-0">{detailsModal.student.name}</h2>
-                <p className="text-sm text-muted-foreground font-normal">
-                  {detailsModal.student.class?.name} · {detailsModal.student.section?.name} | Roll No: {detailsModal.student.rollNumber}
-                </p>
+        onCancel={() => setDetailsModal({ open: false, loading: false, student: null, activeTab: "1" })}
+        footer={null}
+        width={850}
+        destroyOnHidden
+        title={
+          detailsModal.student ? (() => {
+            let outstanding = 0;
+            if (detailsModal.student?.feeCharges) {
+              detailsModal.student.feeCharges.forEach((c: any) => {
+                if (c.status !== "WAIVED") {
+                  c.items?.forEach((i: any) => {
+                    if (i.status !== "WAIVED") {
+                      outstanding += (parseFloat(i.amount || 0) - parseFloat(i.paidAmount || 0));
+                    }
+                  });
+                }
+              });
+            }
+
+            return (
+              <div className="flex items-center justify-between pr-8">
+                <div>
+                  <h2 className="text-xl font-bold m-0">{detailsModal.student.name}</h2>
+                  <p className="text-sm text-muted-foreground font-normal">
+                    {detailsModal.student.class?.name} · {detailsModal.student.section?.name} | Roll No: {detailsModal.student.rollNumber}
+                  </p>
+                </div>
+                {outstanding > 0 && canEdit && detailsModal.activeTab !== "2" && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailsModal((prev) => ({ ...prev, activeTab: "2" }))}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white hover:bg-violet-700 rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    Collect Fee ({formatCurrency(outstanding)})
+                  </button>
+                )}
               </div>
-            ) : "Student Details"
+            );
+          })() : "Student Details"
+        }
+      >
+        {detailsModal.loading ? (
+          <div className="flex justify-center items-center py-20">
+            <Spin size="large" />
+          </div>
+        ) : detailsModal.student ? (() => {
+          let outstanding = 0;
+          if (detailsModal.student?.feeCharges) {
+            detailsModal.student.feeCharges.forEach((c: any) => {
+              if (c.status !== "WAIVED") {
+                c.items?.forEach((i: any) => {
+                  if (i.status !== "WAIVED") {
+                    outstanding += (parseFloat(i.amount || 0) - parseFloat(i.paidAmount || 0));
+                  }
+                });
+              }
+            });
           }
-        >
-          {detailsModal.loading ? (
-            <div className="flex justify-center items-center py-20">
-              <Spin size="large" />
-            </div>
-          ) : detailsModal.student ? (
+
+          return (
             <Tabs
-              defaultActiveKey="1"
+              activeKey={detailsModal.activeTab}
+              onChange={(key) => setDetailsModal((prev) => ({ ...prev, activeTab: key }))}
               items={[
                 {
                   key: '1',
@@ -606,25 +677,36 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                 },
                 {
                   key: '2',
+                  label: outstanding > 0 ? (
+                    <span className="flex items-center gap-1.5 font-semibold text-violet-600 dark:text-violet-400">
+                      Collect Fee
+                      <span className="px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/50 text-[10px] text-violet-700 dark:text-violet-300 font-bold">
+                        {formatCurrency(outstanding)}
+                      </span>
+                    </span>
+                  ) : (
+                    'Collect Fee'
+                  ),
+                  children: (
+                    <div className="max-h-[65vh] overflow-y-auto scrollbar-hide pr-1">
+                      <StudentFeeCollection
+                        student={detailsModal.student}
+                        canEdit={canEdit}
+                        onPaymentSuccess={() => refreshStudentDetails(detailsModal.student.id)}
+                        onWaiveSuccess={() => refreshStudentDetails(detailsModal.student.id)}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  key: '3',
                   label: 'Fee History',
                   children: (
                     <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto scrollbar-hide">
-                      {(() => {
-                        let outstanding = 0;
-                        if (detailsModal.student?.feeCharges) {
-                          detailsModal.student.feeCharges.forEach((c: any) => {
-                            c.items?.forEach((i: any) => {
-                              outstanding += (parseFloat(i.amount) - parseFloat(i.paidAmount));
-                            });
-                          });
-                        }
-                        return (
-                          <div className="flex justify-between items-center p-4 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 rounded-lg mb-6">
-                            <span className="font-semibold text-violet-800 dark:text-violet-300">Total Outstanding Due</span>
-                            <span className="text-lg font-bold text-violet-900 dark:text-violet-200">₹{outstanding.toLocaleString()}</span>
-                          </div>
-                        );
-                      })()}
+                      <div className="flex justify-between items-center p-4 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 rounded-lg mb-6">
+                        <span className="font-semibold text-violet-800 dark:text-violet-300">Total Outstanding Due</span>
+                        <span className="text-lg font-bold text-violet-900 dark:text-violet-200">{formatCurrency(outstanding)}</span>
+                      </div>
 
                       {detailsModal.student.advanceLedgers && detailsModal.student.advanceLedgers.length > 0 && (
                         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg border border-emerald-100 dark:border-emerald-900 mb-6">
@@ -633,7 +715,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                             {detailsModal.student.advanceLedgers.map((ledger: any) => (
                               <div key={ledger.id} className="flex justify-between items-center text-sm">
                                 <span className="text-emerald-700 dark:text-emerald-400">{ledger.description || 'Advance Paid'}</span>
-                                <span className="font-semibold text-emerald-800 dark:text-emerald-300">₹{parseFloat(ledger.amount).toLocaleString()}</span>
+                                <span className="font-semibold text-emerald-800 dark:text-emerald-300">{formatCurrency(parseFloat(ledger.amount))}</span>
                               </div>
                             ))}
                           </div>
@@ -657,7 +739,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                                     <p className="text-xs text-muted-foreground">Due: {new Date(charge.dueDate).toLocaleDateString('default', { month: 'short', year: 'numeric' })}</p>
                                   </div>
                                   <div className="text-right">
-                                    <p className="text-sm font-bold">₹{totalAmount.toLocaleString()}</p>
+                                    <p className="text-sm font-bold">{formatCurrency(totalAmount)}</p>
                                     <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[10px] font-medium border ${FEE_BADGE[charge.status] ?? FEE_BADGE.PAID}`}>
                                       {charge.status}
                                     </span>
@@ -682,10 +764,10 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                                           return (
                                             <tr key={item.id} className="border-b border-muted/50 last:border-0">
                                               <td className="py-2 text-muted-foreground">{item.component?.name || 'Fee'}</td>
-                                              <td className="py-2 text-right">₹{amt.toLocaleString()}</td>
-                                              <td className="py-2 text-right text-emerald-600">₹{paid.toLocaleString()}</td>
+                                              <td className="py-2 text-right">{formatCurrency(amt)}</td>
+                                              <td className="py-2 text-right text-emerald-600">{formatCurrency(paid)}</td>
                                               <td className={`py-2 text-right font-medium ${due > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
-                                                ₹{due.toLocaleString()}
+                                                {formatCurrency(due)}
                                               </td>
                                             </tr>
                                           );
@@ -712,7 +794,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                                 <p className="text-xs text-muted-foreground">{new Date(tx.date).toLocaleDateString()} · {tx.method}</p>
                               </div>
                               <div className="text-right">
-                                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{parseFloat(tx.amount).toLocaleString()}</p>
+                                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(parseFloat(tx.amount))}</p>
                               </div>
                             </div>
                           ))}
@@ -724,7 +806,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                   ),
                 },
                 {
-                  key: '3',
+                  key: '4',
                   label: 'Performance',
                   children: (
                     <div className="flex items-center justify-center py-20 text-muted-foreground text-sm max-h-[60vh] overflow-y-auto scrollbar-hide">
@@ -734,8 +816,9 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                 },
               ]}
             />
-          ) : null}
-        </Modal>
+          );
+        })() : null}
+      </Modal>
       </div>
     </ConfigProvider>
   );
