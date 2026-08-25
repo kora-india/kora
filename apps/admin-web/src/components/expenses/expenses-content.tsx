@@ -19,9 +19,10 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { Table, Button, Input, Select, Card, Tag, DatePicker, ConfigProvider } from "antd";
+import { Table, Button, Input, Select, Tag, DatePicker, ConfigProvider, theme as antTheme } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import { deleteExpense } from "@/lib/actions/expenses";
 import { formatCurrency } from "@schoolos/utils";
 import dayjs, { type Dayjs } from "dayjs";
@@ -68,6 +69,9 @@ const PAYMENT_METHOD_TAGS: Record<string, { color: string; label: string }> = {
 const CATEGORY_COLORS = ["blue", "purple", "cyan", "geekblue", "volcano", "orange", "magenta", "green"];
 
 export function ExpensesContent({ categories, expenses }: Readonly<ExpensesContentProps>) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -268,7 +272,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
       key: "date",
       width: 140,
       render: (date) => (
-        <span className="font-medium text-xs sm:text-sm">
+        <span className="font-medium text-xs sm:text-sm text-foreground">
           {format(new Date(date), "MMM d, yyyy")}
         </span>
       ),
@@ -301,7 +305,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           )}
           {record.recordedBy?.name && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              By: <span className="font-medium">{record.recordedBy.name}</span>
+              By: <span className="font-medium text-foreground/80">{record.recordedBy.name}</span>
             </p>
           )}
         </div>
@@ -367,9 +371,16 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
   return (
     <ConfigProvider
       theme={{
+        algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
         token: {
           colorPrimary: "#7c3aed",
           borderRadius: 8,
+          colorBgContainer: isDark ? "#09090b" : "#ffffff",
+          colorBgElevated: isDark ? "#18181b" : "#ffffff",
+          colorBorder: isDark ? "#27272a" : "#e4e4e7",
+          colorBorderSecondary: isDark ? "#27272a" : "#f4f4f5",
+          colorText: isDark ? "#f4f4f5" : "#09090b",
+          colorTextSecondary: isDark ? "#a1a1aa" : "#71717a",
         },
       }}
     >
@@ -393,7 +404,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
             <Button
               icon={<Settings className="w-4 h-4" />}
               onClick={() => setIsManageCategoriesOpen(true)}
-              className="text-xs font-medium"
+              className="text-xs font-medium border-border"
             >
               Categories ({categories.length})
             </Button>
@@ -452,8 +463,8 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           </div>
         </div>
 
-        {/* Filters and Sorting Toolbar */}
-        <Card className="shadow-sm">
+        {/* Filters and Sorting Toolbar in native Tailwind Card */}
+        <div className="rounded-2xl border border-border bg-card text-card-foreground shadow-sm p-5 space-y-4">
           <div className="space-y-4">
             {/* Row 1: Search & Core Dropdowns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -533,7 +544,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
             </div>
 
             {/* Row 2: Date Presets & Amount Ranges */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground font-semibold flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" /> Date:
@@ -553,7 +564,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                     className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
                       datePreset === p.key
                         ? "bg-violet-600 text-white border-violet-600 font-semibold shadow-xs"
-                        : "bg-background hover:bg-muted text-muted-foreground border-border"
+                        : "bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border"
                     }`}
                   >
                     {p.label}
@@ -589,7 +600,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                     className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
                       amountRangeFilter === a.key
                         ? "bg-violet-600 text-white border-violet-600 font-semibold shadow-xs"
-                        : "bg-background hover:bg-muted text-muted-foreground border-border"
+                        : "bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border"
                     }`}
                   >
                     {a.label}
@@ -601,7 +612,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                     size="small"
                     onClick={handleResetFilters}
                     icon={<RotateCcw className="w-3 h-3" />}
-                    className="text-xs ml-2 text-muted-foreground hover:text-foreground"
+                    className="text-xs ml-2 text-muted-foreground hover:text-foreground border-border"
                   >
                     Reset Filters
                   </Button>
@@ -611,7 +622,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           </div>
 
           {/* Table */}
-          <div className="rounded-xl border overflow-hidden mt-5 bg-card">
+          <div className="rounded-xl border border-border overflow-hidden mt-5 bg-card">
             <Table
               dataSource={paginatedExpenses}
               columns={columns}
@@ -622,7 +633,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
             />
 
             {/* Custom Clean Pagination Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t border-border bg-muted/20 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <span>
                   Showing{" "}
@@ -649,7 +660,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="h-7 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-7 px-2 rounded-md border border-border bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -665,7 +676,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                     disabled={safeCurrentPage <= 1}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     aria-label="Previous Page"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
@@ -702,7 +713,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                     disabled={safeCurrentPage >= totalPages}
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     aria-label="Next Page"
-                    className="w-7 h-7 flex items-center justify-center rounded-lg border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
@@ -710,7 +721,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
               </div>
             </div>
           </div>
-        </Card>
+        </div>
 
         <AddExpenseModal
           open={isAddExpenseOpen}
