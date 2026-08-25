@@ -106,4 +106,46 @@ describe('Fee Settings Actions', () => {
     });
     expect(component).toBeNull();
   });
+
+  it('should create fee structure and invalidate feeStructures cache', async () => {
+    const { invalidateCache } = await import('@/lib/redis');
+    vi.mocked(invalidateCache).mockClear();
+
+    const session = await prisma.academicSession.create({
+      data: {
+        schoolId,
+        name: '2026-27',
+        startDate: new Date('2026-04-01'),
+        endDate: new Date('2027-03-31'),
+        isCurrent: true,
+      }
+    });
+
+    const comp = await prisma.feeComponent.create({
+      data: {
+        schoolId,
+        name: 'Tuition',
+        amount: 1500,
+        frequency: 'MONTHLY',
+        isOptional: false,
+      }
+    });
+
+    const { createFeeStructure } = await import('../fee-settings');
+    const response = await createFeeStructure({
+      name: 'Primary Grade Structure',
+      sessionId: session.id,
+      components: [{ componentId: comp.id, amount: 1500 }]
+    });
+
+    expect(response.success).toBe(true);
+    expect(invalidateCache).toHaveBeenCalledWith(`cache:${schoolId}:feeStructures:*`);
+
+    const structure = await prisma.feeStructure.findFirst({
+      where: { schoolId, name: 'Primary Grade Structure' },
+      include: { items: true }
+    });
+    expect(structure).toBeDefined();
+    expect(structure?.items.length).toBe(1);
+  });
 });

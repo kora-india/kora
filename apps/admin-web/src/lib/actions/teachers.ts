@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { checkTeacherLimit, planLimitMessage } from "@/lib/plan-limits";
+import { invalidateCache } from "@/lib/redis";
 
 const TeacherSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -75,7 +76,9 @@ export async function createTeacher(data: unknown) {
       return teacher;
     });
 
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/teachers");
+    revalidatePath("/dashboard");
     return { success: true, id: result.id, tempPassword };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A user with this email already exists" };
@@ -136,7 +139,9 @@ export async function deleteTeacher(id: string) {
       prisma.user.update({ where: { id: teacher.userId }, data: { isActive: false } }),
     ]);
 
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/teachers");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

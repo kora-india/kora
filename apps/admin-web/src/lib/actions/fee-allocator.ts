@@ -159,6 +159,7 @@ export async function allocatePayment(data: {
 
     revalidatePath("/fees");
     revalidatePath(`/students/${data.studentId}`);
+    revalidatePath("/dashboard");
     await invalidateFeesCache(user.schoolId);
     
     return { success: true, ...result };
@@ -177,6 +178,7 @@ export async function waiveFeeChargeItem(itemId: string) {
       data: { status: "WAIVED" }
     });
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
     await invalidateFeesCache(user.schoolId);
     return { success: true };
   } catch (e: any) {

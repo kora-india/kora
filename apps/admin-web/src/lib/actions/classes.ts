@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkClassLimit, planLimitMessage } from "@/lib/plan-limits";
+import { invalidateCache } from "@/lib/redis";
 
 const ClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
@@ -41,7 +42,12 @@ export async function createClass(data: unknown) {
     const cls = await prisma.class.create({
       data: { ...parsed.data, schoolId: user.schoolId },
     });
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/classes");
+    revalidatePath("/fees");
+    revalidatePath("/students");
+    revalidatePath("/dashboard");
     return { success: true, id: cls.id };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A class with this name already exists" };
@@ -61,7 +67,10 @@ export async function updateClass(id: string, data: unknown) {
       where: { id, schoolId: user.schoolId },
       data: parsed.data,
     });
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
+    revalidatePath("/fees");
+    revalidatePath("/students");
     return { success: true };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A class with this name already exists" };
@@ -75,7 +84,13 @@ export async function deleteClass(id: string) {
 
   try {
     await prisma.class.delete({ where: { id, schoolId: user.schoolId } });
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/classes");
+    revalidatePath("/fees");
+    revalidatePath("/students");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: "Cannot delete class with existing students or sections" };
@@ -98,7 +113,9 @@ export async function createSection(data: unknown) {
     const section = await prisma.section.create({
       data: { ...parsed.data, schoolId: user.schoolId },
     });
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
+    revalidatePath("/students");
     return { success: true, id: section.id };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "Section already exists in this class" };
@@ -112,7 +129,9 @@ export async function deleteSection(id: string) {
 
   try {
     await prisma.section.delete({ where: { id, schoolId: user.schoolId } });
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
+    revalidatePath("/students");
     return { success: true };
   } catch (e: any) {
     return { error: "Cannot delete section with existing students" };

@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { invalidateCache } from "@/lib/redis";
 
 const NoticeSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -38,7 +39,9 @@ export async function createNotice(data: unknown) {
         targetClassId: parsed.data.targetClassId || null,
       },
     });
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
+    revalidatePath("/dashboard");
     return { success: true, id: notice.id };
   } catch (e: any) {
     return { error: e.message };
@@ -66,7 +69,9 @@ export async function updateNotice(id: string, data: unknown) {
       where: { id },
       data: { ...parsed.data, targetClassId: parsed.data.targetClassId || null },
     });
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -88,7 +93,9 @@ export async function deleteNotice(id: string) {
     }
 
     await prisma.notice.delete({ where: { id } });
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -104,7 +111,9 @@ export async function toggleNoticePublish(id: string, isPublished: boolean) {
       where: { id, schoolId: user.schoolId },
       data: { isPublished },
     });
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

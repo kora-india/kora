@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { logger } from "@/lib/logger";
+import { invalidateCache } from "@/lib/redis";
 
 const CreateSchoolSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -141,6 +142,9 @@ export async function toggleSchoolStatus(schoolId: string) {
       toggledBy: user.id,
     });
 
+    await invalidateCache(`cache:${schoolId}:school:*`);
+    await invalidateCache(`cache:${schoolId}:dashboard`);
+
     revalidatePath("/schools");
     return {
       success: true,
@@ -168,6 +172,8 @@ export async function updateSchoolPlan(schoolId: string, plan: string) {
     });
 
     logger.info("School plan updated", { schoolId, plan, updatedBy: user.id });
+    await invalidateCache(`cache:${schoolId}:school:*`);
+    await invalidateCache(`cache:${schoolId}:dashboard`);
     revalidatePath("/schools");
     return { success: true, message: `Plan updated to ${plan}` };
   } catch (e: any) {

@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { invalidateFeesCache } from "@/lib/redis";
 
 const FeeSchema = z.object({
   studentId: z.string().min(1, "Student is required"),
@@ -46,7 +47,9 @@ export async function createFee(data: unknown) {
         status: "PENDING",
       },
     });
+    await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true, id: fee.id };
   } catch (e: any) {
     return { error: e.message };
@@ -102,7 +105,9 @@ export async function recordPayment(data: unknown) {
       }),
     ]);
 
+    await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true, receiptNo, remaining: isFullyPaid ? 0 : totalDue - totalPaid };
   } catch (e: any) {
     return { error: e.message };
@@ -118,7 +123,9 @@ export async function updateFeeStatus(feeId: string, status: "PENDING" | "OVERDU
       where: { id: feeId, schoolId: user.schoolId },
       data: { status },
     });
+    await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -131,7 +138,9 @@ export async function deleteFee(feeId: string) {
 
   try {
     await prisma.fee.delete({ where: { id: feeId, schoolId: user.schoolId } });
+    await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: "Cannot delete fee with existing payment records" };

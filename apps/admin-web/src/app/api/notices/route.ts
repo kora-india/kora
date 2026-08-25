@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { z } from "zod";
+import { invalidateCache } from "@/lib/redis";
 
 const NoticeSchema = z.object({
   title: z.string().min(2),
@@ -31,6 +32,8 @@ export async function POST(req: NextRequest) {
       isPublished: true,
     },
   });
+
+  await invalidateCache(`cache:${user.schoolId}:dashboard`);
 
   return NextResponse.json(notice);
 }

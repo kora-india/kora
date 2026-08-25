@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@schoolos/db";
 import { differenceInMonths } from "date-fns";
+import { invalidateFeesCache } from "@/lib/redis";
 
 // This route should be triggered daily by Vercel Cron or a scheduler
 // URL: /api/cron/apply-late-fees
@@ -42,6 +43,8 @@ export async function GET(req: Request) {
         include: { items: true }
       });
 
+      let schoolFeeUpdated = false;
+
       for (const charge of overdueCharges) {
         // Determine how many months overdue
         // For simplicity, we calculate full months since due date
@@ -61,6 +64,7 @@ export async function GET(req: Request) {
                 data: { amount: totalLateFee }
               });
               appliedCount++;
+              schoolFeeUpdated = true;
             }
           } else {
             // Create a new late fee item for this charge
@@ -73,8 +77,13 @@ export async function GET(req: Request) {
               }
             });
             appliedCount++;
+            schoolFeeUpdated = true;
           }
         }
+      }
+
+      if (schoolFeeUpdated) {
+        await invalidateFeesCache(school.id);
       }
     }
 

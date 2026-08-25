@@ -118,9 +118,9 @@ describe('Fee Allocator Actions', () => {
       method: 'CASH'
     });
 
-    expect(response.error).toBeUndefined();
-    expect(response.success).toBe(true);
-    expect(response.receiptNo).toBeDefined();
+    expect((response as any).error).toBeUndefined();
+    expect((response as any).success).toBe(true);
+    expect((response as any).receiptNo).toBeDefined();
 
     const item = await prisma.feeChargeItem.findUnique({ where: { id: chargeItemId } });
     expect(item?.paidAmount.toNumber()).toBe(1000);
@@ -129,7 +129,7 @@ describe('Fee Allocator Actions', () => {
     const parentCharge = await prisma.feeCharge.findUnique({ where: { id: chargeId } });
     expect(parentCharge?.status).toBe('PAID');
 
-    const paymentTx = await prisma.paymentTransaction.findUnique({ where: { receiptNo: response.receiptNo } });
+    const paymentTx = await prisma.paymentTransaction.findUnique({ where: { receiptNo: (response as any).receiptNo } });
     expect(paymentTx?.amount.toNumber()).toBe(1000);
     expect(paymentTx?.status).toBe('SUCCESS');
   });
@@ -141,7 +141,7 @@ describe('Fee Allocator Actions', () => {
       method: 'ONLINE'
     });
 
-    expect(response.success).toBe(true);
+    expect((response as any).success).toBe(true);
 
     const item = await prisma.feeChargeItem.findUnique({ where: { id: chargeItemId } });
     expect(item?.paidAmount.toNumber()).toBe(400);
@@ -158,7 +158,7 @@ describe('Fee Allocator Actions', () => {
       method: 'CASH'
     });
 
-    expect(response.success).toBe(true);
+    expect((response as any).success).toBe(true);
 
     const item = await prisma.feeChargeItem.findUnique({ where: { id: chargeItemId } });
     expect(item?.paidAmount.toNumber()).toBe(1000);
@@ -179,7 +179,7 @@ describe('Fee Allocator Actions', () => {
       method: 'CASH'
     });
 
-    expect(response.success).toBe(true);
+    expect((response as any).success).toBe(true);
 
     const advance = await prisma.advanceLedger.findFirst({
       where: { studentId, componentId: null }

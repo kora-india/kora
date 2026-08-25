@@ -3,6 +3,7 @@
 import { auth } from "@schoolos/auth";
 import { prisma, FeeFrequency } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
+import { invalidateCache, invalidateFeesCache } from "@/lib/redis";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -37,7 +38,10 @@ export async function createAcademicSession(data: { name: string; startDate: str
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -60,7 +64,9 @@ export async function createFeeComponent(data: { name: string; amount: number; f
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -84,7 +90,8 @@ export async function createFeeStructure(data: { name: string; sessionId: string
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -113,7 +120,10 @@ export async function assignFeeStructureToClass(classId: string, structureId: st
       });
     }
 
-    revalidatePath("/fees/assignments");
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
+    revalidatePath("/classes");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -158,7 +168,9 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
       });
     }
 
-    revalidatePath("/fees/assignments");
+    await invalidateCache(`cache:${user.schoolId}:students:*`);
+    revalidatePath("/fees");
+    revalidatePath(`/students/${studentId}`);
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -188,7 +200,10 @@ export async function updateAcademicSession(id: string, data: { name: string; st
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -211,7 +226,9 @@ export async function updateFeeComponent(id: string, data: { name: string; amoun
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -237,7 +254,8 @@ export async function updateFeeStructure(id: string, data: { name: string; sessi
       }
     });
 
-    revalidatePath("/fees/settings");
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
@@ -283,6 +301,9 @@ export async function saveLateFeeSettings(data: { lateFeeEnabled: boolean; lateF
       }
     }
 
+    await invalidateCache(`cache:${user.schoolId}:school:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {

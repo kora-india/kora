@@ -23,7 +23,15 @@ vi.mock('@schoolos/auth', () => ({
 
 // Mock Redis Cache
 vi.mock('@/lib/redis', () => ({
-  invalidateFeesCache: vi.fn(),
+  redis: {
+    get: vi.fn(),
+    set: vi.fn(),
+    del: vi.fn(),
+    scan: vi.fn(),
+  },
+  getCache: vi.fn(async (_key: string, fetcher: () => Promise<any>) => fetcher()),
+  invalidateCache: vi.fn().mockResolvedValue(undefined),
+  invalidateFeesCache: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock Nodemailer (prevent real emails from being sent during tests).

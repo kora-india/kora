@@ -57,8 +57,11 @@ export async function createStudent(data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-    revalidatePath("/students");
     await invalidateCache(`cache:${user.schoolId}:students:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    revalidatePath("/students");
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true, id: student.id };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
@@ -84,8 +87,11 @@ export async function updateStudent(id: string, data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-    revalidatePath("/students");
     await invalidateCache(`cache:${user.schoolId}:students:*`);
+    revalidatePath("/students");
+    revalidatePath(`/students/${id}`);
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "Roll number already exists in this class" };
@@ -102,8 +108,11 @@ export async function deleteStudent(id: string) {
       where: { id, schoolId: user.schoolId },
       data: { isActive: false },
     });
-    revalidatePath("/students");
     await invalidateCache(`cache:${user.schoolId}:students:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    revalidatePath("/students");
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

@@ -3,6 +3,7 @@
 import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
+import { invalidateFeesCache } from "@/lib/redis";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -113,6 +114,10 @@ export async function runLegacyFeeMigration() {
 
       return { migratedCount };
     }, { maxWait: 15000, timeout: 60000 });
+
+    await invalidateFeesCache(user.schoolId);
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
 
     return { success: true, migratedCount: result.migratedCount };
   } catch (e: any) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { z } from "zod";
+import { invalidateCache } from "@/lib/redis";
 
 const MarkAttendanceSchema = z.object({
   classId: z.string(),
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
         })
       )
     );
+
+    await invalidateCache(`cache:${schoolId}:dashboard`);
 
     return NextResponse.json({ success: true, count: data.records.length });
   } catch (err) {

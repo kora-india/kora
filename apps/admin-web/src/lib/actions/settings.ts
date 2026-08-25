@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { invalidateCache } from "@/lib/redis";
 
 const UpdateSchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -38,7 +39,14 @@ export async function updateSchoolProfile(data: unknown) {
         email: parsed.data.email || null,
       },
     });
+
+    await invalidateCache(`cache:${user.schoolId}:school:*`);
+    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+
+    revalidatePath("/settings");
     revalidatePath("/settings/school-profile");
+    revalidatePath("/fees");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

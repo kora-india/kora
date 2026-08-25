@@ -3,6 +3,7 @@
 import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
+import { invalidateFeesCache } from "@/lib/redis";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -191,7 +192,9 @@ export async function generateMonthlyFees(sessionId: string, classId: string, mo
 
   const res = await processClassFeeGeneration(user.schoolId, sessionId, classId, monthTitle, new Date(dueDateStr));
   if (res.success) {
+    await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
+    revalidatePath("/dashboard");
   }
   return res;
 }

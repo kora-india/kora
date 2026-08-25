@@ -49,6 +49,12 @@ export async function getCache<T>(
  */
 export async function invalidateCache(pattern: string) {
   try {
+    if (!pattern.includes('*')) {
+      await redis.del(pattern);
+      console.log(`[Cache Invalidation] Direct key deleted: ${pattern}`);
+      return;
+    }
+
     let cursor: string | number = 0;
     let totalDeleted = 0;
     
@@ -70,10 +76,16 @@ export async function invalidateCache(pattern: string) {
 }
 
 export async function invalidateFeesCache(schoolId: string) {
-  await invalidateCache(`cache:${schoolId}:feeCharges:*`);
-  await invalidateCache(`cache:${schoolId}:transactions:*`);
-  await invalidateCache(`cache:${schoolId}:academicSessions:*`);
-  await invalidateCache(`cache:${schoolId}:feeComponents:*`);
-  await invalidateCache(`cache:${schoolId}:feeStructures:*`);
-  await invalidateCache(`cache:${schoolId}:students:*`);
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:feeCharges:*`),
+    invalidateCache(`cache:${schoolId}:transactions:*`),
+    invalidateCache(`cache:${schoolId}:academicSessions:*`),
+    invalidateCache(`cache:${schoolId}:feeComponents:*`),
+    invalidateCache(`cache:${schoolId}:feeStructures:*`),
+    invalidateCache(`cache:${schoolId}:students:*`),
+    invalidateCache(`cache:${schoolId}:classes:*`),
+    invalidateCache(`cache:${schoolId}:school:*`),
+    invalidateCache(`cache:${schoolId}:dashboard`),
+  ]);
 }
+

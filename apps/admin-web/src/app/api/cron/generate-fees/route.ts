@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@schoolos/db";
 import { processClassFeeGeneration } from "@/lib/actions/fee-generator";
+import { invalidateFeesCache } from "@/lib/redis";
 
 // Prevents this route from being statically compiled, ensuring it runs on request
 export const dynamic = "force-dynamic";
@@ -68,6 +69,10 @@ export async function GET(request: Request) {
           schoolGeneratedCount += res.generatedCount;
           totalGenerated += res.generatedCount;
         }
+      }
+
+      if (schoolGeneratedCount > 0) {
+        await invalidateFeesCache(school.id);
       }
 
       results.push({ school: school.name, generated: schoolGeneratedCount });
