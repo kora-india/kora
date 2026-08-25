@@ -20,12 +20,13 @@ export default async function StudentsPage() {
     prisma.student.findMany({
       where: { schoolId: schoolId, isActive: true },
       include: {
-        class: { select: { name: true } },
-        section: { select: { name: true } },
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
         feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        attendances: { select: { status: true, date: true }, orderBy: { date: "desc" }, take: 1 },
       },
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: 1000,
     })
   );
 

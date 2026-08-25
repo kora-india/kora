@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import { assignFeeStructureToClass, setStudentFeeOverride } from "@/lib/actions/fee-settings";
 import { toast } from "sonner";
@@ -9,12 +9,30 @@ import { Loader2 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
 export function AssignmentsTab({ classes, structures, sessions, components, students, canEdit }: any) {
-  const [classData, setClassData] = useState<any>(null);
   const [studentData, setStudentData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [updatingClassId, setUpdatingClassId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  // Local state for optimistic UI updates of class assignments
+  const [classAssignments, setClassAssignments] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    classes?.forEach((c: any) => {
+      map[c.id] = c.classFeeStructures?.[0]?.structureId || "";
+    });
+    return map;
+  });
+
+  // Synchronize when server props update
+  useEffect(() => {
+    const map: Record<string, string> = {};
+    classes?.forEach((c: any) => {
+      map[c.id] = c.classFeeStructures?.[0]?.structureId || "";
+    });
+    setClassAssignments(map);
+  }, [classes]);
 
   const activeSession = sessions.find((s: any) => s.isCurrent) || sessions[0];
 
@@ -28,10 +46,30 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
   const paginatedStudents = filteredStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const assignClassStructure = async (classId: string, structureId: string) => {
-    if (!structureId) return;
-    const res = await assignFeeStructureToClass(classId, structureId);
-    if (res.error) toast.error(res.error);
-    else toast.success("Class fee structure updated");
+    const prevStructureId = classAssignments[classId] || "";
+    
+    // 1. Optimistic UI update (0ms perceived latency)
+    setClassAssignments((prev) => ({ ...prev, [classId]: structureId }));
+    setUpdatingClassId(classId);
+
+    const toastId = `assign-class-${classId}`;
+    toast.loading("Updating class fee structure...", { id: toastId });
+
+    try {
+      const res = await assignFeeStructureToClass(classId, structureId);
+      if (res.error) {
+        // Rollback on server error
+        setClassAssignments((prev) => ({ ...prev, [classId]: prevStructureId }));
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success("Class fee structure updated", { id: toastId });
+      }
+    } catch {
+      setClassAssignments((prev) => ({ ...prev, [classId]: prevStructureId }));
+      toast.error("Failed to update class fee structure", { id: toastId });
+    } finally {
+      setUpdatingClassId(null);
+    }
   };
 
   const handleOverrideSubmit = async (e: React.FormEvent) => {
@@ -44,15 +82,24 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
     const amountStr = formData.get("amount") as string;
     const amount = amountStr ? Number(amountStr) : undefined;
 
-    const res = await setStudentFeeOverride(studentData.id, activeSession.id, componentId, {
-      isExempt, discountAmount, amount
-    });
+    const toastId = `override-${studentData?.id}`;
+    toast.loading("Saving student fee override...", { id: toastId });
 
-    setIsSubmitting(false);
-    if (res.error) toast.error(res.error);
-    else {
-      toast.success("Student override saved");
-      setStudentData(null);
+    try {
+      const res = await setStudentFeeOverride(studentData.id, activeSession.id, componentId, {
+        isExempt, discountAmount, amount
+      });
+
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success("Student override saved", { id: toastId });
+        setStudentData(null);
+      }
+    } catch {
+      toast.error("Failed to save override", { id: toastId });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -71,22 +118,27 @@ export function AssignmentsTab({ classes, structures, sessions, components, stud
             </thead>
             <tbody className="divide-y">
               {classes.map((c: any) => {
-                const assigned = c.classFeeStructures?.[0]?.structureId;
+                const assigned = classAssignments[c.id] ?? "";
+                const isUpdating = updatingClassId === c.id;
+
                 return (
                   <tr key={c.id} className="hover:bg-muted/30">
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3">
-                      <select 
-                        className={selectCls + " max-w-xs"}
-                        value={assigned || ""}
-                        onChange={(e) => assignClassStructure(c.id, e.target.value)}
-                        disabled={!canEdit}
-                      >
-                        <option value="">-- No Structure Assigned --</option>
-                        {structures.filter((s:any) => s.sessionId === activeSession?.id).map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2 max-w-xs">
+                        <select 
+                          className={selectCls + " flex-1"}
+                          value={assigned}
+                          onChange={(e) => assignClassStructure(c.id, e.target.value)}
+                          disabled={!canEdit || isUpdating}
+                        >
+                          <option value="">-- No Structure Assigned --</option>
+                          {structures.filter((s: any) => s.sessionId === activeSession?.id).map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        {isUpdating && <Loader2 className="w-4 h-4 animate-spin text-violet-600 flex-shrink-0" />}
+                      </div>
                     </td>
                   </tr>
                 );

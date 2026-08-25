@@ -40,7 +40,10 @@ export default async function FeesPage() {
   const classes = await getCache(`cache:${schoolId}:classes:list`, () => 
     prisma.class.findMany({ 
       where: { schoolId: schoolId },
-      include: { classFeeStructures: true },
+      include: { 
+        sections: { select: { id: true, name: true } },
+        classFeeStructures: true 
+      },
       orderBy: { grade: 'asc' }
     })
   );

@@ -75,39 +75,75 @@ export function SetupTab({ sessions, components, structures, school, canEdit }: 
   };
 
   const onSessionSubmit = async (data: any) => {
-    const res = editSessionId 
-      ? await updateAcademicSession(editSessionId, data)
-      : await createAcademicSession(data);
-    if (res.error) toast.error(res.error);
-    else { toast.success(editSessionId ? "Session updated" : "Session created"); setSessionDialog(false); sessionForm.reset(); }
+    const toastId = "session-submit";
+    toast.loading(editSessionId ? "Updating session..." : "Creating session...", { id: toastId });
+    try {
+      const res = editSessionId 
+        ? await updateAcademicSession(editSessionId, data)
+        : await createAcademicSession(data);
+      if (res.error) toast.error(res.error, { id: toastId });
+      else { 
+        toast.success(editSessionId ? "Session updated" : "Session created", { id: toastId }); 
+        setSessionDialog(false); 
+        sessionForm.reset(); 
+      }
+    } catch {
+      toast.error("Failed to save academic session", { id: toastId });
+    }
   };
 
   const onCompSubmit = async (data: any) => {
-    const res = editComponentId
-      ? await updateFeeComponent(editComponentId, { ...data, amount: Number(data.amount) })
-      : await createFeeComponent({ ...data, amount: Number(data.amount) });
-    if (res.error) toast.error(res.error);
-    else { toast.success(editComponentId ? "Component updated" : "Component created"); setComponentDialog(false); compForm.reset(); }
+    const toastId = "component-submit";
+    toast.loading(editComponentId ? "Updating fee component..." : "Creating fee component...", { id: toastId });
+    try {
+      const res = editComponentId
+        ? await updateFeeComponent(editComponentId, { ...data, amount: Number(data.amount) })
+        : await createFeeComponent({ ...data, amount: Number(data.amount) });
+      if (res.error) toast.error(res.error, { id: toastId });
+      else { 
+        toast.success(editComponentId ? "Component updated" : "Component created", { id: toastId }); 
+        setComponentDialog(false); 
+        compForm.reset(); 
+      }
+    } catch {
+      toast.error("Failed to save fee component", { id: toastId });
+    }
   };
 
   const onStructSubmit = async (data: any) => {
-    const components = data.componentIds.map((id: string) => ({
-      componentId: id,
-      amount: data.amounts?.[id] ? Number(data.amounts[id]) : undefined
-    }));
-    const payload = { name: data.name, sessionId: data.sessionId, components };
-    const res = editStructureId
-      ? await updateFeeStructure(editStructureId, payload)
-      : await createFeeStructure(payload);
-    if (res.error) toast.error(res.error);
-    else { toast.success(editStructureId ? "Structure updated" : "Structure created"); setStructureDialog(false); structForm.reset(); }
+    const toastId = "structure-submit";
+    toast.loading(editStructureId ? "Updating fee structure..." : "Creating fee structure...", { id: toastId });
+    try {
+      const components = data.componentIds.map((id: string) => ({
+        componentId: id,
+        amount: data.amounts?.[id] ? Number(data.amounts[id]) : undefined
+      }));
+      const payload = { name: data.name, sessionId: data.sessionId, components };
+      const res = editStructureId
+        ? await updateFeeStructure(editStructureId, payload)
+        : await createFeeStructure(payload);
+      if (res.error) toast.error(res.error, { id: toastId });
+      else { 
+        toast.success(editStructureId ? "Structure updated" : "Structure created", { id: toastId }); 
+        setStructureDialog(false); 
+        structForm.reset(); 
+      }
+    } catch {
+      toast.error("Failed to save fee structure", { id: toastId });
+    }
   };
 
   const onLateFeeSubmit = async (data: any) => {
-    const payload = { ...data, lateFeeAmount: data.lateFeeAmount ? Number(data.lateFeeAmount) : undefined };
-    const res = await saveLateFeeSettings(payload);
-    if (res.error) toast.error(res.error);
-    else toast.success("Late fee settings updated");
+    const toastId = "late-fee-submit";
+    toast.loading("Updating late fee policy...", { id: toastId });
+    try {
+      const payload = { ...data, lateFeeAmount: data.lateFeeAmount ? Number(data.lateFeeAmount) : undefined };
+      const res = await saveLateFeeSettings(payload);
+      if (res.error) toast.error(res.error, { id: toastId });
+      else toast.success("Late fee policy updated", { id: toastId });
+    } catch {
+      toast.error("Failed to update late fee policy", { id: toastId });
+    }
   };
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Pencil, Trash2, Eye, EyeOff, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -45,6 +45,13 @@ export function NoticesContent({ notices, classes, currentUserId, userRole, page
   const [dialog, setDialog] = useState<"closed" | "create" | "edit">("closed");
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [togglingNoticeId, setTogglingNoticeId] = useState<string | null>(null);
+  const [localNotices, setLocalNotices] = useState<any[]>(notices);
+
+  // Sync with server props
+  useEffect(() => {
+    setLocalNotices(notices);
+  }, [notices]);
 
   const canEdit = (notice: any) =>
     ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(userRole) || notice.publishedById === currentUserId;
@@ -74,26 +81,63 @@ export function NoticesContent({ notices, classes, currentUserId, userRole, page
 
   const onSubmit = async (data: FormData) => {
     const payload = { ...data, targetClassId: data.targetClassId || undefined };
-    const result = editTarget
-      ? await updateNotice(editTarget.id, payload)
-      : await createNotice(payload);
-    if (result.error) { toast.error(result.error); return; }
-    toast.success(editTarget ? "Notice updated" : "Notice published");
-    setDialog("closed");
-    setEditTarget(null);
-    router.refresh();
+    const toastId = "notice-submit";
+    toast.loading(editTarget ? "Updating notice..." : "Publishing notice...", { id: toastId });
+    try {
+      const result = editTarget
+        ? await updateNotice(editTarget.id, payload)
+        : await createNotice(payload);
+      if (result.error) { toast.error(result.error, { id: toastId }); return; }
+      toast.success(editTarget ? "Notice updated" : "Notice published", { id: toastId });
+      setDialog("closed");
+      setEditTarget(null);
+      router.refresh();
+    } catch {
+      toast.error("Failed to save notice", { id: toastId });
+    }
   };
 
   const handleDelete = async () => {
-    const result = await deleteNotice(deleteTarget.id);
-    if (result.error) toast.error(result.error);
-    else { toast.success("Notice deleted"); router.refresh(); }
+    const toastId = "notice-delete";
+    toast.loading("Deleting notice...", { id: toastId });
+    try {
+      const result = await deleteNotice(deleteTarget.id);
+      if (result.error) toast.error(result.error, { id: toastId });
+      else { 
+        toast.success("Notice deleted", { id: toastId }); 
+        setLocalNotices(prev => prev.filter(n => n.id !== deleteTarget.id));
+        router.refresh(); 
+      }
+    } catch {
+      toast.error("Failed to delete notice", { id: toastId });
+    }
   };
 
   const handleTogglePublish = async (notice: any) => {
-    const result = await toggleNoticePublish(notice.id, !notice.isPublished);
-    if (result.error) toast.error(result.error);
-    else { toast.success(notice.isPublished ? "Notice unpublished" : "Notice published"); router.refresh(); }
+    const targetStatus = !notice.isPublished;
+    const toastId = `toggle-notice-${notice.id}`;
+    
+    // 1. Optimistic Update (0ms)
+    setLocalNotices(prev => prev.map(n => n.id === notice.id ? { ...n, isPublished: targetStatus } : n));
+    setTogglingNoticeId(notice.id);
+    toast.loading(targetStatus ? "Publishing notice..." : "Unpublishing notice...", { id: toastId });
+
+    try {
+      const result = await toggleNoticePublish(notice.id, targetStatus);
+      if (result.error) {
+        // Rollback
+        setLocalNotices(prev => prev.map(n => n.id === notice.id ? { ...n, isPublished: notice.isPublished } : n));
+        toast.error(result.error, { id: toastId });
+      } else {
+        toast.success(targetStatus ? "Notice published" : "Notice unpublished", { id: toastId });
+        router.refresh();
+      }
+    } catch {
+      setLocalNotices(prev => prev.map(n => n.id === notice.id ? { ...n, isPublished: notice.isPublished } : n));
+      toast.error("Failed to update notice status", { id: toastId });
+    } finally {
+      setTogglingNoticeId(null);
+    }
   };
 
   return (
@@ -114,9 +158,11 @@ export function NoticesContent({ notices, classes, currentUserId, userRole, page
 
       <div className="space-y-3">
         <AnimatePresence initial={false}>
-          {notices.map((n, i) => {
+          {localNotices.map((n, i) => {
             const cfg = PRIORITY_CONFIG[n.priority] ?? PRIORITY_CONFIG.MEDIUM;
             const owned = canEdit(n);
+            const isToggling = togglingNoticeId === n.id;
+
             return (
               <motion.div
                 key={n.id}
@@ -147,10 +193,17 @@ export function NoticesContent({ notices, classes, currentUserId, userRole, page
                             <button
                               type="button"
                               aria-label={n.isPublished ? "Unpublish" : "Publish"}
+                              disabled={isToggling}
                               onClick={() => handleTogglePublish(n)}
-                              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
                             >
-                              {n.isPublished ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-muted-foreground" />}
+                              {isToggling ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                              ) : n.isPublished ? (
+                                <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                              )}
                             </button>
                             <button
                               type="button"

@@ -39,6 +39,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredExpenses = expenses.filter((e) => {
     const matchesSearch = e.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -49,11 +50,20 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this expense?")) return;
-    const res = await deleteExpense(id);
-    if (res.error) {
-      toast.error(res.error);
-    } else {
-      toast.success("Expense deleted successfully");
+    setDeletingId(id);
+    const toastId = `delete-exp-${id}`;
+    toast.loading("Deleting expense...", { id: toastId });
+    try {
+      const res = await deleteExpense(id);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success("Expense deleted successfully", { id: toastId });
+      }
+    } catch {
+      toast.error("Failed to delete expense", { id: toastId });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -115,6 +125,8 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
         <Button 
           type="text" 
           danger 
+          loading={deletingId === record.id}
+          disabled={deletingId === record.id}
           icon={<Trash2 className="h-4 w-4" />} 
           onClick={() => handleDelete(record.id)} 
         />

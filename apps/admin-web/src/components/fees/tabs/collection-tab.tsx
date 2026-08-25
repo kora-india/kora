@@ -22,6 +22,7 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
 
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
 
   // Filter students based on search
   const filteredStudents = search.length > 2 
@@ -167,28 +168,34 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
     }
     
     setIsSubmitting(true);
+    const toastId = "payment-process";
+    toast.loading("Processing payment transaction...", { id: toastId });
 
-    const payloadPayments = Object.entries(componentPayments)
-      .filter(([id, val]) => selectedComponents[id] && Number(val) > 0)
-      .map(([id, val]) => ({ componentId: id, amount: Number(val) }));
+    try {
+      const payloadPayments = Object.entries(componentPayments)
+        .filter(([id, val]) => selectedComponents[id] && Number(val) > 0)
+        .map(([id, val]) => ({ componentId: id, amount: Number(val) }));
 
-    const res = await allocatePayment({
-      studentId: currentStudent.id,
-      componentPayments: payloadPayments,
-      method: paymentMethod as any,
-      reference,
-    });
+      const res = await allocatePayment({
+        studentId: currentStudent.id,
+        componentPayments: payloadPayments,
+        method: paymentMethod as any,
+        reference,
+      });
 
-    if (res.error) {
-      toast.error(res.error);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success(`Payment successful! Receipt: ${(res as any).receiptNo}`, { id: toastId });
+        setComponentPayments({});
+        setSelectedComponents({});
+        setShowPreview(false);
+        router.refresh();
+      }
+    } catch {
+      toast.error("Payment processing failed", { id: toastId });
+    } finally {
       setIsSubmitting(false);
-    } else {
-      toast.success(`Payment successful! Receipt: ${(res as any).receiptNo}`);
-      setComponentPayments({});
-      setSelectedComponents({});
-      setShowPreview(false);
-      setIsSubmitting(false);
-      router.refresh();
     }
   };
 
@@ -313,13 +320,24 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
                                                 <span>Due: {formatCurrency(item.due)}</span>
                                                 {item.isLateFee && canEdit && (
                                                   <button 
+                                                    disabled={waivingItemId === item.id}
                                                     onClick={async () => {
-                                                      const res = await waiveFeeChargeItem(item.id);
-                                                      if(res.error) toast.error(res.error); 
-                                                      else { toast.success("Late fee waived"); router.refresh(); }
+                                                      setWaivingItemId(item.id);
+                                                      const toastId = `waive-${item.id}`;
+                                                      toast.loading("Waiving late fee...", { id: toastId });
+                                                      try {
+                                                        const res = await waiveFeeChargeItem(item.id);
+                                                        if (res.error) toast.error(res.error, { id: toastId }); 
+                                                        else { toast.success("Late fee waived", { id: toastId }); router.refresh(); }
+                                                      } catch {
+                                                        toast.error("Failed to waive late fee", { id: toastId });
+                                                      } finally {
+                                                        setWaivingItemId(null);
+                                                      }
                                                     }} 
-                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium"
+                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
                                                   >
+                                                    {waivingItemId === item.id && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
                                                     Waive
                                                   </button>
                                                 )}
