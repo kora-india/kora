@@ -57,11 +57,15 @@ export async function createStudent(data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-    await invalidateCache(`cache:${user.schoolId}:students:*`);
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:students:*`),
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/students");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     return { success: true, id: student.id };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
@@ -79,7 +83,7 @@ export async function updateStudent(id: string, data: unknown) {
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 
   try {
-    await prisma.student.update({
+    const student = await prisma.student.update({
       where: { id, schoolId: user.schoolId },
       data: {
         ...rest,
@@ -87,14 +91,18 @@ export async function updateStudent(id: string, data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-    await invalidateCache(`cache:${user.schoolId}:students:*`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:students:*`),
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/students");
-    revalidatePath(`/students/${id}`);
     revalidatePath("/fees");
     revalidatePath("/dashboard");
-    return { success: true };
+    revalidatePath("/analytics");
+    return { success: true, id: student.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "Roll number already exists in this class" };
+    if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
     return { error: e.message };
   }
 }
@@ -108,11 +116,15 @@ export async function deleteStudent(id: string) {
       where: { id, schoolId: user.schoolId },
       data: { isActive: false },
     });
-    await invalidateCache(`cache:${user.schoolId}:students:*`);
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:students:*`),
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/students");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

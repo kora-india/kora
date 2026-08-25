@@ -192,13 +192,17 @@ export async function bulkImportStudents(data: any[]) {
     });
 
     // Invalidate Redis caches
-    await invalidateCache(`cache:${schoolId}:students:*`);
-    await invalidateCache(`cache:${schoolId}:classes:*`);
-    await invalidateCache(`cache:${schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${schoolId}:students:*`),
+      invalidateCache(`cache:${schoolId}:classes:*`),
+      invalidateCache(`cache:${schoolId}:dashboard`),
+      invalidateCache(`cache:${schoolId}:analytics`),
+    ]);
 
     revalidatePath("/students");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     
     return {
       imported: result.count,

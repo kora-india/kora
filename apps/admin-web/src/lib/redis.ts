@@ -86,6 +86,7 @@ export async function invalidateFeesCache(schoolId: string) {
     invalidateCache(`cache:${schoolId}:classes:*`),
     invalidateCache(`cache:${schoolId}:school:*`),
     invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
   ]);
 }
 

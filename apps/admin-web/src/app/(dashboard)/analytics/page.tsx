@@ -2,6 +2,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AnalyticsContent } from "@/components/analytics/analytics-content";
+import { getCache } from "@/lib/redis";
 
 export const metadata = { title: "Analytics" };
 
@@ -196,7 +197,11 @@ export default async function AnalyticsPage() {
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
 
-  const data = await getAnalyticsData(schoolId);
+  const data = await getCache(
+    `cache:${schoolId}:analytics`,
+    () => getAnalyticsData(schoolId),
+    300 // 5 minutes TTL
+  );
 
   return <AnalyticsContent {...data} />;
 }

@@ -25,20 +25,20 @@ async function getDashboardData(schoolId: string) {
   const todayAttendance = { present, total };
 
   const recentActivity = await prisma.student.findMany({
-    where: { schoolId },
+    where: { schoolId, isActive: true },
     orderBy: { createdAt: "desc" },
-    take: 5,
+    take: 6,
     include: {
       class: { select: { name: true } },
       section: { select: { name: true } },
-      fees: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
   });
 
   const notices = await prisma.notice.findMany({
     where: { schoolId, isPublished: true },
     orderBy: { createdAt: "desc" },
-    take: 3,
+    take: 4,
   });
 
   // Revenue by month (last 6 months)
@@ -66,19 +66,19 @@ async function getDashboardData(schoolId: string) {
 
   const revenueByMonth: Record<string, number> = {};
   payments.forEach((p: (typeof payments)[number]) => {
-    const key = monthKey(p.date);
+    const key = monthKey(new Date(p.date));
     revenueByMonth[key] = (revenueByMonth[key] ?? 0) + Number(p.amount);
   });
 
   const pendingByMonth: Record<string, number> = {};
   pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
-    const key = monthKey(f.charge.dueDate);
+    const key = monthKey(new Date(f.charge.dueDate));
     pendingByMonth[key] = (pendingByMonth[key] ?? 0) + (Number(f.amount) - Number(f.paidAmount));
   });
 
   const expenseByMonth: Record<string, number> = {};
   expensesList.forEach((e: (typeof expensesList)[number]) => {
-    const key = monthKey(e.date);
+    const key = monthKey(new Date(e.date));
     expenseByMonth[key] = (expenseByMonth[key] ?? 0) + Number(e.amount);
   });
 
@@ -88,12 +88,52 @@ async function getDashboardData(schoolId: string) {
     return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
   });
 
-  const revenueData = months.map(({ label, key }) => ({
-    month: label,
-    collected: revenueByMonth[key] ?? 0,
-    pending: pendingByMonth[key] ?? 0,
-    expenses: expenseByMonth[key] ?? 0,
-  }));
+  const revenueAreaData: { month: string; type: string; amount: number }[] = [];
+  const revenueData = months.map(({ label, key }) => {
+    const collected = revenueByMonth[key] ?? 0;
+    const expenses = expenseByMonth[key] ?? 0;
+    const pending = pendingByMonth[key] ?? 0;
+    revenueAreaData.push({ month: label, type: "Collected", amount: collected });
+    revenueAreaData.push({ month: label, type: "Expenses", amount: expenses });
+    revenueAreaData.push({ month: label, type: "Pending", amount: pending });
+    return {
+      month: label,
+      collected,
+      pending,
+      expenses,
+    };
+  });
+
+  // Class-wise attendance
+  const classesList = await prisma.class.findMany({
+    where: { schoolId },
+    take: 4,
+    orderBy: { grade: "asc" },
+    include: {
+      _count: { select: { students: true } },
+      attendances: {
+        where: { date: today },
+        select: { status: true },
+      },
+    },
+  });
+
+  const attendancePercentage = todayAttendance.total > 0
+    ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
+    : 0;
+
+  const classAttendance = classesList.map((c) => {
+    const totalStudents = c._count.students;
+    const presentStudents = c.attendances.filter((a) => a.status === "PRESENT").length;
+    const pct = c.attendances.length > 0
+      ? Math.round((presentStudents / c.attendances.length) * 100)
+      : attendancePercentage;
+    return {
+      label: c.name,
+      pct,
+      students: totalStudents,
+    };
+  });
 
   const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { name: true } });
 
@@ -103,14 +143,14 @@ async function getDashboardData(schoolId: string) {
       totalStudents,
       totalTeachers,
       pendingFees: totalPendingFees,
-      attendancePercentage: todayAttendance.total > 0
-        ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
-        : 0,
+      attendancePercentage,
       monthlyRevenue: revenueData[revenueData.length - 1]?.collected ?? 0,
       monthlyExpenses: revenueData[revenueData.length - 1]?.expenses ?? 0,
       activeClasses: totalClasses,
     },
     revenueData,
+    revenueAreaData,
+    classAttendance,
     recentStudents: recentActivity,
     notices,
   };

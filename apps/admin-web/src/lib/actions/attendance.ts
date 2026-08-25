@@ -67,9 +67,13 @@ export async function markAttendance(data: unknown) {
     );
 
     const results = await prisma.$transaction(upserts);
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     return { success: true, count: results.length };
   } catch (e: any) {
     return { error: e.message };

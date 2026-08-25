@@ -37,9 +37,10 @@ function ChartLoader() {
 // 1. AntV Area Chart: Fee Collection vs Pending Trend
 interface RevenueAreaProps {
   data: { month: string; type: string; amount: number }[];
+  height?: number;
 }
 
-export function AntvRevenueAreaChart({ data }: Readonly<RevenueAreaProps>) {
+export function AntvRevenueAreaChart({ data, height = 260 }: Readonly<RevenueAreaProps>) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -55,7 +56,7 @@ export function AntvRevenueAreaChart({ data }: Readonly<RevenueAreaProps>) {
     shapeField: "smooth",
     scale: {
       color: {
-        range: ["#7c3aed", "#f59e0b"],
+        range: ["#7c3aed", "#ef4444", "#f59e0b", "#3b82f6"],
       },
     },
     axis: {
@@ -81,13 +82,13 @@ export function AntvRevenueAreaChart({ data }: Readonly<RevenueAreaProps>) {
       ],
     },
     style: {
-      fillOpacity: 0.45,
+      fillOpacity: 0.4,
       lineWidth: 2.5,
     },
     interaction: {
       tooltip: true,
     },
-    height: 260,
+    height,
   };
 
   return <Area {...config} />;

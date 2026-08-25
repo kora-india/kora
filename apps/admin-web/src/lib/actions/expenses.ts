@@ -72,10 +72,14 @@ export async function createExpense(data: unknown) {
       },
     });
     
-    await invalidateCache(`cache:${user.schoolId}:expenses:list`);
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:expenses:list`),
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     
     return { success: true, id: expense.id };
   } catch (e: any) {
@@ -92,10 +96,14 @@ export async function deleteExpense(id: string) {
       where: { id, schoolId: user.schoolId },
     });
     
-    await invalidateCache(`cache:${user.schoolId}:expenses:list`);
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:expenses:list`),
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:analytics`),
+    ]);
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
+    revalidatePath("/analytics");
     
     return { success: true };
   } catch (e: any) {
