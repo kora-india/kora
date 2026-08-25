@@ -16,6 +16,8 @@ import {
   Tag as TagIcon,
   ArrowUpDown,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Table, Button, Input, Select, Card, Tag, DatePicker, ConfigProvider } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -79,6 +81,10 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
   const [amountRangeFilter, setAmountRangeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date_desc");
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Reset Filters
   const hasActiveFilters =
     search !== "" ||
@@ -97,6 +103,7 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
     setCustomDateRange(null);
     setAmountRangeFilter("all");
     setSortBy("date_desc");
+    setCurrentPage(1);
   };
 
   // Distinct payment methods from existing data + defaults
@@ -187,6 +194,14 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
         }
       });
   }, [expenses, search, categoryFilter, paymentMethodFilter, datePreset, customDateRange, amountRangeFilter, sortBy]);
+
+  // Paginated records
+  const totalPages = Math.max(1, Math.ceil(processedExpenses.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedExpenses = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return processedExpenses.slice(start, start + pageSize);
+  }, [processedExpenses, safeCurrentPage, pageSize]);
 
   // Aggregate Metrics for Current Filter
   const totalAmount = useMemo(() => {
@@ -596,20 +611,104 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           </div>
 
           {/* Table */}
-          <div className="rounded-xl border overflow-hidden mt-5">
+          <div className="rounded-xl border overflow-hidden mt-5 bg-card">
             <Table
-              dataSource={processedExpenses}
+              dataSource={paginatedExpenses}
               columns={columns}
               rowKey="id"
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: true,
-                pageSizeOptions: ["10", "25", "50", "100"],
-                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} records`,
-              }}
+              pagination={false}
               scroll={{ x: 800 }}
               className="ant-table-striped"
             />
+
+            {/* Custom Clean Pagination Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <span>
+                  Showing{" "}
+                  <strong className="text-foreground font-semibold">
+                    {processedExpenses.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}
+                  </strong>{" "}
+                  to{" "}
+                  <strong className="text-foreground font-semibold">
+                    {Math.min(safeCurrentPage * pageSize, processedExpenses.length)}
+                  </strong>{" "}
+                  of{" "}
+                  <strong className="text-foreground font-semibold">{processedExpenses.length}</strong>{" "}
+                  expenses
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-1.5">
+                  <span>Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="h-7 px-2 rounded-md border bg-background text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                {/* Page Controls */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    aria-label="Previous Page"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => {
+                      if (totalPages <= 5) return true;
+                      if (p === 1 || p === totalPages) return true;
+                      return Math.abs(p - safeCurrentPage) <= 1;
+                    })
+                    .map((p, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      const showEllipsis = prev && p - prev > 1;
+                      return (
+                        <div key={p} className="flex items-center">
+                          {showEllipsis && <span className="px-1 text-muted-foreground">…</span>}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage(p)}
+                            className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-semibold transition-all ${
+                              p === safeCurrentPage
+                                ? "bg-violet-600 text-white shadow-xs"
+                                : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    aria-label="Next Page"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </Card>
 
