@@ -1,19 +1,30 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
-import { useTheme } from "next-themes";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { formatCurrency } from "@schoolos/utils";
-
-// Validated categorical palette (blue, orange, aqua, yellow, magenta), "Other" gets muted gray.
-const SLICE_COLORS_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"];
-const SLICE_COLORS_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"];
-const OTHER_COLOR = "#898781";
+import {
+  AntvRevenueAreaChart,
+  AntvAttendanceLineChart,
+  AntvFeePieChart,
+  AntvPaymentMethodsBarChart,
+} from "./antv-charts";
+import {
+  IndianRupee,
+  TrendingUp,
+  Users,
+  CalendarCheck,
+  CreditCard,
+  PieChart as PieIcon,
+  BarChart3,
+} from "lucide-react";
 
 interface Props {
   revenueData: { month: string; collected: number; pending: number }[];
-  attendanceData: { month: string; rate: number }[];
-  feeDistribution: { name: string; value: number }[];
+  revenueAreaData: { month: string; type: string; amount: number }[];
+  attendanceData: { month: string; rate: number; totalRecords?: number }[];
+  feeDistribution: { name: string; value: number; percentage: number }[];
+  paymentMethods: { method: string; amount: number }[];
   metrics: {
     totalRevenue: number;
     revenueChangePct: number | null;
@@ -27,117 +38,204 @@ interface Props {
   };
 }
 
-export function AnalyticsContent({ revenueData, attendanceData, feeDistribution, metrics }: Readonly<Props>) {
-  const { resolvedTheme } = useTheme();
-  const sliceColors = resolvedTheme === "dark" ? SLICE_COLORS_DARK : SLICE_COLORS_LIGHT;
-
+export function AnalyticsContent({
+  revenueData,
+  revenueAreaData,
+  attendanceData,
+  feeDistribution,
+  paymentMethods,
+  metrics,
+}: Readonly<Props>) {
   const keyMetrics = [
     {
       label: "Total Revenue",
       value: formatCurrency(metrics.totalRevenue),
-      sub: metrics.revenueChangePct === null ? "This month" : `${metrics.revenueChangePct >= 0 ? "+" : ""}${metrics.revenueChangePct}% vs last month`,
-      color: metrics.revenueChangePct === null || metrics.revenueChangePct >= 0 ? "text-green-600" : "text-red-600",
+      sub:
+        metrics.revenueChangePct === null
+          ? "This month"
+          : `${metrics.revenueChangePct >= 0 ? "+" : ""}${metrics.revenueChangePct}% vs last month`,
+      color:
+        metrics.revenueChangePct === null || metrics.revenueChangePct >= 0
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-red-600 dark:text-red-400",
+      icon: IndianRupee,
+      bg: "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
     },
     {
       label: "Fee Collection Rate",
       value: `${metrics.feeCollectionRate}%`,
-      sub: `${metrics.paidFeeCount} paid of ${metrics.totalFeeCount}`,
-      color: "text-violet-600",
+      sub: `${metrics.paidFeeCount} paid items of ${metrics.totalFeeCount}`,
+      color: "text-violet-600 dark:text-violet-400",
+      icon: TrendingUp,
+      bg: "bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400",
     },
     {
       label: "Avg Attendance",
       value: `${metrics.avgAttendanceRate}%`,
       sub: `${metrics.avgPresentPerDay} avg present/day`,
-      color: "text-blue-600",
+      color: "text-blue-600 dark:text-blue-400",
+      icon: CalendarCheck,
+      bg: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
     },
     {
-      label: "New Enrolments",
-      value: `+${metrics.newEnrolments}`,
-      sub: `Active: ${metrics.activeStudentCount} students`,
-      color: "text-amber-600",
+      label: "Enrolled Students",
+      value: `${metrics.activeStudentCount}`,
+      sub: `+${metrics.newEnrolments} joined in last 30 days`,
+      color: "text-amber-600 dark:text-amber-400",
+      icon: Users,
+      bg: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
     },
   ];
 
+  const hasRevenueData = revenueAreaData.some((d) => d.amount > 0);
+  const hasAttendanceData = attendanceData.some((d) => (d.totalRecords ?? 0) > 0 || d.rate > 0);
+  const hasFeeDistribution = feeDistribution.length > 0 && feeDistribution.some((d) => d.value > 0);
+  const hasPaymentMethods = paymentMethods.length > 0 && paymentMethods.some((d) => d.amount > 0);
+
   return (
-    <div className="p-6 space-y-5 max-w-[1400px]">
+    <div className="p-6 space-y-6 max-w-[1400px]">
       <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-muted-foreground text-sm mt-1">School performance overview</p>
+        <h1 className="text-2xl font-bold">Analytics & Reports</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Real-time institutional performance metrics and financial intelligence
+        </p>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Fee Collection Trend</h3>
-          {revenueData.every((d) => d.collected === 0 && d.pending === 0) ? (
-            <EmptyChart label="No fee activity in the last 6 months" />
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(val: number) => [formatCurrency(val), ""]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                <Legend />
-                <Bar dataKey="collected" name="Collected" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="pending" name="Pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Attendance Rate Trend</h3>
-          {attendanceData.every((d) => d.rate === 0) ? (
-            <EmptyChart label="No attendance records in the last 6 months" />
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={attendanceData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(val: number) => [`${val}%`, "Attendance"]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                <Line type="monotone" dataKey="rate" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: "#22c55e" }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Fee Distribution by Type</h3>
-          {feeDistribution.length === 0 ? (
-            <EmptyChart label="No fee records yet" />
-          ) : (
-            <div className="flex items-center gap-6">
-              <ResponsiveContainer width={200} height={200}>
-                <PieChart>
-                  <Pie data={feeDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value">
-                    {feeDistribution.map((entry, index) => (
-                      <Cell key={entry.name} fill={entry.name === "Other" ? OTHER_COLOR : sliceColors[index % sliceColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(val: number) => [`${val}%`, ""]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-3">
-                {feeDistribution.map((f, index) => (
-                  <div key={f.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: f.name === "Other" ? OTHER_COLOR : sliceColors[index % sliceColors.length] }} />
-                    <span className="text-xs text-muted-foreground">{f.name}</span>
-                    <span className="text-xs font-semibold ml-auto">{f.value}%</span>
-                  </div>
-                ))}
+
+      {/* Top Metrics Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {keyMetrics.map((m, idx) => {
+          const Icon = m.icon;
+          return (
+            <motion.div
+              key={m.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="rounded-xl border bg-card p-4 shadow-sm flex items-start justify-between"
+            >
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{m.label}</p>
+                <p className={`text-2xl font-black mt-1 ${m.color}`}>{m.value}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{m.sub}</p>
               </div>
+              <div className={`p-2.5 rounded-xl ${m.bg}`}>
+                <Icon className="w-5 h-5" />
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Primary Charts Grid: Area Chart & Line Chart */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        {/* AntV Area Chart: Fee Collection vs Pending Trend */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl border bg-card p-5 shadow-sm space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-violet-600" /> Fee Collection & Dues Trend
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Monthly revenue collected vs outstanding pending balance (AntV Area)
+              </p>
             </div>
+            <div className="flex items-center gap-3 text-xs font-medium">
+              <span className="flex items-center gap-1 text-violet-600">
+                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" /> Collected
+              </span>
+              <span className="flex items-center gap-1 text-amber-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Pending
+              </span>
+            </div>
+          </div>
+
+          {hasRevenueData ? (
+            <AntvRevenueAreaChart data={revenueAreaData} />
+          ) : (
+            <EmptyChart label="No recorded fee transactions in the last 6 months" />
           )}
         </motion.div>
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: 0.25 } }} className="rounded-xl border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Key Metrics</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {keyMetrics.map((m) => (
-              <div key={m.label} className="bg-muted/40 rounded-xl p-4">
-                <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
-                <p className="text-xs font-medium mt-0.5">{m.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{m.sub}</p>
-              </div>
-            ))}
+
+        {/* AntV Line Chart: Attendance Rate Trend */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }}
+          className="rounded-xl border bg-card p-5 shadow-sm space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <CalendarCheck className="w-4 h-4 text-emerald-600" /> Attendance Rate Trend
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Monthly student presence rate progression across all classes (AntV Line)
+              </p>
+            </div>
+            <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+              {metrics.avgAttendanceRate}% Current
+            </span>
           </div>
+
+          {hasAttendanceData ? (
+            <AntvAttendanceLineChart data={attendanceData} />
+          ) : (
+            <EmptyChart label="No attendance marked in the last 6 months" />
+          )}
+        </motion.div>
+      </div>
+
+      {/* Secondary Charts Grid: Component Donut Chart & Payment Methods Column Chart */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        {/* AntV Pie / Donut Chart: Fee Component Distribution */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
+          className="rounded-xl border bg-card p-5 shadow-sm space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <PieIcon className="w-4 h-4 text-violet-600" /> Fee Component Distribution
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Breakdown of fee structures by component type (AntV Donut)
+              </p>
+            </div>
+          </div>
+
+          {hasFeeDistribution ? (
+            <AntvFeePieChart data={feeDistribution} />
+          ) : (
+            <EmptyChart label="No fee component structures configured yet" />
+          )}
+        </motion.div>
+
+        {/* AntV Column Chart: Payment Methods Distribution */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0, transition: { delay: 0.25 } }}
+          className="rounded-xl border bg-card p-5 shadow-sm space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-blue-600" /> Payment Methods Breakdown
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Revenue collected by payment mode (Cash, UPI, Bank Transfer)
+              </p>
+            </div>
+          </div>
+
+          {hasPaymentMethods ? (
+            <AntvPaymentMethodsBarChart data={paymentMethods} />
+          ) : (
+            <EmptyChart label="No completed payments recorded yet" />
+          )}
         </motion.div>
       </div>
     </div>
@@ -146,8 +244,8 @@ export function AnalyticsContent({ revenueData, attendanceData, feeDistribution,
 
 function EmptyChart({ label }: Readonly<{ label: string }>) {
   return (
-    <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">
-      {label}
+    <div className="h-[260px] flex flex-col items-center justify-center text-xs text-muted-foreground bg-muted/10 rounded-xl border border-dashed">
+      <p>{label}</p>
     </div>
   );
 }

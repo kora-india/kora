@@ -21,31 +21,36 @@ async function getAnalyticsData(schoolId: string) {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const payments = await prisma.payment.findMany({
-    where: { schoolId, paidAt: { gte: sixMonthsAgo } },
-    select: { amount: true, paidAt: true },
+  // 1. Real Payment Transactions
+  const paymentTxs = await prisma.paymentTransaction.findMany({
+    where: { schoolId, status: "SUCCESS" },
+    select: { amount: true, date: true, method: true },
+    orderBy: { date: "asc" },
   });
 
-  const pendingFeeRows = await prisma.fee.findMany({
-    where: { schoolId, status: { in: ["PENDING", "OVERDUE"] }, dueDate: { gte: sixMonthsAgo } },
-    select: { amount: true, dueDate: true },
-  });
-
-  const attendanceRows = await prisma.attendance.findMany({
-    where: { schoolId, date: { gte: sixMonthsAgo } },
-    select: { date: true, status: true },
-  });
-
-  const feeTypeSums = await prisma.fee.groupBy({
-    by: ["feeType"],
+  // 2. Real Fee Charges & Items
+  const feeCharges = await prisma.feeCharge.findMany({
     where: { schoolId },
-    _sum: { amount: true },
+    include: {
+      items: {
+        include: {
+          component: { select: { name: true, category: true } },
+        },
+      },
+    },
+    orderBy: { dueDate: "asc" },
   });
 
-  const totalFeeCount = await prisma.fee.count({ where: { schoolId } });
-  const paidFeeCount = await prisma.fee.count({ where: { schoolId, status: "PAID" } });
+  // 3. Real Attendance
+  const attendanceRows = await prisma.attendance.findMany({
+    where: { schoolId },
+    select: { date: true, status: true },
+    orderBy: { date: "asc" },
+  });
+
+  // 4. Student Counts
   const activeStudentCount = await prisma.student.count({ where: { schoolId, isActive: true } });
-  const newStudentCount = await prisma.student.count({ where: { schoolId, createdAt: { gte: startOfMonth } } });
+  const newStudentCount = await prisma.student.count({ where: { schoolId, createdAt: { gte: thirtyDaysAgo } } });
 
   const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
   const months = Array.from({ length: 6 }, (_, i) => {
@@ -54,56 +59,95 @@ async function getAnalyticsData(schoolId: string) {
     return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
   });
 
-  // Fee collection trend
+  // Collected amounts by month (from PaymentTransaction)
   const collectedByMonth: Record<string, number> = {};
-  payments.forEach((p: (typeof payments)[number]) => {
-    const key = monthKey(p.paidAt);
-    collectedByMonth[key] = (collectedByMonth[key] ?? 0) + Number(p.amount);
+  const methodMap: Record<string, number> = {};
+
+  paymentTxs.forEach((tx) => {
+    const key = monthKey(new Date(tx.date));
+    const amt = Number(tx.amount || 0);
+    collectedByMonth[key] = (collectedByMonth[key] ?? 0) + amt;
+    methodMap[tx.method] = (methodMap[tx.method] ?? 0) + amt;
   });
+
+  // Pending and Billed amounts by month (from FeeCharges)
   const pendingByMonth: Record<string, number> = {};
-  pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
-    const key = monthKey(f.dueDate);
-    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + Number(f.amount);
+  const componentSums: Record<string, number> = {};
+  let totalBilledFee = 0;
+  let totalCollectedFee = 0;
+  let paidItemCount = 0;
+  let totalItemCount = 0;
+
+  feeCharges.forEach((charge) => {
+    const key = monthKey(new Date(charge.dueDate));
+    charge.items.forEach((item) => {
+      totalItemCount++;
+      const amt = Number(item.amount || 0);
+      const paid = Number(item.paidAmount || 0);
+      const due = item.status === "WAIVED" ? 0 : Math.max(0, amt - paid);
+
+      totalBilledFee += amt;
+      totalCollectedFee += paid;
+
+      if (item.status === "PAID" || (amt > 0 && paid >= amt)) {
+        paidItemCount++;
+      }
+
+      if (due > 0) {
+        pendingByMonth[key] = (pendingByMonth[key] ?? 0) + due;
+      }
+
+      const compName = item.component?.name || "Tuition Fee";
+      componentSums[compName] = (componentSums[compName] ?? 0) + amt;
+    });
   });
-  const revenueData = months.map(({ label, key }) => ({
-    month: label,
-    collected: collectedByMonth[key] ?? 0,
-    pending: pendingByMonth[key] ?? 0,
-  }));
+
+  // Format Fee Collection Area Chart Data
+  const revenueAreaData: { month: string; type: string; amount: number }[] = [];
+  const revenueData = months.map(({ label, key }) => {
+    const collected = collectedByMonth[key] ?? 0;
+    const pending = pendingByMonth[key] ?? 0;
+    revenueAreaData.push({ month: label, type: "Collected", amount: collected });
+    revenueAreaData.push({ month: label, type: "Pending", amount: pending });
+    return {
+      month: label,
+      collected,
+      pending,
+    };
+  });
 
   // Attendance rate trend
   const presentByMonth: Record<string, number> = {};
-  const totalByMonth: Record<string, number> = {};
-  attendanceRows.forEach((a: (typeof attendanceRows)[number]) => {
-    const key = monthKey(a.date);
-    totalByMonth[key] = (totalByMonth[key] ?? 0) + 1;
+  const totalAttendanceByMonth: Record<string, number> = {};
+
+  attendanceRows.forEach((a) => {
+    const key = monthKey(new Date(a.date));
+    totalAttendanceByMonth[key] = (totalAttendanceByMonth[key] ?? 0) + 1;
     if (a.status === "PRESENT") presentByMonth[key] = (presentByMonth[key] ?? 0) + 1;
   });
+
   const attendanceData = months.map(({ label, key }) => ({
     month: label,
-    rate: totalByMonth[key] > 0 ? Math.round(((presentByMonth[key] ?? 0) / totalByMonth[key]) * 100) : 0,
+    rate: totalAttendanceByMonth[key] > 0 ? Math.round(((presentByMonth[key] ?? 0) / totalAttendanceByMonth[key]) * 100) : 0,
+    totalRecords: totalAttendanceByMonth[key] ?? 0,
   }));
 
-  // Fee distribution by type (top N + Other)
-  const sortedFeeTypes = feeTypeSums
-    .map((f: (typeof feeTypeSums)[number]) => ({ name: f.feeType, amount: Number(f._sum.amount ?? 0) }))
-    .filter((f: { name: string; amount: number }) => f.amount > 0)
-    .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
-  const totalFeeAmount = sortedFeeTypes.reduce((sum: number, f: { amount: number }) => sum + f.amount, 0);
-  const topFeeTypes = sortedFeeTypes.slice(0, FEE_TYPE_SLICE_LIMIT);
-  const otherAmount = sortedFeeTypes.slice(FEE_TYPE_SLICE_LIMIT).reduce((sum: number, f: { amount: number }) => sum + f.amount, 0);
-  const feeDistribution = [
-    ...topFeeTypes.map((f: { name: string; amount: number }) => ({
-      name: f.name,
-      value: totalFeeAmount > 0 ? Math.round((f.amount / totalFeeAmount) * 100) : 0,
-    })),
-    ...(otherAmount > 0 ? [{ name: "Other", value: totalFeeAmount > 0 ? Math.round((otherAmount / totalFeeAmount) * 100) : 0 }] : []),
-  ];
+  // Fee Distribution by Component
+  const sortedCompList = Object.entries(componentSums)
+    .map(([name, amount]) => ({ name, value: amount }))
+    .sort((a, b) => b.value - a.value);
 
-  // Attendance last 30 days (avg present/day)
-  const last30 = attendanceRows.filter((a: (typeof attendanceRows)[number]) => a.date >= thirtyDaysAgo);
-  const daysSeen = new Set(last30.map((a: (typeof attendanceRows)[number]) => a.date.toDateString()));
-  const presentLast30 = last30.filter((a: (typeof attendanceRows)[number]) => a.status === "PRESENT").length;
+  const totalCompSum = sortedCompList.reduce((sum, c) => sum + c.value, 0);
+  const feeDistribution = sortedCompList.map((c) => ({
+    name: c.name,
+    value: c.value,
+    percentage: totalCompSum > 0 ? Math.round((c.value / totalCompSum) * 100) : 0,
+  }));
+
+  // Attendance in last 30 days
+  const last30 = attendanceRows.filter((a) => new Date(a.date) >= thirtyDaysAgo);
+  const daysSeen = new Set(last30.map((a) => new Date(a.date).toDateString()));
+  const presentLast30 = last30.filter((a) => a.status === "PRESENT").length;
   const avgAttendanceRate = last30.length > 0 ? Math.round((presentLast30 / last30.length) * 100) : 0;
   const avgPresentPerDay = daysSeen.size > 0 ? Math.round(presentLast30 / daysSeen.size) : 0;
 
@@ -116,18 +160,27 @@ async function getAnalyticsData(schoolId: string) {
     ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 1000) / 10
     : null;
 
-  const feeCollectionRate = totalFeeCount > 0 ? Math.round((paidFeeCount / totalFeeCount) * 1000) / 10 : 0;
+  // Overall collection rate
+  const feeCollectionRate = totalBilledFee > 0 ? Math.round((totalCollectedFee / totalBilledFee) * 1000) / 10 : 0;
+
+  // Payment Methods
+  const paymentMethods = Object.entries(methodMap).map(([method, amount]) => ({
+    method,
+    amount,
+  }));
 
   return {
     revenueData,
+    revenueAreaData,
     attendanceData,
     feeDistribution,
+    paymentMethods,
     metrics: {
-      totalRevenue: thisMonthRevenue,
+      totalRevenue: thisMonthRevenue || totalCollectedFee,
       revenueChangePct,
       feeCollectionRate,
-      paidFeeCount,
-      totalFeeCount,
+      paidFeeCount: paidItemCount,
+      totalFeeCount: totalItemCount,
       avgAttendanceRate,
       avgPresentPerDay,
       newEnrolments: newStudentCount,
