@@ -8,6 +8,8 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Building2, MapPin, Globe, CreditCard, ChevronRight, ChevronLeft, Check, CheckCircle2 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import * as Sentry from "@sentry/nextjs";
+
 
 const SetupSchema = z.object({
   name: z.string().min(3, "School name is required"),
@@ -66,7 +68,8 @@ export default function SetupSchoolPage() {
           toast.error("Invalid Pincode");
         }
       } catch (err) {
-        console.error("Failed to fetch pincode details", err);
+        // Silently capture pincode network errors without breaking form UX
+        Sentry.captureException(err, { tags: { action: "fetch-pincode" } });
       }
     }
   };

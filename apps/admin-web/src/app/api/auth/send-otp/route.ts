@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
+import { createLogger } from "@schoolos/logger";
 import nodemailer from "nodemailer";
 import { z } from "zod";
+
+const authLogger = createLogger("auth-send-otp");
 
 const SendOtpSchema = z.object({
   email: z.string().email(),
@@ -18,6 +22,7 @@ export async function POST(req: Request) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
+      authLogger.warn({ email }, "Registration attempted for already registered email");
       return NextResponse.json({ error: "Email is already registered" }, { status: 400 });
     }
 
@@ -26,7 +31,7 @@ export async function POST(req: Request) {
 
     // Save OTP to DB (cleanup old ones if they exist for this email to avoid clutter)
     await prisma.otp.deleteMany({ where: { email } });
-    
+
     await prisma.otp.create({
       data: {
         email,
@@ -42,9 +47,7 @@ export async function POST(req: Request) {
 
     // Log OTP to server console in development or if SMTP is not configured
     if (process.env.NODE_ENV === "development" || !smtpUser || !smtpPass) {
-      console.log("\n==============================================");
-      console.log(`🔐 SchoolOS Registration OTP for ${email}: ${otp}`);
-      console.log("==============================================\n");
+      authLogger.info({ email, otpMasked: "***" }, `[DEV OTP Generated] Verification code issued for ${email}`);
     }
 
     // Send email using Nodemailer if SMTP credentials are provided
@@ -86,10 +89,10 @@ export async function POST(req: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input data" }, { status: 400 });
     }
-    console.error("Error sending OTP:", error);
-    return NextResponse.json(
-      { error: "Failed to send OTP" },
-      { status: 500 }
-    );
+    authLogger.error({ err: error }, "Failed to generate or send OTP");
+    Sentry.captureException(error, {
+      tags: { action: "send-otp" },
+    });
+    return NextResponse.json({ error: "Failed to send OTP" }, { status: 500 });
   }
 }

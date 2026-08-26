@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const path = require("node:path");
+const { withSentryConfig } = require("@sentry/nextjs");
 const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig = {
@@ -10,11 +11,12 @@ const nextConfig = {
     "@schoolos/utils",
     "@schoolos/types",
     "@schoolos/auth",
+    "@schoolos/logger",
   ],
 
   // Prevent Next.js from bundling Prisma; Node.js module resolution at runtime
   // correctly finds the native engine binary.
-  serverExternalPackages: ["@prisma/client", ".prisma/client"],
+  serverExternalPackages: ["@prisma/client", ".prisma/client", "pino", "pino-pretty"],
 
   // In a monorepo, Prisma lives outside the app folder; set tracing root so Vercel
   // includes the Prisma query engine in the serverless bundle.
@@ -63,4 +65,14 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+const sentryOptions = {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+};
+
+module.exports = withSentryConfig(nextConfig, sentryOptions);

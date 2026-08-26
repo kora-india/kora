@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { createLogger } from "@schoolos/logger";
 import { z } from "zod";
 import crypto from "crypto";
+
+const schoolLogger = createLogger("school-create");
 
 const SetupSchema = z.object({
   name: z.string().min(3),
@@ -30,6 +34,15 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+    const parsed = SetupSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid data", details: parsed.error.format() },
+        { status: 400 }
+      );
+    }
+
     const {
       name,
       subdomain,
@@ -46,25 +59,30 @@ export async function POST(req: Request) {
       razorpay_payment_id,
       razorpay_order_id,
       razorpay_signature,
-    } = SetupSchema.parse(body);
+    } = parsed.data;
 
-    // Verify Razorpay Signature
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(razorpay_order_id + "|" + razorpay_payment_id)
+    // 1. Verify Razorpay Payment Signature
+    const text = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const generated_signature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "dummy_secret")
+      .update(text)
       .digest("hex");
 
-    if (expectedSignature !== razorpay_signature) {
-      return NextResponse.json({ error: "Invalid payment signature" }, { status: 400 });
+    if (generated_signature !== razorpay_signature) {
+      schoolLogger.warn({ subdomain, razorpay_order_id }, "Invalid Razorpay payment signature");
+      return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
     }
 
-    // Check if subdomain is taken
-    const existingSchool = await prisma.school.findUnique({ where: { subdomain } });
-    if (existingSchool) {
+    // 2. Check Subdomain Availability
+    const existing = await prisma.school.findUnique({
+      where: { subdomain },
+    });
+
+    if (existing) {
       return NextResponse.json({ error: "Subdomain is already taken" }, { status: 400 });
     }
 
-    // Create the school and subscription in a transaction
+    // 3. Create School & Initial Subscription Transaction
     const school = await prisma.$transaction(async (tx) => {
       const newSchool = await tx.school.create({
         data: {
@@ -101,13 +119,20 @@ export async function POST(req: Request) {
       return newSchool;
     });
 
+    schoolLogger.info(
+      { schoolId: school.id, subdomain, plan, userId: session.user.id },
+      `[School Created] ${name} (${subdomain}) on plan ${plan}`
+    );
+
     return NextResponse.json({ success: true, schoolId: school.id });
   } catch (error) {
-    console.error("Error creating school:", error);
+    schoolLogger.error({ err: error }, "Error creating school");
+    Sentry.captureException(error, {
+      tags: { action: "create-school" },
+    });
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function DashboardError({
@@ -11,7 +12,15 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // Report to Sentry
+    Sentry.captureException(error, {
+      tags: {
+        location: "dashboard-error-boundary",
+      },
+      extra: {
+        digest: error.digest,
+      },
+    });
   }, [error]);
 
   return (
@@ -21,7 +30,7 @@ export default function DashboardError({
       </div>
       <h2 className="text-base font-semibold mb-1">Something went wrong</h2>
       <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        We couldn&apos;t load this page. This might be a temporary issue — try again.
+        We couldn&apos;t load this page. This might be a temporary issue — try again or contact support if the issue persists.
       </p>
       <button
         type="button"
@@ -33,7 +42,7 @@ export default function DashboardError({
       </button>
       {error.digest && (
         <p className="mt-4 text-[10px] text-muted-foreground font-mono">
-          Error ID: {error.digest}
+          Incident ID: {error.digest}
         </p>
       )}
     </div>

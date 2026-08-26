@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { createLogger } from "@schoolos/logger";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
+
+const attendanceLogger = createLogger("attendance-api");
 
 const MarkAttendanceSchema = z.object({
   classId: z.string(),
   sectionId: z.string(),
   date: z.string(),
-  records: z.array(z.object({
-    studentId: z.string(),
-    status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
-    remarks: z.string().optional(),
-  })),
+  records: z.array(
+    z.object({
+      studentId: z.string(),
+      status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
+      remarks: z.string().optional(),
+    })
+  ),
 });
 
 export async function POST(req: NextRequest) {
@@ -50,9 +56,22 @@ export async function POST(req: NextRequest) {
 
     await invalidateCache(`cache:${schoolId}:dashboard`);
 
+    attendanceLogger.info(
+      {
+        schoolId,
+        markedCount: data.records.length,
+        classId: data.classId,
+        date: data.date,
+      },
+      `[Attendance Marked] ${data.records.length} student records updated`
+    );
+
     return NextResponse.json({ success: true, count: data.records.length });
   } catch (err) {
-    console.error("Attendance POST error:", err);
+    attendanceLogger.error({ err }, "Attendance POST error");
+    Sentry.captureException(err, {
+      tags: { module: "attendance", action: "mark-attendance" },
+    });
     return NextResponse.json({ error: "Failed to save attendance" }, { status: 500 });
   }
 }
@@ -69,11 +88,18 @@ export async function GET(req: NextRequest) {
     const classId = searchParams.get("classId");
     const date = searchParams.get("date");
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
-    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(searchParams.get("limit")) || MAX_PAGE_SIZE));
+    const limit = Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, Number(searchParams.get("limit")) || MAX_PAGE_SIZE)
+    );
 
     const where: any = { schoolId: user.schoolId };
     if (classId) where.classId = classId;
-    if (date) { const d = new Date(date); d.setHours(0,0,0,0); where.date = d; }
+    if (date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      where.date = d;
+    }
 
     const [records, total] = await Promise.all([
       prisma.attendance.findMany({
@@ -86,8 +112,18 @@ export async function GET(req: NextRequest) {
       prisma.attendance.count({ where }),
     ]);
 
-    return NextResponse.json({ records, page, limit, total, totalPages: Math.ceil(total / limit) });
-  } catch {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+    return NextResponse.json({
+      records,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    attendanceLogger.error({ err }, "Attendance GET query failed");
+    Sentry.captureException(err, {
+      tags: { module: "attendance", action: "get-attendance" },
+    });
+    return NextResponse.json({ error: "Failed to fetch attendance" }, { status: 500 });
   }
 }

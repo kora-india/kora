@@ -89,32 +89,32 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 - Splitting into true microservices would be a large effort (roughly 8–12 weeks for one engineer), mainly due to breaking apart the tightly-related Fee/Payment/Ledger data model, introducing an inter-service communication layer, and handling distributed transactions that are currently single DB transactions. Not recommended until there's a concrete scaling or team-ownership reason to do so — a tighter modular monolith (enforced domain boundaries inside `packages/`) gets most of the benefit at a fraction of the cost.
 
 ### ✅ Already in place
-- Health check endpoint with DB latency check (`/api/health`)
-- Cron endpoints (`/api/cron/generate-fees`, `/api/cron/apply-late-fees`) protected by a `CRON_SECRET` bearer token
-- Zod schema validation (`packages/types`) and NextAuth v5 for authentication
-- Prisma for typed, injection-safe DB access
-- Sensible, normalized domain modeling across 28 tables
-- `.env` correctly gitignored — no secrets committed to the repo
+- **Error Tracking & Observability:** Sentry Next.js SDK integrated (`sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation.ts`) with client crash monitoring and error boundaries (`(dashboard)/error.tsx`, `global-error.tsx`).
+- **Structured JSON Logging:** `@schoolos/logger` package powered by `pino` with pretty terminal output in development, JSON output with tenant metadata in production, and automatic sensitive field redaction (`password`, `token`, `otp`).
+- **Database & Cache Instrumentation:** Prisma slow query detection (>200ms) and resilient Upstash Redis logging.
+- **Health check endpoint with DB latency check:** (`/api/health`)
+- **Cron endpoints:** (`/api/cron/generate-fees`, `/api/cron/apply-late-fees`) protected by a `CRON_SECRET` bearer token with structured audit trails
+- **Zod schema validation:** (`packages/types`) and NextAuth v5 for authentication
+- **Prisma for typed, injection-safe DB access:** Sensible, normalized domain modeling across 28 tables
+- **Environment security:** `.env` correctly gitignored — no secrets committed to the repo
 
 ### ⚠️ Gaps to close before calling this production-grade
 1. **No automated tests** — no `.test.ts`/`.spec.ts` files anywhere in the repo. No safety net for regressions, especially in the fee/payment logic, which is the highest-risk domain.
 2. **No CI/CD pipeline** — no `.github/workflows`; nothing gates merges on lint, type-check, or tests. Deploys rely solely on the Vercel build succeeding.
-3. **No error tracking / observability** — no Sentry, Datadog, or structured logging (pino/winston). Errors currently only go to `console.error`, so production failures are invisible until a user reports them.
-4. **No rate limiting** — auth, OTP, and payment endpoints have no throttling and are open to brute-force/abuse.
-5. **Schema managed via `prisma db push`, not migrations** — no `packages/db/prisma/migrations` folder exists. `db push` is fine for prototyping but is destructive/unsafe for a live production database (no migration history, no safe rollback path). `DEPLOYMENT.md` itself flags this as a recommended-but-not-yet-done step.
-6. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
-7. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
-8. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
-9. **No documented backup/DR strategy** — single database, single region, with no backup or disaster-recovery process written down.
+3. **No rate limiting** — auth, OTP, and payment endpoints have no throttling and are open to brute-force/abuse.
+4. **Schema managed via `prisma db push`, not migrations** — no `packages/db/prisma/migrations` folder exists. `db push` is fine for prototyping but is destructive/unsafe for a live production database (no migration history, no safe rollback path). `DEPLOYMENT.md` itself flags this as a recommended-but-not-yet-done step.
+5. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
+6. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
+7. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
+8. **No documented backup/DR strategy** — single database, single region, with no backup or disaster-recovery process written down.
 
 ### Recommended order of work
 1. Switch to Prisma migrations for schema changes (`prisma migrate dev` / `migrate deploy`).
 2. Add a CI pipeline (lint + type-check + tests) gating merges to `master`.
-3. Add error tracking (e.g. Sentry) and structured logging.
-4. Add rate limiting to auth/OTP/payment endpoints.
-5. Add automated tests for the Fee/Payment/Ledger module first, since it's the highest-risk domain.
-6. Harden cron auth to fail closed, and batch/parallelize the cron job queries.
-7. Document a backup/DR strategy and add idempotency handling to payment flows.
+3. Add rate limiting to auth/OTP/payment endpoints.
+4. Add automated tests for the Fee/Payment/Ledger module first, since it's the highest-risk domain.
+5. Harden cron auth to fail closed, and batch/parallelize the cron job queries.
+6. Document a backup/DR strategy and add idempotency handling to payment flows.
 
 ---
 
