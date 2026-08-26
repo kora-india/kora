@@ -16,13 +16,17 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "seed": "tsx src/seed.ts",
-    "db:seed:test": "tsx src/seed.ts"
+    "db:seed:test": "tsx src/seed.ts",
+    "db:dr:sync": "tsx src/scripts/backup-sync.ts --sync",
+    "db:dr:verify": "tsx src/scripts/backup-sync.ts --verify",
+    "db:dr:dump": "tsx src/scripts/backup-sync.ts --dump"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
     "@schoolos/logger": "workspace:*"
   },
   "devDependencies": {
+    "dotenv": "^16.4.5",
     "prisma": "^5.13.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"

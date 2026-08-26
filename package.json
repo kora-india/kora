@@ -12,6 +12,9 @@
     "db:deploy": "cd packages/db && pnpm prisma migrate deploy",
     "db:status": "cd packages/db && pnpm prisma migrate status",
     "db:seed": "cd packages/db && pnpm seed",
+    "db:dr:sync": "cd packages/db && pnpm db:dr:sync",
+    "db:dr:verify": "cd packages/db && pnpm db:dr:verify",
+    "db:dr:dump": "cd packages/db && pnpm db:dr:dump",
     "db:push": "cd packages/db && pnpm prisma db push",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },

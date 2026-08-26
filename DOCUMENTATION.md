@@ -89,6 +89,7 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 - Splitting into true microservices would be a large effort (roughly 8–12 weeks for one engineer), mainly due to breaking apart the tightly-related Fee/Payment/Ledger data model, introducing an inter-service communication layer, and handling distributed transactions that are currently single DB transactions. Not recommended until there's a concrete scaling or team-ownership reason to do so — a tighter modular monolith (enforced domain boundaries inside `packages/`) gets most of the benefit at a fraction of the cost.
 
 ### ✅ Already in place
+- **Multi-Region Backup & Disaster Recovery (DR):** Hot standby replica (`ap-southeast-1` alongside primary `us-east-1`), automated cross-region sync (`pnpm db:dr:sync`), row count parity verifier (`pnpm db:dr:verify`), offline snapshot dumper (`pnpm db:dr:dump`), and comprehensive runbook in [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md) with $<5\text{min}$ RTO failover.
 - **Version-Controlled Prisma Migrations:** Schema managed via `prisma migrate dev` and `prisma migrate deploy` with baseline `0_init` migration in `packages/db/prisma/migrations` and unpooled `DIRECT_URL` support.
 - **Rate Limiting & Abuse Prevention:** Redis-backed sliding window rate limiters (`@upstash/ratelimit`) with offline fallback protecting `/api/auth/send-otp` (3 req/10m), `/api/auth/register` (5 req/15m), `/api/payment/create-order` (10 req/1m), `/api/school/check-subdomain` (20 req/1m), and `/api/school/create` (5 req/1h).
 - **Error Tracking & Observability:** Sentry Next.js SDK integrated (`sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation.ts`) with client crash monitoring and error boundaries (`(dashboard)/error.tsx`, `global-error.tsx`).
@@ -106,13 +107,12 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 3. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
 4. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
 5. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
-6. **No documented backup/DR strategy** — single database, single region, with no backup or disaster-recovery process written down.
 
 ### Recommended order of work
 1. Add a CI pipeline (lint + type-check + tests) gating merges to `master`.
 2. Add automated tests for the Fee/Payment/Ledger module first, since it's the highest-risk domain.
 3. Harden cron auth to fail closed, and batch/parallelize the cron job queries.
-4. Document a backup/DR strategy and add idempotency handling to payment flows.
+4. Add idempotency handling to payment flows.
 
 ---
 

@@ -59,15 +59,22 @@ pnpm db:seed
 ```
 
 
-### Seed plan limits (run once after first deploy)
+### Multi-Region Backup & Disaster Recovery (DR)
+
+SchoolOS supports a secondary hot-standby replica in AWS `ap-southeast-1`:
 
 ```bash
-# In packages/db, run this snippet via prisma studio or a one-off script:
-# FREE: 50 students / 5 teachers / 5 classes
-# BASIC: 200 / 20 / 20
-# PRO: 1000 / 100 / 60
-# ENTERPRISE: unlimited
+# Replicate tenant data to standby database:
+pnpm db:dr:sync
+
+# Verify 100% table row parity across regions:
+pnpm db:dr:verify
+
+# Export an offline JSON database snapshot:
+pnpm db:dr:dump
 ```
+
+See [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md) for the emergency failover runbook ($<5\text{min}$ RTO).
 
 ---
 
