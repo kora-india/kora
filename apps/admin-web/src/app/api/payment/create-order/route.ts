@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { auth } from "@schoolos/auth";
 import { createLogger } from "@schoolos/logger";
+import { paymentRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import { getClientIp } from "@/lib/ip";
 import Razorpay from "razorpay";
 import { z } from "zod";
 
@@ -19,10 +21,22 @@ const PLAN_PRICES = {
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const identifier = session.user.id || ip;
+    const rateLimitResult = await paymentRatelimit.limit(identifier);
+    if (!rateLimitResult.success) {
+      paymentLogger.warn({ identifier }, "Payment order creation rate limit exceeded");
+      return createRateLimitResponse(
+        rateLimitResult,
+        "Too many payment requests. Please wait a moment before trying again."
+      );
+    }
+
 
     const body = await req.json();
     const { plan } = OrderSchema.parse(body);

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
+import { authRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import { getClientIp } from "@/lib/ip";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -16,8 +18,19 @@ const RegisterSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    const rateLimitResult = await authRatelimit.limit(ip);
+    if (!rateLimitResult.success) {
+      registerLogger.warn({ ip }, "Registration rate limit exceeded for IP");
+      return createRateLimitResponse(
+        rateLimitResult,
+        "Too many registration attempts. Please wait 15 minutes before trying again."
+      );
+    }
+
     const body = await req.json();
     const { name, email, password, otp } = RegisterSchema.parse(body);
+
 
     // 1. Verify OTP
     const otpRecord = await prisma.otp.findFirst({

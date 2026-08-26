@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { subdomainRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 
 const Schema = z.object({
@@ -9,10 +11,20 @@ const Schema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
+    const rateLimitResult = await subdomainRatelimit.limit(ip);
+    if (!rateLimitResult.success) {
+      return createRateLimitResponse(
+        rateLimitResult,
+        "Too many subdomain checks. Please wait a minute before checking again."
+      );
+    }
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
 
     const body = await req.json();
     const { subdomain } = Schema.parse(body);

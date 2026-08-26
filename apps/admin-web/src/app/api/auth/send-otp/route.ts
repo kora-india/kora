@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
+import { otpRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import { getClientIp } from "@/lib/ip";
 import nodemailer from "nodemailer";
 import { z } from "zod";
 
@@ -13,8 +15,20 @@ const SendOtpSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
     const body = await req.json();
     const { email } = SendOtpSchema.parse(body);
+
+    // Rate limit by IP + Email combination (3 requests per 10 minutes)
+    const rateLimitResult = await otpRatelimit.limit(`${ip}:${email}`);
+    if (!rateLimitResult.success) {
+      authLogger.warn({ ip, email }, "OTP rate limit exceeded for IP/Email");
+      return createRateLimitResponse(
+        rateLimitResult,
+        "Too many OTP requests. Please wait a few minutes before trying again."
+      );
+    }
+
 
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();

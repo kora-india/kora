@@ -3,6 +3,8 @@ import * as Sentry from "@sentry/nextjs";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
+import { schoolCreateRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -28,10 +30,22 @@ const SetupSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req);
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const identifier = session.user.id || ip;
+    const rateLimitResult = await schoolCreateRatelimit.limit(identifier);
+    if (!rateLimitResult.success) {
+      schoolLogger.warn({ identifier }, "School creation rate limit exceeded");
+      return createRateLimitResponse(
+        rateLimitResult,
+        "Too many school creation attempts. Please wait an hour before creating another school."
+      );
+    }
+
 
     const body = await req.json();
     const parsed = SetupSchema.safeParse(body);
