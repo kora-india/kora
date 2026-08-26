@@ -15,6 +15,15 @@ import { createSchool, toggleSchoolStatus, updateSchoolPlan } from "@/lib/action
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
 
 const PLAN_BADGE: Record<string, string> = {
   FREE: "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700",
@@ -60,9 +69,9 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
   const [planTarget, setPlanTarget] = useState<{ school: any; plan: string } | null>(null);
   const [planFilter, setPlanFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const form = useForm<CreateSchoolForm>({
+
     resolver: zodResolver(CreateSchoolFormSchema),
     defaultValues: { plan: "FREE", seedDefaultClasses: false },
   });
@@ -239,48 +248,58 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
                   )}
                 </td>
                 <td className="h-12 px-4">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      aria-label="School actions"
-                      onClick={() => setOpenMenuId(openMenuId === s.id ? null : s.id)}
-                      className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                    {openMenuId === s.id && (
-                      <div className="absolute right-0 top-full mt-1 z-10 w-48 rounded-xl border bg-card shadow-lg py-1">
-                        <div className="px-3 py-1.5 border-b">
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Change Plan</p>
-                        </div>
-                        {["FREE", "BASIC", "PRO", "ENTERPRISE"].filter((p) => p !== s.plan).map((p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            onClick={() => { setPlanTarget({ school: s, plan: p }); setOpenMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-muted transition-colors"
-                          >
-                            <span className={`w-2 h-2 rounded-full ${p === "PRO" ? "bg-violet-500" : p === "ENTERPRISE" ? "bg-amber-500" : p === "BASIC" ? "bg-blue-500" : "bg-gray-400"}`} />
-                            Upgrade to {p}
-                          </button>
-                        ))}
-                        <div className="border-t mt-1 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => { setSuspendTarget(s); setOpenMenuId(null); }}
-                            className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors ${
-                              s.isActive
-                                ? "text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                                : "text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
-                            }`}
-                          >
-                            {s.isActive ? <ShieldOff className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-                            {s.isActive ? "Suspend School" : "Reactivate School"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="School actions"
+                        className="p-1.5 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel>Change Plan</DropdownMenuLabel>
+                      {["FREE", "BASIC", "PRO", "ENTERPRISE"]
+                        .filter((p) => p !== s.plan)
+                        .map((p) => {
+                          const PLAN_ORDER = ["FREE", "BASIC", "PRO", "ENTERPRISE"];
+                          const isUpgrade = PLAN_ORDER.indexOf(p) > PLAN_ORDER.indexOf(s.plan);
+                          return (
+                            <DropdownMenuItem
+                              key={p}
+                              onClick={() => setPlanTarget({ school: s, plan: p })}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  p === "PRO"
+                                    ? "bg-violet-500"
+                                    : p === "ENTERPRISE"
+                                    ? "bg-amber-500"
+                                    : p === "BASIC"
+                                    ? "bg-blue-500"
+                                    : "bg-gray-400"
+                                }`}
+                              />
+                              <span>{isUpgrade ? `Upgrade to ${p}` : `Switch to ${p}`}</span>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => setSuspendTarget(s)}
+                        className={`flex items-center gap-2 cursor-pointer ${
+                          s.isActive
+                            ? "text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                            : "text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50 dark:focus:bg-emerald-950/20"
+                        }`}
+                      >
+                        {s.isActive ? <ShieldOff className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        <span>{s.isActive ? "Suspend School" : "Reactivate School"}</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </td>
               </motion.tr>
             ))}

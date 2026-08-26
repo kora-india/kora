@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, GraduationCap, DollarSign, Calendar,
   Megaphone, BookOpen, Settings, ChevronLeft, GraduationCap as Logo,
-  Building2, BarChart3, Wallet, CreditCard
+  Building2, BarChart3, Wallet, CreditCard, Loader2
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -75,9 +76,14 @@ function getRoleBadge(role: UserRole) {
 
 export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
   const [collapsed, setCollapsed] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
   const navItems = getNavItems(userRole);
   const roleBadge = getRoleBadge(userRole);
+
+  useEffect(() => {
+    setNavigatingTo(null);
+  }, [pathname]);
 
   return (
     <motion.aside
@@ -120,11 +126,17 @@ export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          const isLoading = navigatingTo === item.href;
           return (
             <Link
               key={item.href}
               id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
               href={item.href}
+              onClick={() => {
+                if (pathname !== item.href) {
+                  setNavigatingTo(item.href);
+                }
+              }}
               title={collapsed ? item.label : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group",
@@ -141,12 +153,15 @@ export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="whitespace-nowrap"
+                    className="whitespace-nowrap flex-1"
                   >
                     {item.label}
                   </motion.span>
                 )}
               </AnimatePresence>
+              {!collapsed && isLoading && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
+              )}
             </Link>
           );
         })}
