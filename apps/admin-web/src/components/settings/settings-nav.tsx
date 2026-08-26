@@ -2,20 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, KeyRound, Bell } from "lucide-react";
+import { Building2, KeyRound, Bell, Server } from "lucide-react";
 import { cn } from "@schoolos/utils";
+import { UserRole } from "@schoolos/types";
 
-const NAV_ITEMS = [
+interface SettingsNavProps {
+  userRole?: UserRole;
+}
+
+const SCHOOL_ADMIN_NAV_ITEMS = [
   { label: "School Profile", href: "/settings/school-profile", icon: Building2 },
   { label: "Change Password", href: "/settings/account", icon: KeyRound },
 ];
 
-export function SettingsNav() {
+const SUPER_ADMIN_NAV_ITEMS = [
+  { label: "Platform Overview", href: "/settings/platform", icon: Server },
+  { label: "Change Password", href: "/settings/account", icon: KeyRound },
+];
+
+export function SettingsNav({ userRole = UserRole.SCHOOL_ADMIN }: Readonly<SettingsNavProps>) {
   const pathname = usePathname();
+  const navItems = userRole === UserRole.SUPER_ADMIN ? SUPER_ADMIN_NAV_ITEMS : SCHOOL_ADMIN_NAV_ITEMS;
 
   return (
     <div className="flex space-x-1 p-1 bg-muted/50 rounded-xl w-fit border shadow-sm">
-      {NAV_ITEMS.map((item) => {
+      {navItems.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
         return (
           <Link
@@ -41,3 +52,4 @@ export function SettingsNav() {
     </div>
   );
 }
+

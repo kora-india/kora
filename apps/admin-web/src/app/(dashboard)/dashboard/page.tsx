@@ -156,20 +156,36 @@ async function getDashboardData(schoolId: string) {
   };
 }
 
+import { SuperAdminDashboardContent } from "@/components/dashboard/super-admin-dashboard-content";
+import { getSuperAdminDashboardData } from "@/lib/actions/super-admin";
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const user = session.user;
-  const schoolId = user.schoolId;
 
-  if (!schoolId && user.role !== UserRole.SUPER_ADMIN) {
+  // Dedicated Super Admin Multi-Tenant Dashboard
+  if (user.role === UserRole.SUPER_ADMIN) {
+    const superAdminData = await getCache(
+      "cache:superadmin:dashboard",
+      () => getSuperAdminDashboardData(),
+      120 // 2 minutes TTL
+    );
+
+    return <SuperAdminDashboardContent data={superAdminData} userName={user.name} />;
+  }
+
+  const schoolId = user.schoolId;
+  if (!schoolId) {
     return <div className="p-6 text-muted-foreground">No school assigned.</div>;
   }
 
-  const data = schoolId 
-    ? await getCache(`cache:${schoolId}:dashboard`, () => getDashboardData(schoolId), 300) // 5 minutes TTL
-    : null;
+  const data = await getCache(
+    `cache:${schoolId}:dashboard`,
+    () => getDashboardData(schoolId),
+    300 // 5 minutes TTL
+  );
 
   return (
     <>
@@ -178,3 +194,4 @@ export default async function DashboardPage() {
     </>
   );
 }
+

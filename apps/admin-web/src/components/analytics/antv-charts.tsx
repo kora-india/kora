@@ -259,3 +259,116 @@ export function AntvPaymentMethodsBarChart({ data }: Readonly<PaymentMethodsBarP
 
   return <Column {...config} />;
 }
+
+// 5. AntV Donut Chart: Plan Distribution (Super Admin)
+interface PlanDonutProps {
+  data: { name: string; value: number }[];
+  height?: number;
+}
+
+export function AntvPlanDonutChart({ data, height = 240 }: Readonly<PlanDonutProps>) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <ChartLoader />;
+
+  const config = {
+    data,
+    angleField: "value",
+    colorField: "name",
+    innerRadius: 0.64,
+    radius: 0.9,
+    scale: {
+      color: {
+        range: ["#94a3b8", "#3b82f6", "#8b5cf6", "#f59e0b"],
+      },
+    },
+    label: {
+      text: (d: any) => `${d.value}`,
+      style: {
+        fontWeight: "bold",
+        fontSize: 11,
+      },
+    },
+    legend: {
+      color: {
+        position: "bottom",
+        rowPadding: 6,
+      },
+    },
+    tooltip: {
+      items: [
+        (d: any) => ({
+          name: d.name,
+          value: `${d.value} school${d.value === 1 ? "" : "s"}`,
+        }),
+      ],
+    },
+    interaction: {
+      tooltip: true,
+      elementHighlight: true,
+    },
+    height,
+  };
+
+  return <Pie {...config} />;
+}
+
+// 6. AntV Column Chart: School Growth / Onboarding
+interface SchoolGrowthColumnProps {
+  data: { month: string; schools: number }[];
+  height?: number;
+}
+
+export function AntvSchoolGrowthColumnChart({ data, height = 240 }: Readonly<SchoolGrowthColumnProps>) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return <ChartLoader />;
+
+  const config = {
+    data,
+    xField: "month",
+    yField: "schools",
+    scale: {
+      color: {
+        range: ["#8b5cf6"],
+      },
+      y: {
+        nice: true,
+      },
+    },
+    axis: {
+      y: {
+        labelFormatter: (v: number) => `${v}`,
+        gridLineDash: [3, 3],
+      },
+    },
+    label: {
+      text: (d: any) => (d.schools > 0 ? `${d.schools}` : ""),
+      style: {
+        fontSize: 11,
+        fill: "#6b7280",
+      },
+    },
+    tooltip: {
+      items: [
+        (d: any) => ({
+          name: "New Schools",
+          value: `${d.schools}`,
+        }),
+      ],
+    },
+    interaction: {
+      tooltip: true,
+    },
+    height,
+  };
+
+  return <Column {...config} />;
+}
+

@@ -58,6 +58,8 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
   const [showTempPassword, setShowTempPassword] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<any>(null);
   const [planTarget, setPlanTarget] = useState<{ school: any; plan: string } | null>(null);
+  const [planFilter, setPlanFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const form = useForm<CreateSchoolForm>({
@@ -65,11 +67,18 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
     defaultValues: { plan: "FREE", seedDefaultClasses: false },
   });
 
-  const filtered = schools.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.subdomain.toLowerCase().includes(search.toLowerCase()) ||
-    s.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = schools.filter((s) => {
+    const matchesSearch =
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.subdomain.toLowerCase().includes(search.toLowerCase()) ||
+      s.email?.toLowerCase().includes(search.toLowerCase());
+    const matchesPlan = planFilter === "ALL" || s.plan === planFilter;
+    const matchesStatus =
+      statusFilter === "ALL" ||
+      (statusFilter === "ACTIVE" && s.isActive) ||
+      (statusFilter === "SUSPENDED" && !s.isActive);
+    return matchesSearch && matchesPlan && matchesStatus;
+  });
 
   const onSubmit = async (data: CreateSchoolForm) => {
     const result = await createSchool(data);
@@ -110,27 +119,67 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Schools</h1>
-          <p className="text-muted-foreground text-sm mt-1">{schools.length} schools registered</p>
+          <h1 className="text-2xl font-bold">Schools Directory</h1>
+          <p className="text-muted-foreground text-sm mt-1">{schools.length} schools registered across platform</p>
         </div>
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+          className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" /> Add School
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          placeholder="Search by name, subdomain, email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+      {/* Search & Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative max-w-sm w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            placeholder="Search by name, subdomain, email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Plan Filter */}
+          <div className="flex items-center bg-muted/50 p-0.5 rounded-lg border text-xs">
+            {["ALL", "FREE", "BASIC", "PRO", "ENTERPRISE"].map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPlanFilter(p)}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  planFilter === p
+                    ? "bg-background text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center bg-muted/50 p-0.5 rounded-lg border text-xs">
+            {["ALL", "ACTIVE", "SUSPENDED"].map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  statusFilter === st
+                    ? "bg-background text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Table */}

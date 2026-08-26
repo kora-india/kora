@@ -27,10 +27,6 @@ export default auth((req) => {
   if (isPublic(pathname)) {
     // Redirect authenticated users away from login, register, and landing page
     if (req.auth && (pathname.startsWith("/login") || pathname.startsWith("/register") || pathname === "/")) {
-      // SUPER_ADMIN goes to /schools, others to /dashboard
-      if (req.auth.user?.role === "SUPER_ADMIN") {
-        return NextResponse.redirect(new URL("/schools", req.url));
-      }
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
@@ -45,7 +41,7 @@ export default auth((req) => {
   // SUPER_ADMIN has no schoolId, so school-scoped pages have nothing to show them.
   // Redirect stray direct navigation to the page built for their role.
   const user = req.auth.user;
-  const SUPER_ADMIN_ALLOWED = ["/dashboard", "/schools", "/analytics", "/settings"];
+  const SUPER_ADMIN_ALLOWED = ["/dashboard", "/schools", "/subscriptions", "/analytics", "/settings"];
   if (
     user?.role === "SUPER_ADMIN" &&
     !SUPER_ADMIN_ALLOWED.some((p) => pathname === p || pathname.startsWith(p + "/"))

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, GraduationCap, DollarSign, Calendar,
   Megaphone, BookOpen, Settings, ChevronLeft, GraduationCap as Logo,
-  Building2, BarChart3, Wallet
+  Building2, BarChart3, Wallet, CreditCard
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -34,6 +34,7 @@ const adminNavItems = [
 const superAdminNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Schools", href: "/schools", icon: Building2 },
+  { label: "Subscriptions", href: "/subscriptions", icon: CreditCard },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];

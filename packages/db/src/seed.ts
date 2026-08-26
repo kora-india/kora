@@ -32,6 +32,21 @@ async function main() {
 
   // Password for test users
   const testPassword = await bcrypt.hash("test1234", 10);
+  const superAdminPassword = await bcrypt.hash("superadmin123", 10);
+
+  // 1.5 Create/Upsert Super Admin
+  await prisma.user.upsert({
+    where: { email: "superadmin@schoolos.com" },
+    update: { password: superAdminPassword, role: UserRole.SUPER_ADMIN, isActive: true, schoolId: null },
+    create: {
+      email: "superadmin@schoolos.com",
+      name: "Super Admin",
+      password: superAdminPassword,
+      role: UserRole.SUPER_ADMIN,
+      isActive: true,
+      schoolId: null,
+    },
+  });
 
   // 2. Create Test School
   const school = await prisma.school.create({

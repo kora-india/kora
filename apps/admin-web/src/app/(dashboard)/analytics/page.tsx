@@ -190,10 +190,26 @@ async function getAnalyticsData(schoolId: string) {
   };
 }
 
+import { SuperAdminAnalytics } from "@/components/analytics/super-admin-analytics";
+import { getSuperAdminAnalyticsData } from "@/lib/actions/super-admin";
+import { UserRole } from "@schoolos/types";
+
 export default async function AnalyticsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
+
+  // Super Admin Multi-Tenant Analytics
+  if (user.role === UserRole.SUPER_ADMIN) {
+    const superAdminAnalytics = await getCache(
+      "cache:superadmin:analytics",
+      () => getSuperAdminAnalyticsData(),
+      120 // 2 minutes TTL
+    );
+
+    return <SuperAdminAnalytics {...superAdminAnalytics} />;
+  }
+
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
 
@@ -205,3 +221,4 @@ export default async function AnalyticsPage() {
 
   return <AnalyticsContent {...data} />;
 }
+
