@@ -7,10 +7,12 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "type-check": "turbo type-check",
     "db:generate": "cd packages/db && pnpm prisma generate",
-    "db:push": "cd packages/db && pnpm prisma db push",
+    "db:migrate": "cd packages/db && pnpm prisma migrate dev",
+    "db:deploy": "cd packages/db && pnpm prisma migrate deploy",
+    "db:status": "cd packages/db && pnpm prisma migrate status",
     "db:seed": "cd packages/db && pnpm seed",
+    "db:push": "cd packages/db && pnpm prisma db push",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {

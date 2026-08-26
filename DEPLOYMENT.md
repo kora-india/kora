@@ -37,7 +37,9 @@ cp .env.example .env
 
 ---
 
-## 3. Database Setup
+## 3. Database Setup & Migrations
+
+SchoolOS uses version-controlled **Prisma Migrations** for safe, zero-downtime schema evolution.
 
 ```bash
 # Install dependencies
@@ -46,17 +48,16 @@ pnpm install
 # Generate Prisma client
 pnpm db:generate
 
-# Push schema to database (first deploy)
-pnpm db:push
+# Apply pending migrations to database (Production / Staging / Dev)
+pnpm db:deploy
 
-# OR use migrations (recommended for production)
-cd packages/db && pnpm prisma migrate deploy
+# (Optional) For developing new schema features locally:
+pnpm db:migrate
 
 # Seed demo data
 pnpm db:seed
 ```
 
-> **Note:** After adding the `Subscription` and `PlanLimit` models, run `pnpm db:push` or create a migration before deploying.
 
 ### Seed plan limits (run once after first deploy)
 
