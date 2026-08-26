@@ -12,7 +12,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "pino-pretty": "^13.0.0",
     "typescript": "^5.4.0"
   }
 }

@@ -67,6 +67,7 @@ Fully functional dashboard routes for managing:
 - Students & Teachers
 - Classes
 - Fees & Finances
+- **Transport Management:** Multi-category fleet management (`BUS`, `VAN`, `RICKSHAW`), route & stop sequence planning, Google Maps distance-based & flat-rate monthly transport fee calculation, session-scoped student opt-in, vehicle capacity tracking, printable driver manifests, and automatic fee invoice integration.
 - Attendance & Notices
 - Settings
 
@@ -76,6 +77,7 @@ Mobile-optimized experience featuring:
 - Assignment creation and tracking
 - Notice board viewing
 - Student directory access
+- Read-only route passenger manifests for transport roll call
 
 ---
 
@@ -85,12 +87,13 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 
 ### Architecture Classification
 - **Type:** Modular monolith (multiple Next.js apps — `admin-web`, `teacher-pwa`, `marketing` — sharing one database via `packages/db` and one auth layer via `packages/auth`).
-- **Not microservices:** all domains (Students, Fees, Payments, Attendance, etc.) live in one Prisma schema (28 models) and are accessed via direct DB calls / Server Actions, not internal service APIs.
+- **Not microservices:** all domains (Students, Fees, Payments, Transport, Attendance, etc.) live in one Prisma schema (32 models) and are accessed via direct DB calls / Server Actions, not internal service APIs.
 - Splitting into true microservices would be a large effort (roughly 8–12 weeks for one engineer), mainly due to breaking apart the tightly-related Fee/Payment/Ledger data model, introducing an inter-service communication layer, and handling distributed transactions that are currently single DB transactions. Not recommended until there's a concrete scaling or team-ownership reason to do so — a tighter modular monolith (enforced domain boundaries inside `packages/`) gets most of the benefit at a fraction of the cost.
 
 ### ✅ Already in place
+- **Transport & Fleet Management:** Multi-category vehicle fleet (`BUS`, `VAN`, `RICKSHAW`), sequenced stops, per-km distance auto-calculation via Google Maps, vehicle capacity utilization meters, printable driver passenger manifests (`window.print()`), CSV export, and seamless integration with monthly fee generation.
 - **Multi-Region Backup & Disaster Recovery (DR):** Hot standby replica (`ap-southeast-1` alongside primary `us-east-1`), automated cross-region sync (`pnpm db:dr:sync`), row count parity verifier (`pnpm db:dr:verify`), offline snapshot dumper (`pnpm db:dr:dump`), and comprehensive runbook in [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md) with $<5\text{min}$ RTO failover.
-- **Version-Controlled Prisma Migrations:** Schema managed via `prisma migrate dev` and `prisma migrate deploy` with baseline `0_init` migration in `packages/db/prisma/migrations` and unpooled `DIRECT_URL` support.
+- **Version-Controlled Prisma Migrations:** Schema managed via `prisma migrate dev` and `prisma migrate deploy` with baseline `0_init` and `20260826121700_add_transport_management` migrations in `packages/db/prisma/migrations` and unpooled `DIRECT_URL` support.
 - **Rate Limiting & Abuse Prevention:** Redis-backed sliding window rate limiters (`@upstash/ratelimit`) with offline fallback protecting `/api/auth/send-otp` (3 req/10m), `/api/auth/register` (5 req/15m), `/api/payment/create-order` (10 req/1m), `/api/school/check-subdomain` (20 req/1m), and `/api/school/create` (5 req/1h).
 - **Error Tracking & Observability:** Sentry Next.js SDK integrated (`sentry.client.config.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation.ts`) with client crash monitoring and error boundaries (`(dashboard)/error.tsx`, `global-error.tsx`).
 - **Structured JSON Logging:** `@schoolos/logger` package powered by `pino` with pretty terminal output in development, JSON output with tenant metadata in production, and automatic sensitive field redaction (`password`, `token`, `otp`).
@@ -98,7 +101,7 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 - **Health check endpoint with DB latency check:** (`/api/health`)
 - **Cron endpoints:** (`/api/cron/generate-fees`, `/api/cron/apply-late-fees`) protected by a `CRON_SECRET` bearer token with structured audit trails
 - **Zod schema validation:** (`packages/types`) and NextAuth v5 for authentication
-- **Prisma for typed, injection-safe DB access:** Sensible, normalized domain modeling across 28 tables
+- **Prisma for typed, injection-safe DB access:** Sensible, normalized domain modeling across 32 tables
 - **Environment security:** `.env` correctly gitignored — no secrets committed to the repo
 
 ### ⚠️ Gaps to close before calling this production-grade
@@ -130,9 +133,9 @@ While the core functionality is robust, several modules are planned for future d
 - **SMS & Email Notifications:** Automated alerts for fee dues, absent students, important notices, and exam results.
 
 ### Advanced Operations
+- **Live Vehicle GPS Tracking (Mobile App):** Real-time GPS location streaming from driver devices to parent app during morning pickup and afternoon drop.
 - **Biometric Attendance Integration:** Connecting physical biometric/RFID scanners to the attendance module for automatic logging.
 - **Custom Report Builder:** A drag-and-drop interface for admins to generate custom data exports and analytical reports.
-- **Transport Management:** Managing bus routes, vehicle tracking, and transport fee allocation.
 - **Inventory & Asset Management:** Tracking school physical assets, stationary, and purchase orders.
 
 ---

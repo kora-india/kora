@@ -87,6 +87,41 @@ export async function processClassFeeGeneration(
           }
         }
 
+        // Check for active Transport Enrollment
+        const transport = await tx.studentTransport.findFirst({
+          where: {
+            studentId: student.id,
+            sessionId,
+            status: "ACTIVE",
+          },
+        });
+
+        if (transport && Number(transport.monthlyFee) > 0) {
+          let transportComp = await tx.feeComponent.findFirst({
+            where: { schoolId, name: { equals: "Transport Fee", mode: "insensitive" } },
+          });
+          if (!transportComp) {
+            transportComp = await tx.feeComponent.create({
+              data: {
+                schoolId,
+                name: "Transport Fee",
+                description: "Distance-based monthly transport charge",
+                category: "TRANSPORT",
+                amount: 0,
+                frequency: "MONTHLY",
+                isOptional: true,
+                isActive: true,
+              },
+            });
+          }
+          if (!rawItems.some((i) => i.componentId === transportComp!.id)) {
+            rawItems.push({
+              componentId: transportComp.id,
+              amount: Number(transport.monthlyFee),
+            });
+          }
+        }
+
         if (rawItems.length === 0) continue;
 
         // Fetch student's current advance ledger balances

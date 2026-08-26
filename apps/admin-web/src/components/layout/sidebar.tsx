@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, GraduationCap, DollarSign, Calendar,
   Megaphone, BookOpen, Settings, ChevronLeft, GraduationCap as Logo,
-  Building2, BarChart3, Wallet, CreditCard, Loader2
+  Building2, BarChart3, Wallet, CreditCard, Loader2, Bus
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -26,6 +26,7 @@ const adminNavItems = [
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
+  { label: "Transport", href: "/transport", icon: Bus },
   { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
@@ -44,6 +45,7 @@ const teacherNavItems = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Students", href: "/students", icon: Users },
+  { label: "Transport", href: "/transport", icon: Bus },
   { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
 ];
@@ -52,6 +54,7 @@ const accountantNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
+  { label: "Transport", href: "/transport", icon: Bus },
   { label: "Payments", href: "/payments", icon: BarChart3 },
   { label: "Students", href: "/students", icon: Users },
 ];

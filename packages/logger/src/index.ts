@@ -31,21 +31,60 @@ const pinoConfig: pino.LoggerOptions = {
     service: "schoolos",
   },
   timestamp: pino.stdTimeFunctions.isoTime,
-  ...(isDev && !isTest
-    ? {
-        transport: {
-          target: "pino-pretty",
-          options: {
-            colorize: true,
-            ignore: "pid,hostname,env,service",
-            translateTime: "HH:MM:ss.l",
-          },
-        },
-      }
-    : {}),
+  browser: {
+    asObject: true,
+  },
 };
 
-export const logger = pino(pinoConfig);
+// In-process dev stream for pretty terminal output without worker_threads or Webpack/Turbopack bundling issues
+const devPrettyStream = {
+  write(str: string) {
+    try {
+      const log = JSON.parse(str);
+      const time = log.time ? new Date(log.time).toLocaleTimeString() : "";
+      const levelMap: Record<number, string> = {
+        10: "\x1b[90mTRACE\x1b[0m",
+        20: "\x1b[34mDEBUG\x1b[0m",
+        30: "\x1b[32mINFO\x1b[0m ",
+        40: "\x1b[33mWARN\x1b[0m ",
+        50: "\x1b[31mERROR\x1b[0m",
+        60: "\x1b[35mFATAL\x1b[0m",
+      };
+      const lvl = levelMap[log.level] || "LOG";
+      const mod = log.module ? `\x1b[36m[${log.module}]\x1b[0m ` : "";
+      const msg = log.msg || "";
+      delete log.time;
+      delete log.level;
+      delete log.msg;
+      delete log.pid;
+      delete log.hostname;
+      delete log.env;
+      delete log.service;
+      delete log.module;
+      const extra = Object.keys(log).length > 0 ? ` \x1b[90m${JSON.stringify(log)}\x1b[0m` : "";
+      if (typeof process !== "undefined" && process.stdout?.write) {
+        process.stdout.write(`[${time}] ${lvl} ${mod}${msg}${extra}\n`);
+      } else {
+        console.log(`[${time}] ${lvl} ${mod}${msg}${extra}`);
+      }
+    } catch {
+      if (typeof process !== "undefined" && process.stdout?.write) {
+        process.stdout.write(str);
+      } else {
+        console.log(str);
+      }
+    }
+  },
+};
+
+function createRootLogger(): pino.Logger {
+  if (isDev && !isTest && typeof window === "undefined") {
+    return pino(pinoConfig, devPrettyStream);
+  }
+  return pino(pinoConfig);
+}
+
+export const logger = createRootLogger();
 
 /**
  * Creates a child logger scoped to a specific application module

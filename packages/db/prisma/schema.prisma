@@ -49,6 +49,9 @@ model School {
   users            User[]
   expenseCategories ExpenseCategory[]
   expenses         Expense[]
+  vehicles         Vehicle[]
+  transportRoutes  TransportRoute[]
+  studentTransports StudentTransport[]
 
   @@map("schools")
 }
@@ -176,6 +179,7 @@ model Student {
   paymentTxs      PaymentTransaction[]
   feeAssignments  StudentFeeAssignment[]
   feeOverrides    StudentFeeOverride[]
+  transports      StudentTransport[]
   class           Class                  @relation(fields: [classId], references: [id])
   school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section         Section                @relation(fields: [sectionId], references: [id])
@@ -312,6 +316,7 @@ model AcademicSession {
   feeStructures      FeeStructure[]
   studentAssignments StudentFeeAssignment[]
   studentOverrides   StudentFeeOverride[]
+  studentTransports  StudentTransport[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -668,5 +673,139 @@ model Expense {
   @@index([schoolId])
   @@index([categoryId])
   @@map("expenses")
+}
+
+// ─── Transport Management ──────────────────────────────────────────────────
+
+enum VehicleType {
+  BUS
+  VAN
+  RICKSHAW
+}
+
+enum VehicleStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum RouteStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TransportEnrollmentStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TransportTripType {
+  TWO_WAY
+  PICKUP_ONLY
+  DROP_ONLY
+}
+
+model Vehicle {
+  id             String          @id @default(cuid())
+  schoolId       String
+  registrationNo String
+  type           VehicleType     @default(BUS)
+  model          String?
+  capacity       Int
+  driverName     String
+  driverPhone    String
+  helperName     String?
+  helperPhone    String?
+  status         VehicleStatus   @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  routes         TransportRoute[]
+  enrollments    StudentTransport[]
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, registrationNo])
+  @@index([schoolId])
+  @@map("vehicles")
+}
+
+model TransportRoute {
+  id               String             @id @default(cuid())
+  schoolId         String
+  name             String
+  code             String?
+  vehicleId        String?
+  startPoint       String
+  endPoint         String
+  defaultRatePerKm Decimal            @default(100.00) @db.Decimal(10, 2)
+  flatRate         Decimal?           @db.Decimal(10, 2)
+  status           RouteStatus        @default(ACTIVE)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  vehicle          Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  school           School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  stops            RouteStop[]
+  enrollments      StudentTransport[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("transport_routes")
+}
+
+model RouteStop {
+  id                   String             @id @default(cuid())
+  routeId              String
+  stopName             String
+  sequenceOrder        Int
+  pickupTime           String?
+  dropTime             String?
+  latitude             Float?
+  longitude            Float?
+  distanceFromSchoolKm Decimal            @default(0.0) @db.Decimal(6, 2)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  route                TransportRoute     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  enrollments          StudentTransport[]
+
+  @@index([routeId])
+  @@map("route_stops")
+}
+
+model StudentTransport {
+  id              String                    @id @default(cuid())
+  schoolId        String
+  studentId       String
+  sessionId       String
+  routeId         String
+  stopId          String
+  vehicleId       String?
+  tripType        TransportTripType         @default(TWO_WAY)
+  distanceKm      Decimal                   @db.Decimal(6, 2)
+  monthlyFee      Decimal                   @db.Decimal(10, 2)
+  status          TransportEnrollmentStatus @default(ACTIVE)
+  startDate       DateTime                  @default(now())
+  endDate         DateTime?
+  notes           String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  school          School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student         Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session         AcademicSession           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  route           TransportRoute            @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stop            RouteStop                 @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  vehicle         Vehicle?                  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, sessionId])
+  @@index([schoolId])
+  @@index([sessionId])
+  @@index([routeId])
+  @@index([vehicleId])
+  @@map("student_transports")
 }
 
