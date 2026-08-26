@@ -114,23 +114,7 @@ export async function getTransportData() {
     orderBy: { createdAt: "desc" },
   });
 
-  // 5. Fetch Active Students (for enrollment modal)
-  const students = await prisma.student.findMany({
-    where: { schoolId, isActive: true },
-    select: {
-      id: true,
-      name: true,
-      rollNumber: true,
-      admissionNumber: true,
-      address: true,
-      parentPhone: true,
-      class: { select: { id: true, name: true } },
-      section: { select: { id: true, name: true } },
-    },
-    orderBy: [{ class: { name: "asc" } }, { rollNumber: "asc" }],
-  });
-
-  // 6. Compute KPI Fleet Metrics
+  // 5. Compute KPI Fleet Metrics
   const totalVehicles = vehicles.length;
   const totalBuses = vehicles.filter((v) => v.type === VehicleType.BUS).length;
   const totalVans = vehicles.filter((v) => v.type === VehicleType.VAN).length;
@@ -146,7 +130,6 @@ export async function getTransportData() {
     vehicles,
     routes,
     enrollments,
-    students,
     metrics: {
       totalVehicles,
       totalBuses,

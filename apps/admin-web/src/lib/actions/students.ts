@@ -34,6 +34,66 @@ async function getAdminSession() {
   return { ...user, schoolId: user.schoolId };
 }
 
+async function getStaffSession() {
+  const session = await auth();
+  if (!session?.user) return null;
+  const user = session.user;
+  if (!user.schoolId) return null;
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER"].includes(user.role)) return null;
+  return { ...user, schoolId: user.schoolId };
+}
+
+export async function searchStudents(query: string = "", limit: number = 25) {
+  const user = await getStaffSession();
+  if (!user) return { error: "Unauthorized" };
+
+  const trimmed = query.trim();
+
+  const whereClause: any = {
+    schoolId: user.schoolId,
+    isActive: true,
+  };
+
+  if (trimmed) {
+    whereClause.OR = [
+      { name: { contains: trimmed, mode: "insensitive" } },
+      { rollNumber: { contains: trimmed, mode: "insensitive" } },
+      { admissionNumber: { contains: trimmed, mode: "insensitive" } },
+      { parentPhone: { contains: trimmed, mode: "insensitive" } },
+      { parentName: { contains: trimmed, mode: "insensitive" } },
+      { class: { name: { contains: trimmed, mode: "insensitive" } } },
+      { section: { name: { contains: trimmed, mode: "insensitive" } } },
+    ];
+  }
+
+  try {
+    const students = await prisma.student.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        rollNumber: true,
+        admissionNumber: true,
+        parentPhone: true,
+        parentName: true,
+        address: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+      },
+      orderBy: [
+        { class: { name: "asc" } },
+        { rollNumber: "asc" },
+        { name: "asc" },
+      ],
+      take: Math.min(Math.max(1, limit), 50),
+    });
+
+    return { success: true, students };
+  } catch (err: any) {
+    return { error: err.message || "Failed to search students" };
+  }
+}
+
 export async function createStudent(data: unknown) {
   const user = await getAdminSession();
   if (!user) return { error: "Unauthorized" };
