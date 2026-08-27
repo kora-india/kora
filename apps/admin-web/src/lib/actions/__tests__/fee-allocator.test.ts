@@ -20,14 +20,14 @@ describe('Fee Allocator Actions', () => {
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
 
     // Create required initial data
     const school = await prisma.school.create({
       data: {
         id: schoolId,
         name: 'Test School',
-        subdomain: 'testschool',
+        subdomain: 'testschool-' + Math.random().toString(36).substring(7),
       }
     });
 
@@ -108,7 +108,7 @@ describe('Fee Allocator Actions', () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
   });
 
   it('should allocate payment fully to a component and update charge to PAID', async () => {

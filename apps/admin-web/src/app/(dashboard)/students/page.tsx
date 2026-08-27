@@ -16,18 +16,34 @@ export default async function StudentsPage() {
 
   const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role);
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const students = await getCache(`cache:${schoolId}:students:list`, () => 
     prisma.student.findMany({
       where: { schoolId: schoolId, isActive: true },
       include: {
         class: { select: { id: true, name: true } },
         section: { select: { id: true, name: true } },
-        feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
-        attendances: { select: { status: true, date: true }, orderBy: { date: "desc" }, take: 1 },
+        feeCharges: {
+          where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+          select: {
+            id: true,
+            status: true,
+            dueDate: true,
+            title: true,
+            items: { select: { amount: true, paidAmount: true, status: true } },
+          },
+        },
+        attendances: {
+          where: { date: today },
+          select: { status: true, date: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 1000,
-    })
+    }),
+    60
   );
 
   const classes = await getCache(`cache:${schoolId}:classes:list`, () => 

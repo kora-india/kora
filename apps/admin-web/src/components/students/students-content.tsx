@@ -30,6 +30,31 @@ const FEE_BADGE: Record<string, string> = {
   "NO DUES": "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
 };
 
+export function getStudentComputedFeeStatus(s: any): string {
+  const pendingCharges = s.feeCharges || [];
+  if (pendingCharges.length === 0) return "NO DUES";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const hasOverdue = pendingCharges.some((c: any) => {
+    if (c.status === "OVERDUE") return true;
+    if (c.dueDate && new Date(c.dueDate) < today && c.status !== "PAID" && c.status !== "WAIVED") {
+      return true;
+    }
+    return false;
+  });
+  if (hasOverdue) return "OVERDUE";
+
+  const hasPartial = pendingCharges.some((c: any) => c.status === "PARTIAL");
+  if (hasPartial) return "PARTIAL";
+
+  const hasPending = pendingCharges.some((c: any) => c.status === "PENDING");
+  if (hasPending) return "PENDING";
+
+  return "PAID";
+}
+
 const ATTENDANCE_BADGE: Record<string, { label: string; badge: string }> = {
   PRESENT: { label: "Present", badge: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800" },
   ABSENT: { label: "Absent", badge: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800" },
@@ -129,7 +154,7 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
         s.section?.name === selectedSection;
 
       // Fee Status matching
-      const studentFeeStatus = s.feeCharges?.[0]?.status ?? "NO DUES";
+      const studentFeeStatus = getStudentComputedFeeStatus(s);
       const matchFeeStatus =
         selectedFeeStatus === "all" ||
         (selectedFeeStatus === "NO_DUES" ? (studentFeeStatus === "NO DUES" || studentFeeStatus === "PAID") : studentFeeStatus === selectedFeeStatus);
@@ -438,9 +463,14 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                     </span>
                   </td>
                   <td className="h-12 px-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${FEE_BADGE[s.feeCharges?.[0]?.status] ?? FEE_BADGE.PAID}`}>
-                      {s.feeCharges?.[0]?.status ?? "NO DUES"}
-                    </span>
+                    {(() => {
+                      const feeStatus = getStudentComputedFeeStatus(s);
+                      return (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${FEE_BADGE[feeStatus] ?? FEE_BADGE.PAID}`}>
+                          {feeStatus}
+                        </span>
+                      );
+                    })()}
                   </td>
                   {canEdit && (
                     <td className="h-12 px-4" onClick={(e) => e.stopPropagation()}>

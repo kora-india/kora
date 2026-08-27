@@ -184,7 +184,7 @@ export async function processClassFeeGeneration(
           if (chargeItemsData.every(i => i.status === FeeStatus.PAID)) chargeStatus = FeeStatus.PAID;
           else if (chargeItemsData.some(i => i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL)) chargeStatus = FeeStatus.PARTIAL;
 
-          await tx.feeCharge.create({
+          const createdCharge = await tx.feeCharge.create({
             data: {
               schoolId,
               studentId: student.id,
@@ -195,19 +195,58 @@ export async function processClassFeeGeneration(
               items: {
                 create: chargeItemsData
               }
+            },
+            include: {
+              items: true,
             }
           });
 
-          // Insert negative advance ledger entries to reflect usage
-          for (const deduction of advancesToDeduct) {
-             await tx.advanceLedger.create({
-               data: {
-                 studentId: student.id,
-                 componentId: deduction.componentId || null,
-                 amount: -deduction.amount,
-                 description: `Auto-adjusted against generated fee: ${monthTitle}`
-               }
-             });
+          // Insert negative advance ledger entries and create PaymentTransaction record for revenue consistency
+          if (advancesToDeduct.length > 0) {
+            const totalAdjusted = advancesToDeduct.reduce((sum, d) => sum + d.amount, 0);
+            const receiptNo = `ADV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+
+            const paymentTx = await tx.paymentTransaction.create({
+              data: {
+                schoolId,
+                studentId: student.id,
+                amount: totalAdjusted,
+                method: "OTHER",
+                reference: `Advance settlement for ${monthTitle}`,
+                receiptNo,
+                remarks: `Auto-settled from student advance balance for ${monthTitle}`,
+                status: "SUCCESS",
+              },
+            });
+
+            const allocations: { paymentId: string; chargeItemId: string; amount: number }[] = [];
+            for (const deduction of advancesToDeduct) {
+              if (deduction.componentId) {
+                const item = createdCharge.items.find((i) => i.componentId === deduction.componentId);
+                if (item) {
+                  allocations.push({
+                    paymentId: paymentTx.id,
+                    chargeItemId: item.id,
+                    amount: deduction.amount,
+                  });
+                }
+              }
+            }
+
+            if (allocations.length > 0) {
+              await tx.paymentAllocation.createMany({ data: allocations });
+            }
+
+            for (const deduction of advancesToDeduct) {
+              await tx.advanceLedger.create({
+                data: {
+                  studentId: student.id,
+                  componentId: deduction.componentId || null,
+                  amount: -deduction.amount,
+                  description: `Auto-adjusted against generated fee: ${monthTitle}`,
+                },
+              });
+            }
           }
 
           generatedCount++;

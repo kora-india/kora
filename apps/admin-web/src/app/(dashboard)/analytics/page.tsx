@@ -177,7 +177,8 @@ async function getAnalyticsData(schoolId: string) {
     feeDistribution,
     paymentMethods,
     metrics: {
-      totalRevenue: thisMonthRevenue || totalCollectedFee,
+      totalRevenue: thisMonthRevenue,
+      allTimeRevenue: totalCollectedFee,
       revenueChangePct,
       feeCollectionRate,
       paidFeeCount: paidItemCount,

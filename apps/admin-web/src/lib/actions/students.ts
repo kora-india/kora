@@ -221,6 +221,14 @@ export async function getStudentDetails(id: string) {
           advanceLedgers: {
             orderBy: { createdAt: "desc" },
           },
+          transports: {
+            where: { status: "ACTIVE" },
+            include: {
+              route: true,
+              stop: true,
+              vehicle: true,
+            },
+          },
         },
       })
     );

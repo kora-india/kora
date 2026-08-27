@@ -3,7 +3,7 @@
 import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
-import { invalidateFeesCache } from "@/lib/redis";
+import { invalidateFeesCache, invalidateCache } from "@/lib/redis";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -160,7 +160,10 @@ export async function allocatePayment(data: {
     revalidatePath("/fees");
     revalidatePath(`/students/${data.studentId}`);
     revalidatePath("/dashboard");
-    await invalidateFeesCache(user.schoolId);
+    await Promise.all([
+      invalidateFeesCache(user.schoolId),
+      invalidateCache(`cache:${user.schoolId}:students:details:${data.studentId}`),
+    ]);
     
     return { success: true, ...result };
   } catch (e: any) {
@@ -185,3 +188,131 @@ export async function waiveFeeChargeItem(itemId: string) {
     return { error: e.message };
   }
 }
+
+export async function getStudentFeeDues(studentId: string) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId, schoolId: user.schoolId },
+      include: {
+        advanceLedgers: true,
+        class: { select: { id: true, name: true } },
+        section: { select: { id: true, name: true } },
+        transports: {
+          where: { status: "ACTIVE" },
+          include: {
+            route: { select: { name: true } },
+            stop: { select: { stopName: true, distanceFromSchoolKm: true } },
+            vehicle: { select: { registrationNo: true } },
+          },
+        },
+      },
+    });
+
+    if (!student) return { error: "Student not found" };
+
+    // Check if student has active transport with monthlyFee > 0
+    const activeTransport = student.transports?.[0];
+    if (activeTransport && Number(activeTransport.monthlyFee) > 0) {
+      // Ensure Transport Fee component exists
+      let transportComp = await prisma.feeComponent.findFirst({
+        where: {
+          schoolId: user.schoolId,
+          category: "TRANSPORT",
+        },
+      });
+
+      if (!transportComp) {
+        transportComp = await prisma.feeComponent.create({
+          data: {
+            schoolId: user.schoolId,
+            name: "Transport Fee",
+            description: "Monthly distance-based transport charge",
+            category: "TRANSPORT",
+            amount: 0,
+            frequency: "MONTHLY",
+            isOptional: true,
+            isActive: true,
+          },
+        });
+      }
+
+      // If open charges exist for this student, check if the latest pending/overdue charge has a Transport Fee item
+      const latestCharge = await prisma.feeCharge.findFirst({
+        where: {
+          studentId,
+          schoolId: user.schoolId,
+          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        },
+        orderBy: { dueDate: "desc" },
+        include: { items: true },
+      });
+
+      if (latestCharge) {
+        const hasTransportItem = latestCharge.items.some(
+          (i) => i.componentId === transportComp!.id
+        );
+        if (!hasTransportItem) {
+          await prisma.feeChargeItem.create({
+            data: {
+              chargeId: latestCharge.id,
+              componentId: transportComp.id,
+              amount: activeTransport.monthlyFee,
+              paidAmount: 0,
+              status: "PENDING",
+            },
+          });
+        }
+      }
+    }
+
+    const charges = await prisma.feeCharge.findMany({
+      where: {
+        studentId,
+        schoolId: user.schoolId,
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      },
+      include: {
+        items: {
+          include: {
+            component: true,
+          },
+        },
+      },
+      orderBy: { dueDate: "asc" },
+    });
+
+    const recentTransactions = await prisma.paymentTransaction.findMany({
+      where: {
+        studentId,
+        schoolId: user.schoolId,
+      },
+      include: {
+        allocations: {
+          include: {
+            chargeItem: {
+              include: {
+                component: true,
+                charge: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { date: "desc" },
+      take: 10,
+    });
+
+    return {
+      success: true,
+      student,
+      charges,
+      recentTransactions,
+    };
+  } catch (e: any) {
+    return { error: e.message || "Failed to fetch student fee dues" };
+  }
+}
+

@@ -17,6 +17,7 @@ interface TodayRecord { classId: string; status: string; _count: { id: number };
 interface Props {
   classes: ClassData[];
   todayRecords: TodayRecord[];
+  weeklyAttendance?: { day: string; present: number; absent: number; total: number }[];
   userRole: string;
   userId: string;
   assignedClassId?: string | null;
@@ -30,15 +31,14 @@ const STATUS_CONFIG = {
   EXCUSED: { label: "Excused", color: "bg-blue-500 text-white border-blue-500", icon: AlertCircle },
 };
 
-const mockWeekly = [
-  { day: "Mon", present: 0, absent: 0 },
-  { day: "Tue", present: 0, absent: 0 },
-  { day: "Wed", present: 0, absent: 0 },
-  { day: "Thu", present: 0, absent: 0 },
-  { day: "Fri", present: 0, absent: 0 },
-];
-
-export function AttendanceContent({ classes, todayRecords, userRole, assignedClassId, assignedSectionId }: Readonly<Props>) {
+export function AttendanceContent({
+  classes,
+  todayRecords,
+  weeklyAttendance = [],
+  userRole,
+  assignedClassId,
+  assignedSectionId,
+}: Readonly<Props>) {
   const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
 
@@ -59,8 +59,10 @@ export function AttendanceContent({ classes, todayRecords, userRole, assignedCla
 
   const totalPresent = todayRecords.filter((r) => r.status === "PRESENT").reduce((a, r) => a + r._count.id, 0);
   const totalAbsent = todayRecords.filter((r) => r.status === "ABSENT").reduce((a, r) => a + r._count.id, 0);
-  const total = totalPresent + totalAbsent;
-  const pct = total > 0 ? Math.round((totalPresent / total) * 100) : 0;
+  const totalLate = todayRecords.filter((r) => r.status === "LATE").reduce((a, r) => a + r._count.id, 0);
+  const totalExcused = todayRecords.filter((r) => r.status === "EXCUSED").reduce((a, r) => a + r._count.id, 0);
+  const total = totalPresent + totalAbsent + totalLate + totalExcused;
+  const pct = total > 0 ? Math.round(((totalPresent + totalLate) / total) * 100) : 0;
 
   const loadStudents = async () => {
     if (!selectedClassId || !selectedSectionId) {
@@ -261,7 +263,7 @@ export function AttendanceContent({ classes, todayRecords, userRole, assignedCla
       <div className="rounded-xl border bg-card p-5">
         <h3 className="text-sm font-semibold mb-4">Weekly Attendance Trend</h3>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={mockWeekly}>
+          <BarChart data={weeklyAttendance}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
             <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />

@@ -15,7 +15,7 @@ describe('Bulk Student Import', () => {
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
 
     // Create required initial data
     await prisma.school.create({
@@ -46,11 +46,11 @@ describe('Bulk Student Import', () => {
   });
 
   beforeEach(async () => {
-    await prisma.student.deleteMany();
+    await prisma.student.deleteMany({ where: { schoolId } });
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
   });
 
   it('should successfully bulk import students', async () => {

@@ -14,6 +14,7 @@ import {
   CreditCard,
   Eye,
   ArrowUpRight,
+  Bus,
 } from "lucide-react";
 import { Select } from "antd";
 
@@ -316,6 +317,38 @@ export function StudentFeeCollection({
           </div>
         )}
       </div>
+
+      {(() => {
+        const activeTransport = student?.transports?.[0];
+        if (!activeTransport) return null;
+        return (
+          <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Bus className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-foreground">Transport Service Opted-In</span>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+                    {activeTransport.tripType ? activeTransport.tripType.replace("_", " ") : "Active"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Route: <span className="font-medium text-foreground">{activeTransport.route?.name || "Assigned Route"}</span>
+                  {activeTransport.stop?.stopName && (
+                    <span> • Stop: <span className="font-medium text-foreground">{activeTransport.stop.stopName}</span> ({Number(activeTransport.distanceKm || activeTransport.stop.distanceFromSchoolKm || 0)} km)</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <p className="text-[11px] text-muted-foreground">Monthly Transport Fee</p>
+              <p className="text-base font-bold text-amber-600 dark:text-amber-400">{formatCurrency(Number(activeTransport.monthlyFee || 0))}</p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Component Due Table */}
       <div className="border rounded-xl bg-card overflow-hidden shadow-sm">

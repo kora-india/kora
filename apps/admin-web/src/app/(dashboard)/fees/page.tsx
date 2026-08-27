@@ -51,7 +51,20 @@ export default async function FeesPage() {
   const students = await getCache(`cache:${schoolId}:students:feesList`, () => 
     prisma.student.findMany({
       where: { schoolId: schoolId, isActive: true },
-      select: { id: true, name: true, rollNumber: true, classId: true, advanceLedgers: true },
+      select: {
+        id: true,
+        name: true,
+        rollNumber: true,
+        classId: true,
+        advanceLedgers: true,
+        transports: {
+          where: { status: "ACTIVE" },
+          include: {
+            route: { select: { name: true } },
+            stop: { select: { stopName: true, distanceFromSchoolKm: true } },
+          },
+        },
+      },
       orderBy: { name: 'asc' }
     })
   );

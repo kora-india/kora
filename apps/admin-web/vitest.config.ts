@@ -18,6 +18,7 @@ export default defineConfig({
     globals: true,
     fileParallelism: false,
     testTimeout: 30000,
+    hookTimeout: 30000,
     server: {
       // Force next-auth through Vite's own resolver (instead of being
       // externalized to Node's native ESM loader) so the `next/server` alias

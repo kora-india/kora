@@ -20,8 +20,32 @@ export async function GET(req: Request) {
 
   try {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Find all schools that have late fees enabled
+    // 1. Automatically transition charges and items past due date to OVERDUE
+    await prisma.feeCharge.updateMany({
+      where: {
+        status: { in: ["PENDING", "PARTIAL"] },
+        dueDate: { lt: today },
+      },
+      data: {
+        status: "OVERDUE",
+      },
+    });
+
+    await prisma.feeChargeItem.updateMany({
+      where: {
+        status: "PENDING",
+        charge: {
+          dueDate: { lt: today },
+        },
+      },
+      data: {
+        status: "OVERDUE",
+      },
+    });
+
+    // 2. Find all schools that have late fees enabled
     const schools = await prisma.school.findMany({
       where: { lateFeeEnabled: true, lateFeeAmount: { not: null } },
       select: { id: true, lateFeeAmount: true, lateFeeFrequency: true },
@@ -32,12 +56,25 @@ export async function GET(req: Request) {
     for (const school of schools) {
       if (!school.lateFeeAmount) continue;
 
-      // Get the Late Fee component for this school
-      const lateFeeComponent = await prisma.feeComponent.findFirst({
+      // Get or create the Late Fee component for this school
+      let lateFeeComponent = await prisma.feeComponent.findFirst({
         where: { schoolId: school.id, category: "LATE_FEE" },
       });
 
-      if (!lateFeeComponent) continue;
+      if (!lateFeeComponent) {
+        lateFeeComponent = await prisma.feeComponent.create({
+          data: {
+            schoolId: school.id,
+            name: "Late Fee",
+            description: "Automated penalty for overdue payment",
+            category: "LATE_FEE",
+            amount: school.lateFeeAmount,
+            frequency: "MONTHLY",
+            isOptional: true,
+            isActive: true,
+          },
+        });
+      }
 
       // Find all overdue FeeCharges for this school
       const overdueCharges = await prisma.feeCharge.findMany({
@@ -52,15 +89,26 @@ export async function GET(req: Request) {
       let schoolFeeUpdated = false;
 
       for (const charge of overdueCharges) {
-        // Determine how many months overdue
-        const monthsOverdue = differenceInMonths(today, charge.dueDate);
+        // Calculate days overdue
+        const diffMs = today.getTime() - new Date(charge.dueDate).getTime();
+        const daysOverdue = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
-        if (monthsOverdue > 0) {
-          const totalLateFee = Number(school.lateFeeAmount) * monthsOverdue;
+        if (daysOverdue > 0) {
+          let multiplier = 1;
+          if (school.lateFeeFrequency === "DAILY") {
+            multiplier = daysOverdue;
+          } else if (school.lateFeeFrequency === "WEEKLY") {
+            multiplier = Math.ceil(daysOverdue / 7);
+          } else {
+            // MONTHLY default
+            multiplier = Math.max(1, Math.ceil(daysOverdue / 30));
+          }
+
+          const totalLateFee = Number(school.lateFeeAmount) * multiplier;
 
           // Check if there's already a late fee item
           const existingLateFeeItem = charge.items.find(
-            (i) => i.componentId === lateFeeComponent.id
+            (i) => i.componentId === lateFeeComponent!.id
           );
 
           if (existingLateFeeItem) {

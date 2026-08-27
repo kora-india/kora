@@ -12,6 +12,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createTenantLogger } from "@schoolos/logger";
+import { invalidateCache } from "@/lib/redis";
 
 const logger = createTenantLogger("global", "transport-actions");
 
@@ -338,7 +339,7 @@ export async function enrollStudentTransport(data: z.infer<typeof EnrollmentSche
   });
   if (!currentSession) return { error: "No active academic session configured for this school." };
 
-  await getOrCreateTransportFeeComponent(schoolId);
+  const transportComp = await getOrCreateTransportFeeComponent(schoolId);
 
   const enrollment = await prisma.studentTransport.upsert({
     where: {
@@ -364,8 +365,52 @@ export async function enrollStudentTransport(data: z.infer<typeof EnrollmentSche
     },
   });
 
+  // If monthlyFee > 0, find any active fee charge for this student and ensure Transport Fee item exists
+  if (parsed.data.monthlyFee > 0) {
+    const latestCharge = await prisma.feeCharge.findFirst({
+      where: {
+        studentId: parsed.data.studentId,
+        schoolId,
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      },
+      orderBy: { dueDate: "desc" },
+      include: { items: true },
+    });
+
+    if (latestCharge) {
+      const existingItem = latestCharge.items.find(
+        (i) => i.componentId === transportComp.id
+      );
+      if (existingItem) {
+        if (existingItem.status !== "PAID" && existingItem.status !== "WAIVED") {
+          await prisma.feeChargeItem.update({
+            where: { id: existingItem.id },
+            data: { amount: parsed.data.monthlyFee },
+          });
+        }
+      } else {
+        await prisma.feeChargeItem.create({
+          data: {
+            chargeId: latestCharge.id,
+            componentId: transportComp.id,
+            amount: parsed.data.monthlyFee,
+            paidAmount: 0,
+            status: "PENDING",
+          },
+        });
+      }
+    }
+  }
+
   revalidatePath("/transport");
   revalidatePath("/students");
+  revalidatePath("/fees");
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:students:*`),
+    invalidateCache(`cache:${schoolId}:feeCharges:*`),
+    invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
+  ]);
   return { success: true, enrollment };
 }
 
@@ -383,6 +428,13 @@ export async function cancelStudentTransport(enrollmentId: string) {
 
   revalidatePath("/transport");
   revalidatePath("/students");
+  revalidatePath("/fees");
+  await Promise.all([
+    invalidateCache(`cache:${user.schoolId}:students:*`),
+    invalidateCache(`cache:${user.schoolId}:feeCharges:*`),
+    invalidateCache(`cache:${user.schoolId}:dashboard`),
+    invalidateCache(`cache:${user.schoolId}:analytics`),
+  ]);
   return { success: true, enrollment };
 }
 

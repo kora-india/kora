@@ -12,21 +12,21 @@ describe('Fee Settings Actions', () => {
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
 
     // Create required initial data
     await prisma.school.create({
       data: {
         id: schoolId,
         name: 'Test School',
-        subdomain: 'testschool2',
+        subdomain: 'testschool-' + Math.random().toString(36).substring(7),
       }
     });
   });
 
   beforeEach(async () => {
     // Reset fee components
-    await prisma.feeComponent.deleteMany();
+    await prisma.feeComponent.deleteMany({ where: { schoolId } });
     // Reset school late fee settings
     await prisma.school.update({
       where: { id: schoolId },
@@ -39,7 +39,7 @@ describe('Fee Settings Actions', () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany();
+    await prisma.school.deleteMany({ where: { id: schoolId } });
   });
 
   it('should enable late fee, update school, and create Late Fee component if not exists', async () => {

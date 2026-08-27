@@ -194,7 +194,10 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
           value={formatCurrency(stats?.monthlyRevenue || 0)}
           icon={TrendingUp}
           color="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-          trend={{ up: true, label: "Collected in Aug" }}
+          trend={{
+            up: true,
+            label: `Collected in ${new Intl.DateTimeFormat("en-IN", { month: "short" }).format(new Date())}`,
+          }}
           href="/analytics"
         />
         <StatCard

@@ -33,6 +33,47 @@ export default async function AttendancePage() {
     _count: { id: true },
   });
 
+  // Calculate Monday of the current week
+  const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, ...
+  const diffToMonday = (currentDay === 0 ? -6 : 1) - currentDay;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+  saturday.setHours(23, 59, 59, 999);
+
+  const weekAttendances = await prisma.attendance.findMany({
+    where: {
+      schoolId: schoolId,
+      date: {
+        gte: monday,
+        lte: saturday,
+      },
+    },
+    select: {
+      date: true,
+      status: true,
+    },
+  });
+
+  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weeklyAttendance = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateStr = d.toDateString();
+    const dayRecords = weekAttendances.filter((a) => new Date(a.date).toDateString() === dateStr);
+    const present = dayRecords.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
+    const absent = dayRecords.filter((a) => a.status === "ABSENT").length;
+    return {
+      day: dayNames[i],
+      present,
+      absent,
+      total: dayRecords.length,
+    };
+  });
+
   const classes = await prisma.class.findMany({
     where: { schoolId: schoolId },
     include: { sections: { orderBy: { name: "asc" } } },
@@ -44,6 +85,7 @@ export default async function AttendancePage() {
     <AttendanceContent
       classes={classes}
       todayRecords={todayRecords}
+      weeklyAttendance={weeklyAttendance}
       userRole={user.role}
       userId={user.id}
       assignedClassId={assignedClassId}

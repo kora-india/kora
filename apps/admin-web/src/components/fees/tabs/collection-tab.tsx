@@ -1,17 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { allocatePayment, waiveFeeChargeItem } from "@/lib/actions/fee-allocator";
+import { allocatePayment, waiveFeeChargeItem, getStudentFeeDues } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2, Activity, ArrowUpRight } from "lucide-react";
+import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2, Activity, ArrowUpRight, Bus } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
-export function CollectionTab({ students, recentCharges, components, canEdit, transactions, onNavigate }: any) {
+export function CollectionTab({ students, recentCharges = [], components, canEdit, transactions, onNavigate }: any) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [dynamicStudent, setDynamicStudent] = useState<any>(null);
+  const [dynamicCharges, setDynamicCharges] = useState<any[]>([]);
+  const [loadingDues, setLoadingDues] = useState(false);
   
   // Payment States
   const [selectedComponents, setSelectedComponents] = useState<Record<string, boolean>>({});
@@ -25,27 +28,45 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
 
   // Filter students based on search
-  const filteredStudents = search.length > 2 
+  const filteredStudents = search.length > 1 
     ? students.filter((s:any) => s.name.toLowerCase().includes(search.toLowerCase()) || s.rollNumber.includes(search))
     : [];
 
-  const handleSelectStudent = (student: any) => {
+  const refreshCurrentStudent = useCallback(async (studentId: string) => {
+    setLoadingDues(true);
+    try {
+      const res = await getStudentFeeDues(studentId);
+      if (res.success && res.student) {
+        setDynamicStudent(res.student);
+        setDynamicCharges(res.charges || []);
+      }
+    } catch (e) {
+      console.error("Failed to refresh student dues:", e);
+    } finally {
+      setLoadingDues(false);
+    }
+  }, []);
+
+  const handleSelectStudent = async (student: any) => {
     setSelectedStudent(student);
     setSearch("");
     setSelectedComponents({});
     setComponentPayments({});
     setShowPreview(false);
+    await refreshCurrentStudent(student.id);
   };
 
-  // Keep student data fresh by finding it in the latest props
-  const currentStudent = selectedStudent 
+  // Keep student data fresh
+  const currentStudent = dynamicStudent || (selectedStudent 
     ? students.find((s:any) => s.id === selectedStudent.id) || selectedStudent 
-    : null;
+    : null);
 
-  // Calculate student dues
-  const studentCharges = currentStudent 
-    ? recentCharges.filter((c:any) => c.studentId === currentStudent.id && c.status !== "WAIVED")
-    : [];
+  // Calculate student dues from dynamic query
+  const studentCharges = dynamicCharges.length > 0 || dynamicStudent
+    ? dynamicCharges
+    : (currentStudent 
+      ? recentCharges.filter((c:any) => c.studentId === currentStudent.id && c.status !== "WAIVED")
+      : []);
 
   const advanceBalance = currentStudent?.advanceLedgers?.reduce((sum:number, l:any) => sum + Number(l.amount), 0) || 0;
 
@@ -190,6 +211,9 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
         setComponentPayments({});
         setSelectedComponents({});
         setShowPreview(false);
+        if (currentStudent?.id) {
+          await refreshCurrentStudent(currentStudent.id);
+        }
         router.refresh();
       }
     } catch {
@@ -246,6 +270,38 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(advanceBalance)}</p>
               </div>
             </div>
+
+            {(() => {
+              const activeTransport = currentStudent?.transports?.[0];
+              if (!activeTransport) return null;
+              return (
+                <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <Bus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-foreground">Transport Service Opted-In</span>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
+                          {activeTransport.tripType ? activeTransport.tripType.replace("_", " ") : "Active"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Route: <span className="font-medium text-foreground">{activeTransport.route?.name || "Assigned Route"}</span>
+                        {activeTransport.stop?.stopName && (
+                          <span> • Stop: <span className="font-medium text-foreground">{activeTransport.stop.stopName}</span> ({Number(activeTransport.distanceKm || activeTransport.stop.distanceFromSchoolKm || 0)} km)</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="text-[11px] text-muted-foreground">Monthly Transport Fee</p>
+                    <p className="text-base font-bold text-amber-600 dark:text-amber-400">{formatCurrency(Number(activeTransport.monthlyFee || 0))}</p>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
               <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
@@ -328,7 +384,13 @@ export function CollectionTab({ students, recentCharges, components, canEdit, tr
                                                       try {
                                                         const res = await waiveFeeChargeItem(item.id);
                                                         if (res.error) toast.error(res.error, { id: toastId }); 
-                                                        else { toast.success("Late fee waived", { id: toastId }); router.refresh(); }
+                                                        else {
+                                                          toast.success("Late fee waived", { id: toastId });
+                                                          if (currentStudent?.id) {
+                                                            await refreshCurrentStudent(currentStudent.id);
+                                                          }
+                                                          router.refresh();
+                                                        }
                                                       } catch {
                                                         toast.error("Failed to waive late fee", { id: toastId });
                                                       } finally {
