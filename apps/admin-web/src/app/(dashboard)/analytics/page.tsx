@@ -22,19 +22,23 @@ async function getAnalyticsData(schoolId: string) {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  // 1. Real Payment Transactions
+  // 1. Real Payment Transactions (Bounded to 6 months for trend)
   const paymentTxs = await prisma.paymentTransaction.findMany({
-    where: { schoolId, status: "SUCCESS" },
+    where: { schoolId, status: "SUCCESS", date: { gte: sixMonthsAgo } },
     select: { amount: true, date: true, method: true },
     orderBy: { date: "asc" },
   });
 
-  // 2. Real Fee Charges & Items
+  // 2. Real Fee Charges & Items (Bounded to 6 months)
   const feeCharges = await prisma.feeCharge.findMany({
-    where: { schoolId },
-    include: {
+    where: { schoolId, dueDate: { gte: sixMonthsAgo } },
+    select: {
+      dueDate: true,
       items: {
-        include: {
+        select: {
+          amount: true,
+          paidAmount: true,
+          status: true,
           component: { select: { name: true, category: true } },
         },
       },
@@ -42,9 +46,9 @@ async function getAnalyticsData(schoolId: string) {
     orderBy: { dueDate: "asc" },
   });
 
-  // 3. Real Attendance
+  // 3. Real Attendance (Bounded to 30 days for trend)
   const attendanceRows = await prisma.attendance.findMany({
-    where: { schoolId },
+    where: { schoolId, date: { gte: thirtyDaysAgo } },
     select: { date: true, status: true },
     orderBy: { date: "asc" },
   });

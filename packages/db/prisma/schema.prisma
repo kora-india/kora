@@ -193,6 +193,8 @@ model Student {
   @@unique([schoolId, rollNumber, classId])
   @@index([schoolId])
   @@index([classId])
+  @@index([schoolId, isActive, classId])
+  @@index([schoolId, isActive, name])
   @@map("students")
 }
 
@@ -286,6 +288,7 @@ model Attendance {
   @@unique([studentId, date])
   @@index([schoolId, date])
   @@index([classId, sectionId, date])
+  @@index([schoolId, classId, date, status])
   @@map("attendances")
 }
 
@@ -474,6 +477,8 @@ model FeeCharge {
   @@index([schoolId])
   @@index([studentId])
   @@index([sessionId])
+  @@index([schoolId, status, dueDate])
+  @@index([studentId, schoolId, status])
   @@map("fee_charges")
 }
 
@@ -490,6 +495,8 @@ model FeeChargeItem {
   allocations PaymentAllocation[]
 
   @@unique([chargeId, componentId])
+  @@index([chargeId, status])
+  @@index([componentId, status])
   @@map("fee_charge_items")
 }
 
@@ -512,6 +519,8 @@ model PaymentTransaction {
 
   @@index([schoolId])
   @@index([studentId])
+  @@index([schoolId, date])
+  @@index([studentId, date])
   @@map("payment_transactions")
 }
 
@@ -701,6 +710,7 @@ model Expense {
 
   @@index([schoolId])
   @@index([categoryId])
+  @@index([schoolId, date])
   @@map("expenses")
 }
 
@@ -835,6 +845,7 @@ model StudentTransport {
   @@index([sessionId])
   @@index([routeId])
   @@index([vehicleId])
+  @@index([schoolId, status])
   @@map("student_transports")
 }
 

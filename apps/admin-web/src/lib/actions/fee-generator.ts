@@ -47,28 +47,85 @@ export async function processClassFeeGeneration(
     let generatedCount = 0;
 
     await prisma.$transaction(async (tx) => {
-      for (const student of students) {
-        // Find existing charge to prevent duplicates
-        const existingCharge = await tx.feeCharge.findFirst({
-          where: { studentId: student.id, sessionId, title: monthTitle }
-        });
-        if (existingCharge) continue; // Skip if already generated
+      const studentIds = students.map((s) => s.id);
 
-        // Get student-level overrides
-        const overrides = await tx.studentFeeOverride.findMany({
-          where: { studentId: student.id, sessionId }
-        });
+      // 1. Batch find existing charges
+      const existingCharges = await tx.feeCharge.findMany({
+        where: { studentId: { in: studentIds }, sessionId, title: monthTitle },
+        select: { studentId: true },
+      });
+      const existingStudentIds = new Set(existingCharges.map((c) => c.studentId));
+      const eligibleStudents = students.filter((s) => !existingStudentIds.has(s.id));
 
-        // Calculate raw components to charge
+      if (eligibleStudents.length === 0) return;
+
+      const eligibleIds = eligibleStudents.map((s) => s.id);
+
+      // 2. Batch fetch all overrides, active transports, and ledgers in parallel
+      const [allOverrides, allTransports, allLedgers] = await Promise.all([
+        tx.studentFeeOverride.findMany({
+          where: { studentId: { in: eligibleIds }, sessionId },
+        }),
+        tx.studentTransport.findMany({
+          where: { studentId: { in: eligibleIds }, sessionId, status: "ACTIVE" },
+        }),
+        tx.advanceLedger.findMany({
+          where: { studentId: { in: eligibleIds } },
+        }),
+      ]);
+
+      // Index pre-fetched data by studentId
+      const overridesByStudent = new Map<string, typeof allOverrides>();
+      for (const o of allOverrides) {
+        if (!overridesByStudent.has(o.studentId)) overridesByStudent.set(o.studentId, []);
+        overridesByStudent.get(o.studentId)!.push(o);
+      }
+
+      const transportByStudent = new Map<string, (typeof allTransports)[0]>();
+      for (const t of allTransports) {
+        transportByStudent.set(t.studentId, t);
+      }
+
+      const ledgersByStudent = new Map<string, typeof allLedgers>();
+      for (const l of allLedgers) {
+        if (!ledgersByStudent.has(l.studentId)) ledgersByStudent.set(l.studentId, []);
+        ledgersByStudent.get(l.studentId)!.push(l);
+      }
+
+      // Ensure Transport Fee component exists once
+      let transportComp: any = null;
+      if (allTransports.some((t) => Number(t.monthlyFee) > 0)) {
+        transportComp = await tx.feeComponent.findFirst({
+          where: { schoolId, name: { equals: "Transport Fee", mode: "insensitive" } },
+        });
+        if (!transportComp) {
+          transportComp = await tx.feeComponent.create({
+            data: {
+              schoolId,
+              name: "Transport Fee",
+              description: "Distance-based monthly transport charge",
+              category: "TRANSPORT",
+              amount: 0,
+              frequency: "MONTHLY",
+              isOptional: true,
+              isActive: true,
+            },
+          });
+        }
+      }
+
+      for (const student of eligibleStudents) {
+        const overrides = overridesByStudent.get(student.id) || [];
         const rawItems: { componentId: string; amount: number }[] = [];
-        
-        // Base components
+
+        // Base components from structure
         for (const item of classStructure.structure.items) {
-          const override = overrides.find(o => o.componentId === item.componentId);
+          const override = overrides.find((o) => o.componentId === item.componentId);
           if (override?.isExempt) continue;
 
-          let finalAmount = override?.amount !== null && override?.amount !== undefined 
-              ? Number(override.amount) 
+          let finalAmount =
+            override?.amount !== null && override?.amount !== undefined
+              ? Number(override.amount)
               : Number(item.amount ?? item.component.amount);
 
           if (override?.discountAmount) {
@@ -80,41 +137,21 @@ export async function processClassFeeGeneration(
           }
         }
 
-        // Add any optional components that are assigned to the student but not in the class structure
+        // Add optional components assigned to student but not in structure
         for (const override of overrides) {
-          if (override.amount && Number(override.amount) > 0 && !classStructure.structure.items.find(i => i.componentId === override.componentId)) {
-             rawItems.push({ componentId: override.componentId, amount: Number(override.amount) });
+          if (
+            override.amount &&
+            Number(override.amount) > 0 &&
+            !classStructure.structure.items.find((i) => i.componentId === override.componentId)
+          ) {
+            rawItems.push({ componentId: override.componentId, amount: Number(override.amount) });
           }
         }
 
-        // Check for active Transport Enrollment
-        const transport = await tx.studentTransport.findFirst({
-          where: {
-            studentId: student.id,
-            sessionId,
-            status: "ACTIVE",
-          },
-        });
-
-        if (transport && Number(transport.monthlyFee) > 0) {
-          let transportComp = await tx.feeComponent.findFirst({
-            where: { schoolId, name: { equals: "Transport Fee", mode: "insensitive" } },
-          });
-          if (!transportComp) {
-            transportComp = await tx.feeComponent.create({
-              data: {
-                schoolId,
-                name: "Transport Fee",
-                description: "Distance-based monthly transport charge",
-                category: "TRANSPORT",
-                amount: 0,
-                frequency: "MONTHLY",
-                isOptional: true,
-                isActive: true,
-              },
-            });
-          }
-          if (!rawItems.some((i) => i.componentId === transportComp!.id)) {
+        // Check transport
+        const transport = transportByStudent.get(student.id);
+        if (transport && Number(transport.monthlyFee) > 0 && transportComp) {
+          if (!rawItems.some((i) => i.componentId === transportComp.id)) {
             rawItems.push({
               componentId: transportComp.id,
               amount: Number(transport.monthlyFee),
@@ -124,14 +161,11 @@ export async function processClassFeeGeneration(
 
         if (rawItems.length === 0) continue;
 
-        // Fetch student's current advance ledger balances
-        const ledgers = await tx.advanceLedger.findMany({
-          where: { studentId: student.id }
-        });
-        
+        // Advance ledger balances
+        const ledgers = ledgersByStudent.get(student.id) || [];
         let totalGeneralAdvance = 0;
         const componentAdvances: Record<string, number> = {};
-        
+
         for (const l of ledgers) {
           const amt = Number(l.amount);
           if (l.componentId) {
@@ -142,7 +176,7 @@ export async function processClassFeeGeneration(
         }
 
         const chargeItemsData: any[] = [];
-        const advancesToDeduct: { componentId?: string, amount: number }[] = [];
+        const advancesToDeduct: { componentId?: string; amount: number }[] = [];
 
         // Try to pay off components using advance balances
         for (const c of rawItems) {

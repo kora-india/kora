@@ -97,3 +97,40 @@ export async function invalidateFeesCache(schoolId: string) {
     invalidateCache("cache:superadmin:analytics"),
   ]);
 }
+
+export async function invalidateStudentsCache(schoolId: string) {
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:students:*`),
+    invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
+  ]);
+}
+
+export async function invalidateClassesCache(schoolId: string) {
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:classes:*`),
+    invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
+  ]);
+}
+
+export async function invalidateDashboardCache(schoolId: string) {
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
+    invalidateCache("cache:superadmin:dashboard"),
+    invalidateCache("cache:superadmin:analytics"),
+  ]);
+}
+
+export async function invalidateTransportCache(schoolId: string) {
+  await Promise.all([
+    invalidateCache(`cache:${schoolId}:transport:*`),
+    invalidateCache(`cache:${schoolId}:students:*`),
+    invalidateCache(`cache:${schoolId}:feeCharges:*`),
+    invalidateCache(`cache:${schoolId}:dashboard`),
+    invalidateCache(`cache:${schoolId}:analytics`),
+    invalidateCache("cache:superadmin:dashboard"),
+    invalidateCache("cache:superadmin:analytics"),
+  ]);
+}

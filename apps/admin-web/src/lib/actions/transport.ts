@@ -12,7 +12,7 @@ import {
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createTenantLogger } from "@schoolos/logger";
-import { invalidateCache } from "@/lib/redis";
+import { getCache, invalidateTransportCache } from "@/lib/redis";
 
 const logger = createTenantLogger("global", "transport-actions");
 
@@ -61,88 +61,90 @@ export async function getTransportData() {
   if (!user) return { error: "Unauthorized" };
   const schoolId = user.schoolId;
 
-  // 1. Get active session
-  const currentSession = await prisma.academicSession.findFirst({
-    where: { schoolId, isCurrent: true },
-  });
+  return getCache(`cache:${schoolId}:transport:data`, async () => {
+    // 1. Get active session
+    const currentSession = await prisma.academicSession.findFirst({
+      where: { schoolId, isCurrent: true },
+    });
 
-  const sessionId = currentSession?.id;
+    const sessionId = currentSession?.id;
 
-  // 2. Fetch Vehicles with occupancy count
-  const vehicles = await prisma.vehicle.findMany({
-    where: { schoolId },
-    include: {
-      routes: { select: { id: true, name: true, code: true } },
-      enrollments: {
-        where: sessionId ? { sessionId, status: TransportEnrollmentStatus.ACTIVE } : { status: TransportEnrollmentStatus.ACTIVE },
-        select: { id: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  // 3. Fetch Routes with ordered stops and passenger count
-  const routes = await prisma.transportRoute.findMany({
-    where: { schoolId },
-    include: {
-      vehicle: true,
-      stops: { orderBy: { sequenceOrder: "asc" } },
-      enrollments: {
-        where: sessionId ? { sessionId, status: TransportEnrollmentStatus.ACTIVE } : { status: TransportEnrollmentStatus.ACTIVE },
-        select: { id: true, monthlyFee: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  // 4. Fetch Student Transport Enrollments
-  const enrollments = await prisma.studentTransport.findMany({
-    where: {
-      schoolId,
-      ...(sessionId ? { sessionId } : {}),
-    },
-    include: {
-      student: {
-        include: {
-          class: { select: { name: true } },
-          section: { select: { name: true } },
+    // 2. Fetch Vehicles with occupancy count
+    const vehicles = await prisma.vehicle.findMany({
+      where: { schoolId },
+      include: {
+        routes: { select: { id: true, name: true, code: true } },
+        enrollments: {
+          where: sessionId ? { sessionId, status: TransportEnrollmentStatus.ACTIVE } : { status: TransportEnrollmentStatus.ACTIVE },
+          select: { id: true },
         },
       },
-      route: { select: { id: true, name: true, code: true, defaultRatePerKm: true, flatRate: true } },
-      stop: { select: { id: true, stopName: true, sequenceOrder: true, pickupTime: true, dropTime: true } },
-      vehicle: { select: { id: true, registrationNo: true, type: true, driverName: true, driverPhone: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    });
 
-  // 5. Compute KPI Fleet Metrics
-  const totalVehicles = vehicles.length;
-  const totalBuses = vehicles.filter((v) => v.type === VehicleType.BUS).length;
-  const totalVans = vehicles.filter((v) => v.type === VehicleType.VAN).length;
-  const totalRickshaws = vehicles.filter((v) => v.type === VehicleType.RICKSHAW).length;
-  const totalCapacity = vehicles.reduce((sum, v) => sum + v.capacity, 0);
-  const totalEnrolled = enrollments.filter((e) => e.status === TransportEnrollmentStatus.ACTIVE).length;
-  const totalMonthlyRevenue = enrollments
-    .filter((e) => e.status === TransportEnrollmentStatus.ACTIVE)
-    .reduce((sum, e) => sum + Number(e.monthlyFee), 0);
+    // 3. Fetch Routes with ordered stops and passenger count
+    const routes = await prisma.transportRoute.findMany({
+      where: { schoolId },
+      include: {
+        vehicle: true,
+        stops: { orderBy: { sequenceOrder: "asc" } },
+        enrollments: {
+          where: sessionId ? { sessionId, status: TransportEnrollmentStatus.ACTIVE } : { status: TransportEnrollmentStatus.ACTIVE },
+          select: { id: true, monthlyFee: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-  return {
-    currentSession,
-    vehicles,
-    routes,
-    enrollments,
-    metrics: {
-      totalVehicles,
-      totalBuses,
-      totalVans,
-      totalRickshaws,
-      totalCapacity,
-      totalEnrolled,
-      totalMonthlyRevenue,
-      overallOccupancyPct: totalCapacity > 0 ? Math.round((totalEnrolled / totalCapacity) * 100) : 0,
-    },
-    userRole: user.role,
-  };
+    // 4. Fetch Student Transport Enrollments
+    const enrollments = await prisma.studentTransport.findMany({
+      where: {
+        schoolId,
+        ...(sessionId ? { sessionId } : {}),
+      },
+      include: {
+        student: {
+          include: {
+            class: { select: { name: true } },
+            section: { select: { name: true } },
+          },
+        },
+        route: { select: { id: true, name: true, code: true, defaultRatePerKm: true, flatRate: true } },
+        stop: { select: { id: true, stopName: true, sequenceOrder: true, pickupTime: true, dropTime: true } },
+        vehicle: { select: { id: true, registrationNo: true, type: true, driverName: true, driverPhone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // 5. Compute KPI Fleet Metrics
+    const totalVehicles = vehicles.length;
+    const totalBuses = vehicles.filter((v) => v.type === VehicleType.BUS).length;
+    const totalVans = vehicles.filter((v) => v.type === VehicleType.VAN).length;
+    const totalRickshaws = vehicles.filter((v) => v.type === VehicleType.RICKSHAW).length;
+    const totalCapacity = vehicles.reduce((sum, v) => sum + v.capacity, 0);
+    const totalEnrolled = enrollments.filter((e) => e.status === TransportEnrollmentStatus.ACTIVE).length;
+    const totalMonthlyRevenue = enrollments
+      .filter((e) => e.status === TransportEnrollmentStatus.ACTIVE)
+      .reduce((sum, e) => sum + Number(e.monthlyFee), 0);
+
+    return {
+      currentSession,
+      vehicles,
+      routes,
+      enrollments,
+      metrics: {
+        totalVehicles,
+        totalBuses,
+        totalVans,
+        totalRickshaws,
+        totalCapacity,
+        totalEnrolled,
+        totalMonthlyRevenue,
+        overallOccupancyPct: totalCapacity > 0 ? Math.round((totalEnrolled / totalCapacity) * 100) : 0,
+      },
+      userRole: user.role,
+    };
+  }, 300);
 }
 
 // ─── Vehicle Fleet Actions ──────────────────────────────────────────────────
@@ -180,6 +182,7 @@ export async function createVehicle(data: z.infer<typeof VehicleSchema>) {
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true, vehicle };
 }
 
@@ -193,6 +196,7 @@ export async function updateVehicle(id: string, data: Partial<z.infer<typeof Veh
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true, vehicle };
 }
 
@@ -205,6 +209,7 @@ export async function deleteVehicle(id: string) {
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true };
 }
 
@@ -263,6 +268,7 @@ export async function createRoute(data: z.infer<typeof RouteSchema>) {
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true, route };
 }
 
@@ -296,6 +302,7 @@ export async function updateRoute(id: string, data: z.infer<typeof RouteSchema>)
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true };
 }
 
@@ -308,6 +315,7 @@ export async function deleteRoute(id: string) {
   });
 
   revalidatePath("/transport");
+  await invalidateTransportCache(user.schoolId);
   return { success: true };
 }
 
@@ -405,12 +413,7 @@ export async function enrollStudentTransport(data: z.infer<typeof EnrollmentSche
   revalidatePath("/transport");
   revalidatePath("/students");
   revalidatePath("/fees");
-  await Promise.all([
-    invalidateCache(`cache:${schoolId}:students:*`),
-    invalidateCache(`cache:${schoolId}:feeCharges:*`),
-    invalidateCache(`cache:${schoolId}:dashboard`),
-    invalidateCache(`cache:${schoolId}:analytics`),
-  ]);
+  await invalidateTransportCache(schoolId);
   return { success: true, enrollment };
 }
 
@@ -429,12 +432,7 @@ export async function cancelStudentTransport(enrollmentId: string) {
   revalidatePath("/transport");
   revalidatePath("/students");
   revalidatePath("/fees");
-  await Promise.all([
-    invalidateCache(`cache:${user.schoolId}:students:*`),
-    invalidateCache(`cache:${user.schoolId}:feeCharges:*`),
-    invalidateCache(`cache:${user.schoolId}:dashboard`),
-    invalidateCache(`cache:${user.schoolId}:analytics`),
-  ]);
+  await invalidateTransportCache(user.schoolId);
   return { success: true, enrollment };
 }
 
@@ -445,36 +443,38 @@ export async function getRoutePassengerManifest(routeId: string) {
   if (!user) return { error: "Unauthorized" };
   const schoolId = user.schoolId;
 
-  const currentSession = await prisma.academicSession.findFirst({
-    where: { schoolId, isCurrent: true },
-  });
+  return getCache(`cache:${schoolId}:transport:manifest:${routeId}`, async () => {
+    const currentSession = await prisma.academicSession.findFirst({
+      where: { schoolId, isCurrent: true },
+    });
 
-  const route = await prisma.transportRoute.findUnique({
-    where: { id: routeId, schoolId },
-    include: {
-      vehicle: true,
-      school: { select: { name: true, phone: true, address: true, logoUrl: true } },
-      stops: { orderBy: { sequenceOrder: "asc" } },
-      enrollments: {
-        where: {
-          status: TransportEnrollmentStatus.ACTIVE,
-          ...(currentSession ? { sessionId: currentSession.id } : {}),
-        },
-        include: {
-          student: {
-            include: {
-              class: { select: { name: true } },
-              section: { select: { name: true } },
-            },
+    const route = await prisma.transportRoute.findUnique({
+      where: { id: routeId, schoolId },
+      include: {
+        vehicle: true,
+        school: { select: { name: true, phone: true, address: true, logoUrl: true } },
+        stops: { orderBy: { sequenceOrder: "asc" } },
+        enrollments: {
+          where: {
+            status: TransportEnrollmentStatus.ACTIVE,
+            ...(currentSession ? { sessionId: currentSession.id } : {}),
           },
-          stop: true,
+          include: {
+            student: {
+              include: {
+                class: { select: { name: true } },
+                section: { select: { name: true } },
+              },
+            },
+            stop: true,
+          },
+          orderBy: [{ stop: { sequenceOrder: "asc" } }, { student: { name: "asc" } }],
         },
-        orderBy: [{ stop: { sequenceOrder: "asc" } }, { student: { name: "asc" } }],
       },
-    },
-  });
+    });
 
-  if (!route) return { error: "Route not found" };
+    if (!route) return { error: "Route not found" };
 
-  return { route };
+    return { route };
+  }, 300);
 }
