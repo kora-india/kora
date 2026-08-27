@@ -114,6 +114,21 @@ export async function processClassFeeGeneration(
         }
       }
 
+      const chargesToCreate: any[] = [];
+      const chargeItemsToCreate: any[] = [];
+      const paymentsToCreate: any[] = [];
+      const allocationsToCreate: any[] = [];
+      const advancesToCreate: any[] = [];
+
+      function createCuid(): string {
+        return (
+          "c" +
+          Date.now().toString(36) +
+          Math.random().toString(36).substring(2, 10) +
+          Math.random().toString(36).substring(2, 6)
+        );
+      }
+
       for (const student of eligibleStudents) {
         const overrides = overridesByStudent.get(student.id) || [];
         const rawItems: { componentId: string; amount: number }[] = [];
@@ -175,110 +190,103 @@ export async function processClassFeeGeneration(
           }
         }
 
-        const chargeItemsData: any[] = [];
-        const advancesToDeduct: { componentId?: string; amount: number }[] = [];
+        const studentChargeItems: { id: string; componentId: string; amount: number; paidAmount: number; status: FeeStatus }[] = [];
+        const advancesToDeduct: { componentId?: string; amount: number; chargeItemId: string }[] = [];
+        const chargeId = createCuid();
 
         // Try to pay off components using advance balances
         for (const c of rawItems) {
           let remainingDue = c.amount;
           let paidAmount = 0;
+          const chargeItemId = createCuid();
 
           // 1. Try component specific advance
           if (componentAdvances[c.componentId] && componentAdvances[c.componentId] > 0) {
-             const use = Math.min(remainingDue, componentAdvances[c.componentId]);
-             componentAdvances[c.componentId] -= use;
-             remainingDue -= use;
-             paidAmount += use;
-             advancesToDeduct.push({ componentId: c.componentId, amount: use });
+            const use = Math.min(remainingDue, componentAdvances[c.componentId]);
+            componentAdvances[c.componentId] -= use;
+            remainingDue -= use;
+            paidAmount += use;
+            advancesToDeduct.push({ componentId: c.componentId, amount: use, chargeItemId });
           }
 
           // 2. Try general advance
           if (remainingDue > 0 && totalGeneralAdvance > 0) {
-             const use = Math.min(remainingDue, totalGeneralAdvance);
-             totalGeneralAdvance -= use;
-             remainingDue -= use;
-             paidAmount += use;
-             advancesToDeduct.push({ amount: use });
+            const use = Math.min(remainingDue, totalGeneralAdvance);
+            totalGeneralAdvance -= use;
+            remainingDue -= use;
+            paidAmount += use;
+            advancesToDeduct.push({ amount: use, chargeItemId });
           }
 
           let itemStatus: FeeStatus = FeeStatus.PENDING;
           if (paidAmount >= c.amount) itemStatus = FeeStatus.PAID;
           else if (paidAmount > 0) itemStatus = FeeStatus.PARTIAL;
 
-          chargeItemsData.push({
+          studentChargeItems.push({
+            id: chargeItemId,
             componentId: c.componentId,
             amount: c.amount,
             paidAmount: paidAmount,
-            status: itemStatus
+            status: itemStatus,
+          });
+
+          chargeItemsToCreate.push({
+            id: chargeItemId,
+            chargeId: chargeId,
+            componentId: c.componentId,
+            amount: c.amount,
+            paidAmount: paidAmount,
+            status: itemStatus,
           });
         }
 
-        if (chargeItemsData.length > 0) {
+        if (studentChargeItems.length > 0) {
           let chargeStatus: FeeStatus = FeeStatus.PENDING;
-          if (chargeItemsData.every(i => i.status === FeeStatus.PAID)) chargeStatus = FeeStatus.PAID;
-          else if (chargeItemsData.some(i => i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL)) chargeStatus = FeeStatus.PARTIAL;
+          if (studentChargeItems.every((i) => i.status === FeeStatus.PAID)) chargeStatus = FeeStatus.PAID;
+          else if (studentChargeItems.some((i) => i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL)) chargeStatus = FeeStatus.PARTIAL;
 
-          const createdCharge = await tx.feeCharge.create({
-            data: {
-              schoolId,
-              studentId: student.id,
-              sessionId,
-              title: monthTitle,
-              dueDate,
-              status: chargeStatus,
-              items: {
-                create: chargeItemsData
-              }
-            },
-            include: {
-              items: true,
-            }
+          chargesToCreate.push({
+            id: chargeId,
+            schoolId,
+            studentId: student.id,
+            sessionId,
+            title: monthTitle,
+            dueDate,
+            status: chargeStatus,
           });
 
-          // Insert negative advance ledger entries and create PaymentTransaction record for revenue consistency
+          // Insert negative advance ledger entries and create PaymentTransaction record
           if (advancesToDeduct.length > 0) {
             const totalAdjusted = advancesToDeduct.reduce((sum, d) => sum + d.amount, 0);
-            const receiptNo = `ADV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+            const receiptNo = `ADV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}-${Math.floor(100 + Math.random() * 900)}`;
+            const paymentId = createCuid();
 
-            const paymentTx = await tx.paymentTransaction.create({
-              data: {
-                schoolId,
-                studentId: student.id,
-                amount: totalAdjusted,
-                method: "OTHER",
-                reference: `Advance settlement for ${monthTitle}`,
-                receiptNo,
-                remarks: `Auto-settled from student advance balance for ${monthTitle}`,
-                status: "SUCCESS",
-              },
+            paymentsToCreate.push({
+              id: paymentId,
+              schoolId,
+              studentId: student.id,
+              amount: totalAdjusted,
+              method: "OTHER",
+              reference: `Advance settlement for ${monthTitle}`,
+              receiptNo,
+              remarks: `Auto-settled from student advance balance for ${monthTitle}`,
+              status: "SUCCESS",
             });
 
-            const allocations: { paymentId: string; chargeItemId: string; amount: number }[] = [];
             for (const deduction of advancesToDeduct) {
-              if (deduction.componentId) {
-                const item = createdCharge.items.find((i) => i.componentId === deduction.componentId);
-                if (item) {
-                  allocations.push({
-                    paymentId: paymentTx.id,
-                    chargeItemId: item.id,
-                    amount: deduction.amount,
-                  });
-                }
-              }
-            }
+              allocationsToCreate.push({
+                id: createCuid(),
+                paymentId: paymentId,
+                chargeItemId: deduction.chargeItemId,
+                amount: deduction.amount,
+              });
 
-            if (allocations.length > 0) {
-              await tx.paymentAllocation.createMany({ data: allocations });
-            }
-
-            for (const deduction of advancesToDeduct) {
-              await tx.advanceLedger.create({
-                data: {
-                  studentId: student.id,
-                  componentId: deduction.componentId || null,
-                  amount: -deduction.amount,
-                  description: `Auto-adjusted against generated fee: ${monthTitle}`,
-                },
+              advancesToCreate.push({
+                id: createCuid(),
+                studentId: student.id,
+                componentId: deduction.componentId || null,
+                amount: -deduction.amount,
+                description: `Auto-adjusted against generated fee: ${monthTitle}`,
               });
             }
           }
@@ -286,7 +294,25 @@ export async function processClassFeeGeneration(
           generatedCount++;
         }
       }
-    }, { maxWait: 10000, timeout: 30000 });
+
+      // Execute all bulk writes in 4 parallel/sequential single operations
+      if (chargesToCreate.length > 0) {
+        await tx.feeCharge.createMany({ data: chargesToCreate });
+        await tx.feeChargeItem.createMany({ data: chargeItemsToCreate });
+      }
+
+      if (paymentsToCreate.length > 0) {
+        await tx.paymentTransaction.createMany({ data: paymentsToCreate });
+      }
+
+      if (allocationsToCreate.length > 0) {
+        await tx.paymentAllocation.createMany({ data: allocationsToCreate });
+      }
+
+      if (advancesToCreate.length > 0) {
+        await tx.advanceLedger.createMany({ data: advancesToCreate });
+      }
+    }, { maxWait: 10000, timeout: 60000 });
 
     return { success: true, generatedCount };
   } catch (e: any) {
