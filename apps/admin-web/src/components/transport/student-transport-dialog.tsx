@@ -284,7 +284,18 @@ export function StudentTransportDialog({
               disabled={Boolean(initialEnrollment)}
               allowClear
               loading={isSearching}
+              getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+              dropdownStyle={{ maxHeight: 260, overflowY: "auto" }}
+              virtual={false}
               className="w-full h-10"
+              dropdownRender={(menu) => (
+                <div
+                  onWheel={(e) => e.stopPropagation()}
+                  style={{ maxHeight: 260, overflowY: "auto" }}
+                >
+                  {menu}
+                </div>
+              )}
               notFoundContent={
                 isSearching ? (
                   <div className="flex items-center justify-center gap-2 p-3 text-xs text-muted-foreground">

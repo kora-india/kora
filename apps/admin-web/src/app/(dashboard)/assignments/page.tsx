@@ -17,10 +17,19 @@ export default async function AssignmentsPage() {
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
       where: { userId: user.id, schoolId: schoolId },
-      select: { assignedClassId: true },
+      include: {
+        assignedSections: true,
+        classTeacherOf: { select: { id: true } },
+      },
     });
-    if (teacher?.assignedClassId) {
-      classFilter = { schoolId: schoolId, classId: teacher.assignedClassId };
+    if (teacher) {
+      const secClassIds = teacher.assignedSections.map((as) => as.classId);
+      const ctClassIds = teacher.classTeacherOf.map((ct) => ct.id);
+      const legacyClassId = teacher.assignedClassId ? [teacher.assignedClassId] : [];
+      const assignedClassIds = Array.from(new Set([...secClassIds, ...ctClassIds, ...legacyClassId]));
+      if (assignedClassIds.length > 0) {
+        classFilter = { schoolId: schoolId, classId: { in: assignedClassIds } };
+      }
     }
   }
 

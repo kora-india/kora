@@ -52,6 +52,7 @@ model School {
   vehicles         Vehicle[]
   transportRoutes  TransportRoute[]
   studentTransports StudentTransport[]
+  teacherSections  TeacherSection[]
 
   @@map("schools")
 }
@@ -116,6 +117,8 @@ model Class {
   schoolId           String
   name               String
   grade              Int
+  classTeacherId     String?
+  classTeacher       Teacher?            @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   assignments        Assignment[]
@@ -125,25 +128,28 @@ model Class {
   fees               Fee[]
   sections           Section[]
   students           Student[]
-  teachers           Teacher[]
+  teachers           Teacher[]           @relation("LegacyAssignedClass")
+  teacherSections    TeacherSection[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
+  @@index([classTeacherId])
   @@map("classes")
 }
 
 model Section {
-  id          String       @id @default(cuid())
-  schoolId    String
-  classId     String
-  name        String
-  createdAt   DateTime     @default(now())
-  assignments Assignment[]
-  attendances Attendance[]
-  class       Class        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  students    Student[]
-  teachers    Teacher[]
+  id              String           @id @default(cuid())
+  schoolId        String
+  classId         String
+  name            String
+  createdAt       DateTime         @default(now())
+  assignments     Assignment[]
+  attendances     Attendance[]
+  class           Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students        Student[]
+  teachers        Teacher[]        @relation("LegacyAssignedSection")
+  teacherSections TeacherSection[]
 
   @@unique([classId, name])
   @@index([schoolId])
@@ -191,30 +197,53 @@ model Student {
 }
 
 model Teacher {
-  id                String       @id @default(cuid())
+  id                String           @id @default(cuid())
   schoolId          String
-  userId            String       @unique
+  userId            String           @unique
   name              String
   email             String
   phone             String?
   subject           String
   qualification     String?
-  salary            Decimal?     @db.Decimal(10, 2)
+  salary            Decimal?         @db.Decimal(10, 2)
   joiningDate       DateTime?
   assignedClassId   String?
   assignedSectionId String?
-  isActive          Boolean      @default(true)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   assignments       Assignment[]
-  assignedClass     Class?       @relation(fields: [assignedClassId], references: [id])
-  assignedSection   Section?     @relation(fields: [assignedSectionId], references: [id])
-  school            School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedClass     Class?           @relation("LegacyAssignedClass", fields: [assignedClassId], references: [id])
+  assignedSection   Section?         @relation("LegacyAssignedSection", fields: [assignedSectionId], references: [id])
+  classTeacherOf    Class[]          @relation("ClassTeacher")
+  assignedSections  TeacherSection[]
+  school            School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
   @@index([assignedClassId])
   @@map("teachers")
+}
+
+model TeacherSection {
+  id        String   @id @default(cuid())
+  schoolId  String
+  teacherId String
+  classId   String
+  sectionId String
+  createdAt DateTime @default(now())
+
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classId, sectionId])
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([classId])
+  @@index([sectionId])
+  @@map("teacher_sections")
 }
 
 model Staff {

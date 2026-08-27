@@ -16,6 +16,7 @@ import {
   IndianRupee,
   Calendar,
   Filter,
+  Award,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -360,17 +361,41 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                 </div>
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t">
-                {t.assignedClass?.name && (
+              <div className="space-y-2 pt-2 border-t">
+                {t.classTeacherOf && t.classTeacherOf.length > 0 && (
                   <div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+                      <Award className="w-3 h-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                      Class Teacher: {t.classTeacherOf.map((c: any) => c.name).join(", ")}
+                    </span>
+                  </div>
+                )}
+
+                {t.assignedSections && t.assignedSections.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 items-center">
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-0.5">
+                      <GraduationCap className="w-3 h-3" /> Classes:
+                    </span>
+                    {t.assignedSections.map((as: any) => (
+                      <span
+                        key={as.id || `${as.classId}-${as.sectionId}`}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800"
+                      >
+                        {as.class?.name || "Class"} · {as.section?.name || "Sec"}
+                      </span>
+                    ))}
+                  </div>
+                ) : t.assignedClass?.name ? (
+                  <div>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
                       <GraduationCap className="w-2.5 h-2.5" />
                       Class: {t.assignedClass.name} · {t.assignedSection?.name ?? "—"}
                     </span>
                   </div>
-                )}
+                ) : null}
+
                 {t.joiningDate && (
-                  <p className="text-[10px] text-muted-foreground flex items-center justify-between">
+                  <p className="text-[10px] text-muted-foreground flex items-center justify-between pt-0.5">
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" /> Joined:
                     </span>

@@ -18,6 +18,15 @@ export default async function TeachersPage() {
     include: {
       assignedClass: { select: { name: true } },
       assignedSection: { select: { name: true } },
+      assignedSections: {
+        include: {
+          class: { select: { id: true, name: true } },
+          section: { select: { id: true, name: true } },
+        },
+      },
+      classTeacherOf: {
+        select: { id: true, name: true },
+      },
     },
     orderBy: { name: "asc" },
     take: 500,

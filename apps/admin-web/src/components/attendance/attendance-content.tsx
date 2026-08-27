@@ -22,6 +22,8 @@ interface Props {
   userId: string;
   assignedClassId?: string | null;
   assignedSectionId?: string | null;
+  assignedClassIds?: string[];
+  assignedSectionIds?: string[];
 }
 
 const STATUS_CONFIG = {
@@ -38,11 +40,13 @@ export function AttendanceContent({
   userRole,
   assignedClassId,
   assignedSectionId,
+  assignedClassIds = [],
+  assignedSectionIds = [],
 }: Readonly<Props>) {
   const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
 
-  const [selectedClassId, setSelectedClassId] = useState(assignedClassId ?? "");
+  const [selectedClassId, setSelectedClassId] = useState(assignedClassId ?? (classes[0]?.id || ""));
   const [selectedSectionId, setSelectedSectionId] = useState(assignedSectionId ?? "");
   const [selectedDate, setSelectedDate] = useState(today);
   const [students, setStudents] = useState<Student[]>([]);
@@ -51,11 +55,22 @@ export function AttendanceContent({
   const [saving, setSaving] = useState(false);
 
   const isTeacher = userRole === "TEACHER";
-  const availableClasses = isTeacher && assignedClassId
-    ? classes.filter((c) => c.id === assignedClassId)
+  const teacherClassIds = assignedClassIds.length > 0
+    ? assignedClassIds
+    : (assignedClassId ? [assignedClassId] : []);
+
+  const availableClasses = isTeacher && teacherClassIds.length > 0
+    ? classes.filter((c) => teacherClassIds.includes(c.id))
     : classes;
 
-  const sections = classes.find((c) => c.id === selectedClassId)?.sections ?? [];
+  const teacherSecIds = assignedSectionIds.length > 0
+    ? assignedSectionIds
+    : (assignedSectionId ? [assignedSectionId] : []);
+
+  const allSectionsForClass = classes.find((c) => c.id === selectedClassId)?.sections ?? [];
+  const sections = isTeacher && teacherSecIds.length > 0
+    ? allSectionsForClass.filter((s) => teacherSecIds.includes(s.id))
+    : allSectionsForClass;
 
   const totalPresent = todayRecords.filter((r) => r.status === "PRESENT").reduce((a, r) => a + r._count.id, 0);
   const totalAbsent = todayRecords.filter((r) => r.status === "ABSENT").reduce((a, r) => a + r._count.id, 0);
@@ -159,7 +174,7 @@ export function AttendanceContent({
               aria-label="Select class"
               value={selectedClassId}
               onChange={(e) => { setSelectedClassId(e.target.value); setSelectedSectionId(""); setStudents([]); }}
-              disabled={isTeacher && !!assignedClassId}
+              disabled={isTeacher && availableClasses.length === 1}
               className="h-8 px-2 rounded-lg border bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Select class</option>
@@ -169,7 +184,7 @@ export function AttendanceContent({
               aria-label="Select section"
               value={selectedSectionId}
               onChange={(e) => { setSelectedSectionId(e.target.value); setStudents([]); }}
-              disabled={!selectedClassId || (isTeacher && !!assignedSectionId)}
+              disabled={!selectedClassId || (isTeacher && sections.length === 1)}
               className="h-8 px-2 rounded-lg border bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Select section</option>

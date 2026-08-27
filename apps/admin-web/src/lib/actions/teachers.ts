@@ -19,6 +19,7 @@ const TeacherSchema = z.object({
   joiningDate: z.string().optional().nullable(),
   assignedClassId: z.string().optional().nullable(),
   assignedSectionId: z.string().optional().nullable(),
+  assignedSectionIds: z.array(z.string()).optional().default([]),
 });
 
 async function getAdminSession() {
@@ -47,7 +48,7 @@ export async function createTeacher(data: unknown) {
     return { error: planLimitMessage("teachers", limit.current, limit.max, limit.plan) };
   }
 
-  const { assignedClassId, assignedSectionId, salary, joiningDate, ...rest } = parsed.data;
+  const { assignedClassId, assignedSectionId, assignedSectionIds, salary, joiningDate, ...rest } = parsed.data;
 
   try {
     const tempPassword = generateTempPassword();
@@ -65,6 +66,17 @@ export async function createTeacher(data: unknown) {
         },
       });
 
+      // Resolve sections
+      const sectionRecords = assignedSectionIds && assignedSectionIds.length > 0
+        ? await tx.section.findMany({
+            where: { id: { in: assignedSectionIds }, schoolId: user.schoolId },
+            select: { id: true, classId: true },
+          })
+        : [];
+
+      const primaryClassId = sectionRecords[0]?.classId || assignedClassId || null;
+      const primarySectionId = sectionRecords[0]?.id || assignedSectionId || null;
+
       const teacher = await tx.teacher.create({
         data: {
           ...rest,
@@ -74,16 +86,29 @@ export async function createTeacher(data: unknown) {
           joiningDate: joiningDate ? new Date(joiningDate) : null,
           schoolId: user.schoolId,
           userId: newUser.id,
-          assignedClassId: assignedClassId || null,
-          assignedSectionId: assignedSectionId || null,
+          assignedClassId: primaryClassId,
+          assignedSectionId: primarySectionId,
         },
       });
+
+      if (sectionRecords.length > 0) {
+        await tx.teacherSection.createMany({
+          data: sectionRecords.map((s) => ({
+            schoolId: user.schoolId,
+            teacherId: teacher.id,
+            classId: s.classId,
+            sectionId: s.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
 
       return teacher;
     });
 
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/teachers");
+    revalidatePath("/attendance");
     revalidatePath("/dashboard");
     return { success: true, id: result.id, tempPassword };
   } catch (e: any) {
@@ -99,7 +124,7 @@ export async function updateTeacher(id: string, data: unknown) {
   const parsed = TeacherSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { assignedClassId, assignedSectionId, salary, joiningDate, ...rest } = parsed.data;
+  const { assignedClassId, assignedSectionId, assignedSectionIds, salary, joiningDate, ...rest } = parsed.data;
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -113,6 +138,17 @@ export async function updateTeacher(id: string, data: unknown) {
         data: { name: rest.name, email: rest.email, phone: rest.phone || null },
       });
 
+      // Resolve sections
+      const sectionRecords = assignedSectionIds && assignedSectionIds.length > 0
+        ? await tx.section.findMany({
+            where: { id: { in: assignedSectionIds }, schoolId: user.schoolId },
+            select: { id: true, classId: true },
+          })
+        : [];
+
+      const primaryClassId = sectionRecords[0]?.classId || assignedClassId || null;
+      const primarySectionId = sectionRecords[0]?.id || assignedSectionId || null;
+
       await tx.teacher.update({
         where: { id },
         data: {
@@ -121,13 +157,31 @@ export async function updateTeacher(id: string, data: unknown) {
           qualification: rest.qualification || null,
           salary: salary ? salary : null,
           joiningDate: joiningDate ? new Date(joiningDate) : null,
-          assignedClassId: assignedClassId || null,
-          assignedSectionId: assignedSectionId || null,
+          assignedClassId: primaryClassId,
+          assignedSectionId: primarySectionId,
         },
       });
+
+      // Replace TeacherSection rows
+      await tx.teacherSection.deleteMany({
+        where: { teacherId: id, schoolId: user.schoolId },
+      });
+
+      if (sectionRecords.length > 0) {
+        await tx.teacherSection.createMany({
+          data: sectionRecords.map((s) => ({
+            schoolId: user.schoolId,
+            teacherId: id,
+            classId: s.classId,
+            sectionId: s.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
     });
 
     revalidatePath("/teachers");
+    revalidatePath("/attendance");
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

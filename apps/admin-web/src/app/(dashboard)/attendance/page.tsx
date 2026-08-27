@@ -17,14 +17,29 @@ export default async function AttendancePage() {
 
   let assignedClassId: string | null = null;
   let assignedSectionId: string | null = null;
+  let assignedClassIds: string[] = [];
+  let assignedSectionIds: string[] = [];
 
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
       where: { userId: user.id, schoolId: schoolId },
-      select: { assignedClassId: true, assignedSectionId: true },
+      include: {
+        assignedSections: true,
+        classTeacherOf: { select: { id: true } },
+      },
     });
-    assignedClassId = teacher?.assignedClassId ?? null;
-    assignedSectionId = teacher?.assignedSectionId ?? null;
+    if (teacher) {
+      const secClassIds = teacher.assignedSections.map((as) => as.classId);
+      const ctClassIds = teacher.classTeacherOf.map((ct) => ct.id);
+      const legacyClassId = teacher.assignedClassId ? [teacher.assignedClassId] : [];
+      assignedClassIds = Array.from(new Set([...secClassIds, ...ctClassIds, ...legacyClassId]));
+      assignedSectionIds = teacher.assignedSections.map((as) => as.sectionId);
+      if (teacher.assignedSectionId) assignedSectionIds.push(teacher.assignedSectionId);
+      assignedSectionIds = Array.from(new Set(assignedSectionIds));
+
+      assignedClassId = assignedClassIds[0] ?? null;
+      assignedSectionId = assignedSectionIds[0] ?? null;
+    }
   }
 
   const todayRecords = await prisma.attendance.groupBy({
@@ -90,6 +105,8 @@ export default async function AttendancePage() {
       userId={user.id}
       assignedClassId={assignedClassId}
       assignedSectionId={assignedSectionId}
+      assignedClassIds={assignedClassIds}
+      assignedSectionIds={assignedSectionIds}
     />
   );
 }

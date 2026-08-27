@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Pencil, Trash2, BookOpen, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, Loader2, Award } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Select } from "antd";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
@@ -16,6 +17,7 @@ import { createClass, updateClass, deleteClass, createSection, deleteSection } f
 const ClassSchema = z.object({
   name: z.string().min(1, "Required"),
   grade: z.coerce.number().min(1).max(13),
+  classTeacherId: z.string().optional().nullable(),
 });
 const SectionSchema = z.object({
   name: z.string().min(1, "Required"),
@@ -26,27 +28,34 @@ type SectionForm = z.infer<typeof SectionSchema>;
 
 interface Props {
   classes: any[];
+  teachers?: any[];
 }
 
-export function ClassesContent({ classes }: Readonly<Props>) {
+export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   const router = useRouter();
   const [classDialog, setClassDialog] = useState<"closed" | "create" | "edit">("closed");
   const [sectionDialog, setSectionDialog] = useState<string | null>(null);
   const [editClass, setEditClass] = useState<any>(null);
   const [deleteClassTarget, setDeleteClassTarget] = useState<any>(null);
   const [deleteSectionTarget, setDeleteSectionTarget] = useState<any>(null);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
 
   const classForm = useForm<ClassForm>({ resolver: zodResolver(ClassSchema) });
   const sectionForm = useForm<SectionForm>({ resolver: zodResolver(SectionSchema) });
 
   const onSubmitClass = async (data: ClassForm) => {
+    const payload = {
+      ...data,
+      classTeacherId: selectedClassTeacherId || null,
+    };
     const result = editClass
-      ? await updateClass(editClass.id, data)
-      : await createClass(data);
+      ? await updateClass(editClass.id, payload)
+      : await createClass(payload);
     if (result.error) { toast.error(result.error); return; }
     toast.success(editClass ? "Class updated" : "Class created");
     setClassDialog("closed");
     setEditClass(null);
+    setSelectedClassTeacherId(null);
     classForm.reset();
     router.refresh();
   };
@@ -75,8 +84,16 @@ export function ClassesContent({ classes }: Readonly<Props>) {
 
   const openEditClass = (cls: any) => {
     setEditClass(cls);
-    classForm.reset({ name: cls.name, grade: cls.grade });
+    setSelectedClassTeacherId(cls.classTeacherId ?? null);
+    classForm.reset({ name: cls.name, grade: cls.grade, classTeacherId: cls.classTeacherId ?? "" });
     setClassDialog("edit");
+  };
+
+  const openCreateClass = () => {
+    setEditClass(null);
+    setSelectedClassTeacherId(null);
+    classForm.reset({ name: "", grade: 1, classTeacherId: "" });
+    setClassDialog("create");
   };
 
   return (
@@ -88,7 +105,7 @@ export function ClassesContent({ classes }: Readonly<Props>) {
         </div>
         <button
           type="button"
-          onClick={() => { classForm.reset({ name: "", grade: 1 }); setEditClass(null); setClassDialog("create"); }}
+          onClick={openCreateClass}
           className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Class
@@ -101,36 +118,50 @@ export function ClassesContent({ classes }: Readonly<Props>) {
             key={cls.id}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { delay: i * 0.05 } }}
-            className="rounded-xl border bg-card p-5 hover:shadow-md transition-shadow"
+            className="rounded-xl border bg-card p-5 hover:shadow-md transition-shadow flex flex-col justify-between"
           >
-            <div className="flex items-start justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-bold text-violet-700 dark:text-violet-300 text-sm flex-shrink-0">
-                {cls.grade}
+            <div>
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-bold text-violet-700 dark:text-violet-300 text-sm flex-shrink-0">
+                  {cls.grade}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    aria-label="Edit class"
+                    onClick={() => openEditClass(cls)}
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete class"
+                    onClick={() => setDeleteClassTarget(cls)}
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  aria-label="Edit class"
-                  onClick={() => openEditClass(cls)}
-                  className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Delete class"
-                  onClick={() => setDeleteClassTarget(cls)}
-                  className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                </button>
+
+              <p className="text-sm font-semibold">{cls.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{cls._count?.students ?? 0} students</p>
+
+              <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Award className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span>
+                  Class Teacher:{" "}
+                  {cls.classTeacher?.name ? (
+                    <strong className="text-foreground font-medium">{cls.classTeacher.name}</strong>
+                  ) : (
+                    <span className="italic text-muted-foreground/80">Unassigned</span>
+                  )}
+                </span>
               </div>
             </div>
 
-            <p className="text-sm font-semibold">{cls.name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{cls._count?.students ?? 0} students</p>
-
-            <div className="flex gap-1.5 mt-3 flex-wrap">
+            <div className="flex gap-1.5 mt-4 flex-wrap pt-3 border-t">
               {cls.sections.map((s: any) => (
                 <div key={s.id} className="group flex items-center gap-1">
                   <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-800 px-2 py-0.5 rounded-full font-medium">
@@ -168,7 +199,7 @@ export function ClassesContent({ classes }: Readonly<Props>) {
             </p>
             <button
               type="button"
-              onClick={() => { classForm.reset({ name: "", grade: 1 }); setEditClass(null); setClassDialog("create"); }}
+              onClick={openCreateClass}
               className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" /> Add Class
@@ -182,7 +213,7 @@ export function ClassesContent({ classes }: Readonly<Props>) {
         open={classDialog !== "closed"}
         onOpenChange={(open) => { if (!open) { setClassDialog("closed"); setEditClass(null); } }}
         title={editClass ? "Edit Class" : "Create New Class"}
-        className="max-w-sm"
+        className="max-w-md"
       >
         <form onSubmit={classForm.handleSubmit(onSubmitClass)} className="space-y-4">
           <FormField label="Class Name" error={classForm.formState.errors.name?.message} required>
@@ -190,6 +221,35 @@ export function ClassesContent({ classes }: Readonly<Props>) {
           </FormField>
           <FormField label="Grade (1–13)" error={classForm.formState.errors.grade?.message} required>
             <input {...classForm.register("grade")} type="number" min={1} max={13} className={inputCls} />
+          </FormField>
+          <FormField label="Class Teacher (Optional)">
+            <Select
+              allowClear
+              placeholder="Select Class Teacher"
+              value={selectedClassTeacherId || undefined}
+              onChange={(val) => {
+                setSelectedClassTeacherId(val || null);
+                classForm.setValue("classTeacherId", val || "");
+              }}
+              options={teachers.map((t) => ({
+                label: `${t.name} (${t.email})`,
+                value: t.id,
+              }))}
+              getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+              dropdownStyle={{ maxHeight: 260, overflowY: "auto" }}
+              virtual={false}
+              className="w-full"
+              style={{ width: "100%" }}
+              size="large"
+              dropdownRender={(menu) => (
+                <div
+                  onWheel={(e) => e.stopPropagation()}
+                  style={{ maxHeight: 260, overflowY: "auto" }}
+                >
+                  {menu}
+                </div>
+              )}
+            />
           </FormField>
           <div className="flex gap-2 justify-end pt-1">
             <button type="button" onClick={() => setClassDialog("closed")} className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors">Cancel</button>

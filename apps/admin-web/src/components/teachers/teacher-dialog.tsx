@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Select } from "antd";
 import { Dialog } from "@/components/ui/dialog";
-import { FormField, inputCls, selectCls } from "@/components/ui/form-field";
+import { FormField, inputCls } from "@/components/ui/form-field";
 import { createTeacher, updateTeacher } from "@/lib/actions/teachers";
 
 const Schema = z.object({
@@ -19,8 +20,6 @@ const Schema = z.object({
   qualification: z.string().optional(),
   salary: z.coerce.number().min(0).optional().nullable(),
   joiningDate: z.string().optional().nullable(),
-  assignedClassId: z.string().optional(),
-  assignedSectionId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof Schema>;
@@ -37,16 +36,28 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
   const isEdit = !!teacher;
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [showTempPassword, setShowTempPassword] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
 
-  const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(Schema),
   });
 
-  const selectedClassId = watch("assignedClassId");
-  const sections = classes.find((c) => c.id === selectedClassId)?.sections ?? [];
+  const groupedSectionOptions = useMemo(() => {
+    return classes.map((c) => ({
+      label: c.name,
+      options: (c.sections || []).map((s) => ({
+        label: `${c.name} · Section ${s.name}`,
+        value: s.id,
+      })),
+    }));
+  }, [classes]);
 
   useEffect(() => {
     if (teacher) {
+      const initialSectionIds: string[] = teacher.assignedSections?.map((as: any) => as.sectionId) ??
+        (teacher.assignedSectionId ? [teacher.assignedSectionId] : []);
+      setSelectedSectionIds(initialSectionIds);
+
       reset({
         name: teacher.name,
         email: teacher.email,
@@ -55,10 +66,9 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
         qualification: teacher.qualification ?? "",
         salary: teacher.salary ? Number(teacher.salary) : undefined,
         joiningDate: teacher.joiningDate ? new Date(teacher.joiningDate).toISOString().split("T")[0] : "",
-        assignedClassId: teacher.assignedClassId ?? "",
-        assignedSectionId: teacher.assignedSectionId ?? "",
       });
     } else {
+      setSelectedSectionIds([]);
       reset({
         name: "",
         email: "",
@@ -67,15 +77,18 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
         qualification: "",
         salary: undefined,
         joiningDate: new Date().toISOString().split("T")[0],
-        assignedClassId: "",
-        assignedSectionId: "",
       });
     }
   }, [teacher, open, reset]);
 
   const onSubmit = async (data: FormData) => {
+    const payload = {
+      ...data,
+      assignedSectionIds: selectedSectionIds,
+    };
+
     if (isEdit) {
-      const result = await updateTeacher(teacher.id, data);
+      const result = await updateTeacher(teacher.id, payload);
       if (result.error) { toast.error(result.error); return; }
       toast.success("Teacher updated");
       onOpenChange(false);
@@ -83,7 +96,7 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
       return;
     }
 
-    const result = await createTeacher(data);
+    const result = await createTeacher(payload);
     if (result.error || !result.tempPassword) { toast.error(result.error ?? "Failed to create teacher"); return; }
     setTempPassword(result.tempPassword);
     setShowTempPassword(false);
@@ -153,6 +166,7 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
       onOpenChange={onOpenChange}
       title={isEdit ? "Edit Teacher" : "Add New Teacher"}
       description={isEdit ? "Update teacher details" : "A login account will be created with a temporary password"}
+      className="max-w-xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -184,22 +198,35 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
             <input {...register("joiningDate")} type="date" className={inputCls} />
           </FormField>
 
-          <FormField label="Assigned Class" error={errors.assignedClassId?.message}>
-            <select {...register("assignedClassId")} className={selectCls}>
-              <option value="">No class assigned</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </FormField>
-
-          <FormField label="Assigned Section" error={errors.assignedSectionId?.message}>
-            <select {...register("assignedSectionId")} className={selectCls} disabled={!selectedClassId}>
-              <option value="">No section assigned</option>
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+          <FormField label="Assigned Classes & Sections" className="col-span-2">
+            <div className="w-full mt-1">
+              <Select
+                mode="multiple"
+                allowClear
+                placeholder="Select classes and sections taught by this teacher"
+                value={selectedSectionIds}
+                onChange={setSelectedSectionIds}
+                options={groupedSectionOptions}
+                getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                dropdownStyle={{ maxHeight: 260, overflowY: "auto" }}
+                virtual={false}
+                className="w-full ant-select-custom"
+                style={{ width: "100%" }}
+                size="large"
+                maxTagCount="responsive"
+                dropdownRender={(menu) => (
+                  <div
+                    onWheel={(e) => e.stopPropagation()}
+                    style={{ maxHeight: 260, overflowY: "auto" }}
+                  >
+                    {menu}
+                  </div>
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                You can assign this teacher to multiple classes and sections.
+              </p>
+            </div>
           </FormField>
         </div>
 

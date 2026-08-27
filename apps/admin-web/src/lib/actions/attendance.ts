@@ -41,10 +41,19 @@ export async function markAttendance(data: unknown) {
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
       where: { userId: user.id, schoolId: user.schoolId },
+      include: {
+        assignedSections: true,
+        classTeacherOf: { select: { id: true } },
+      },
     });
     if (!teacher) return { error: "Teacher record not found" };
-    if (teacher.assignedClassId !== classId || teacher.assignedSectionId !== sectionId) {
-      return { error: "You can only mark attendance for your assigned class" };
+
+    const isDirectMatch = teacher.assignedClassId === classId && (!teacher.assignedSectionId || teacher.assignedSectionId === sectionId);
+    const isSectionMatch = teacher.assignedSections.some((as) => as.classId === classId && as.sectionId === sectionId);
+    const isClassTeacher = teacher.classTeacherOf.some((ct) => ct.id === classId);
+
+    if (!isDirectMatch && !isSectionMatch && !isClassTeacher) {
+      return { error: "You can only mark attendance for your assigned classes and sections" };
     }
   }
 

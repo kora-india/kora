@@ -42,22 +42,42 @@ export async function createAssignment(data: unknown) {
     if (user.role === "TEACHER") {
       teacherId = await resolveTeacherId(user.id, user.schoolId);
       if (!teacherId) return { error: "Teacher record not found" };
-      const teacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
-      if (teacher?.assignedClassId !== parsed.data.classId) {
-        return { error: "You can only create assignments for your assigned class" };
-      }
-    } else {
-      const classTeacher = await prisma.teacher.findFirst({
-        where: {
-          schoolId: user.schoolId,
-          assignedClassId: parsed.data.classId,
-          assignedSectionId: parsed.data.sectionId,
+      const teacher = await prisma.teacher.findUnique({
+        where: { id: teacherId },
+        include: {
+          assignedSections: true,
+          classTeacherOf: { select: { id: true } },
         },
       });
-      if (!classTeacher) {
-        return { error: "No teacher is assigned to this class and section yet. Assign one first." };
+      const isDirectMatch = teacher?.assignedClassId === parsed.data.classId;
+      const isSectionMatch = teacher?.assignedSections.some((as) => as.classId === parsed.data.classId && (!parsed.data.sectionId || as.sectionId === parsed.data.sectionId));
+      const isClassTeacher = teacher?.classTeacherOf.some((ct) => ct.id === parsed.data.classId);
+
+      if (!isDirectMatch && !isSectionMatch && !isClassTeacher) {
+        return { error: "You can only create assignments for your assigned classes" };
       }
-      teacherId = classTeacher.id;
+    } else {
+      const cls = await prisma.class.findUnique({
+        where: { id: parsed.data.classId },
+        select: { classTeacherId: true },
+      });
+      if (cls?.classTeacherId) {
+        teacherId = cls.classTeacherId;
+      } else {
+        const assignedTeacher = await prisma.teacher.findFirst({
+          where: {
+            schoolId: user.schoolId,
+            OR: [
+              { assignedSections: { some: { classId: parsed.data.classId, sectionId: parsed.data.sectionId } } },
+              { assignedClassId: parsed.data.classId },
+            ],
+          },
+        });
+        if (!assignedTeacher) {
+          return { error: "No teacher is assigned to this class and section yet. Assign one first." };
+        }
+        teacherId = assignedTeacher.id;
+      }
     }
 
     const assignment = await prisma.assignment.create({

@@ -10,6 +10,7 @@ import { invalidateCache } from "@/lib/redis";
 const ClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
   grade: z.coerce.number().min(1).max(13),
+  classTeacherId: z.string().optional().nullable(),
 });
 
 const SectionSchema = z.object({
@@ -40,13 +41,19 @@ export async function createClass(data: unknown) {
 
   try {
     const cls = await prisma.class.create({
-      data: { ...parsed.data, schoolId: user.schoolId },
+      data: {
+        name: parsed.data.name,
+        grade: parsed.data.grade,
+        classTeacherId: parsed.data.classTeacherId || null,
+        schoolId: user.schoolId,
+      },
     });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/classes");
     revalidatePath("/fees");
     revalidatePath("/students");
+    revalidatePath("/teachers");
     revalidatePath("/dashboard");
     return { success: true, id: cls.id };
   } catch (e: any) {
@@ -65,12 +72,17 @@ export async function updateClass(id: string, data: unknown) {
   try {
     await prisma.class.update({
       where: { id, schoolId: user.schoolId },
-      data: parsed.data,
+      data: {
+        name: parsed.data.name,
+        grade: parsed.data.grade,
+        classTeacherId: parsed.data.classTeacherId || null,
+      },
     });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
     revalidatePath("/fees");
     revalidatePath("/students");
+    revalidatePath("/teachers");
     return { success: true };
   } catch (e: any) {
     if (e.code === "P2002") return { error: "A class with this name already exists" };
