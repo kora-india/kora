@@ -455,8 +455,9 @@ export function StudentFeeCollection({
                                 <tr className="text-muted-foreground border-b">
                                   <th className="text-left pb-1 font-medium">Charge</th>
                                   <th className="text-left pb-1 font-medium">Due Date</th>
-                                  <th className="text-right pb-1 font-medium">Amount</th>
-                                  <th className="text-right pb-1 font-medium">Due</th>
+                                  <th className="text-right pb-1 font-medium">Net Charge</th>
+                                  <th className="text-right pb-1 font-medium">Advance Paid</th>
+                                  <th className="text-right pb-1 font-medium">Payable</th>
                                   <th className="text-right pb-1 font-medium">Action</th>
                                 </tr>
                               </thead>
@@ -470,10 +471,13 @@ export function StudentFeeCollection({
                                         year: "numeric",
                                       })}
                                     </td>
-                                    <td className="py-1.5 text-right">
+                                    <td className="py-1.5 text-right font-medium">
                                       {formatCurrency(item.amount)}
                                     </td>
-                                    <td className="py-1.5 text-right font-semibold text-amber-600">
+                                    <td className="py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                      {formatCurrency(item.paidAmount)}
+                                    </td>
+                                    <td className={`py-1.5 text-right font-semibold ${item.due > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                                       {formatCurrency(item.due)}
                                     </td>
                                     <td className="py-1.5 text-right">

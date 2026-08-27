@@ -780,9 +780,9 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                                       <thead>
                                         <tr className="text-xs text-muted-foreground border-b border-muted">
                                           <th className="text-left font-medium pb-2">Component</th>
-                                          <th className="text-right font-medium pb-2">Amount</th>
-                                          <th className="text-right font-medium pb-2">Paid</th>
-                                          <th className="text-right font-medium pb-2">Due</th>
+                                          <th className="text-right font-medium pb-2">Net Charge</th>
+                                          <th className="text-right font-medium pb-2">Advance Paid</th>
+                                          <th className="text-right font-medium pb-2">Payable</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -793,9 +793,9 @@ export function StudentsContent({ students, classes, canEdit }: Readonly<Props>)
                                           return (
                                             <tr key={item.id} className="border-b border-muted/50 last:border-0">
                                               <td className="py-2 text-muted-foreground">{item.component?.name || 'Fee'}</td>
-                                              <td className="py-2 text-right">{formatCurrency(amt)}</td>
-                                              <td className="py-2 text-right text-emerald-600">{formatCurrency(paid)}</td>
-                                              <td className={`py-2 text-right font-medium ${due > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                                              <td className="py-2 text-right font-medium">{formatCurrency(amt)}</td>
+                                              <td className="py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">{formatCurrency(paid)}</td>
+                                              <td className={`py-2 text-right font-semibold ${due > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                                 {formatCurrency(due)}
                                               </td>
                                             </tr>
