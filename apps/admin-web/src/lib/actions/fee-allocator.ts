@@ -16,7 +16,8 @@ async function getFinanceSession() {
 
 export async function allocatePayment(data: {
   studentId: string;
-  componentPayments: { componentId: string; amount: number }[];
+  itemPayments?: { chargeItemId: string; amount: number }[];
+  componentPayments?: { componentId: string; amount: number }[];
   generalAdvanceAmount?: number;
   method: PaymentMethod;
   reference?: string;
@@ -25,7 +26,9 @@ export async function allocatePayment(data: {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
-  const totalPayment = data.componentPayments.reduce((sum, cp) => sum + cp.amount, 0) + (data.generalAdvanceAmount || 0);
+  const itemTotal = (data.itemPayments || []).reduce((sum, ip) => sum + ip.amount, 0);
+  const componentTotal = (data.componentPayments || []).reduce((sum, cp) => sum + cp.amount, 0);
+  const totalPayment = itemTotal + componentTotal + (data.generalAdvanceAmount || 0);
   if (totalPayment <= 0) return { error: "Payment amount must be greater than zero." };
 
   try {
@@ -49,39 +52,29 @@ export async function allocatePayment(data: {
       const allocationsCreated = [];
       const affectedChargeIds = new Set<string>();
 
-      // 2. Allocate component-wise payments
-      for (const cp of data.componentPayments) {
-        if (cp.amount <= 0) continue;
+      // 2. Allocate item-wise payments if provided
+      if (data.itemPayments && data.itemPayments.length > 0) {
+        for (const ip of data.itemPayments) {
+          if (ip.amount <= 0) continue;
 
-        let remainingAmount = cp.amount;
+          const item = await tx.feeChargeItem.findUnique({
+            where: { id: ip.chargeItemId },
+            include: { charge: true }
+          });
 
-        // Find all outstanding FeeChargeItems for this student and component
-        const items = await tx.feeChargeItem.findMany({
-          where: {
-            componentId: cp.componentId,
-            status: { in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE] },
-            charge: { studentId: data.studentId }
-          },
-          include: { charge: true },
-          orderBy: { charge: { dueDate: 'asc' } }
-        });
-
-        for (const item of items) {
-          if (remainingAmount <= 0) break;
+          if (!item || item.charge.studentId !== data.studentId) continue;
 
           const due = Number(item.amount) - Number(item.paidAmount);
-          if (due > 0) {
-            const allocAmount = Math.min(due, remainingAmount);
-            
+          const allocAmount = Math.min(due, ip.amount);
+          const surplus = Math.max(0, ip.amount - due);
+
+          if (allocAmount > 0) {
             allocationsCreated.push({
               paymentId: payment.id,
               chargeItemId: item.id,
               amount: allocAmount
             });
-            
-            remainingAmount -= allocAmount;
 
-            // Update item status
             const newPaidAmount = Number(item.paidAmount) + allocAmount;
             let newItemStatus = item.status;
             if (newPaidAmount >= Number(item.amount)) {
@@ -97,18 +90,82 @@ export async function allocatePayment(data: {
 
             affectedChargeIds.add(item.chargeId);
           }
-        }
 
-        // 3. Create component-specific advance if there's remaining amount
-        if (remainingAmount > 0) {
-          await tx.advanceLedger.create({
-            data: {
-              studentId: data.studentId,
+          if (surplus > 0) {
+            await tx.advanceLedger.create({
+              data: {
+                studentId: data.studentId,
+                componentId: item.componentId || null,
+                amount: surplus,
+                description: `Surplus Advance from payment ${receiptNo} for ${item.charge.title}`
+              }
+            });
+          }
+        }
+      }
+
+      // 3. Allocate component-wise payments if provided
+      if (data.componentPayments && data.componentPayments.length > 0) {
+        for (const cp of data.componentPayments) {
+          if (cp.amount <= 0) continue;
+
+          let remainingAmount = cp.amount;
+
+          // Find all outstanding FeeChargeItems for this student and component
+          const items = await tx.feeChargeItem.findMany({
+            where: {
               componentId: cp.componentId,
-              amount: remainingAmount,
-              description: `Component Advance from payment ${receiptNo}`
-            }
+              status: { in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE] },
+              charge: { studentId: data.studentId }
+            },
+            include: { charge: true },
+            orderBy: { charge: { dueDate: 'asc' } }
           });
+
+          for (const item of items) {
+            if (remainingAmount <= 0) break;
+
+            const due = Number(item.amount) - Number(item.paidAmount);
+            if (due > 0) {
+              const allocAmount = Math.min(due, remainingAmount);
+              
+              allocationsCreated.push({
+                paymentId: payment.id,
+                chargeItemId: item.id,
+                amount: allocAmount
+              });
+              
+              remainingAmount -= allocAmount;
+
+              // Update item status
+              const newPaidAmount = Number(item.paidAmount) + allocAmount;
+              let newItemStatus = item.status;
+              if (newPaidAmount >= Number(item.amount)) {
+                newItemStatus = FeeStatus.PAID;
+              } else if (newPaidAmount > 0) {
+                newItemStatus = FeeStatus.PARTIAL;
+              }
+
+              await tx.feeChargeItem.update({
+                where: { id: item.id },
+                data: { paidAmount: newPaidAmount, status: newItemStatus }
+              });
+
+              affectedChargeIds.add(item.chargeId);
+            }
+          }
+
+          // Create component-specific advance if there's remaining amount
+          if (remainingAmount > 0) {
+            await tx.advanceLedger.create({
+              data: {
+                studentId: data.studentId,
+                componentId: cp.componentId,
+                amount: remainingAmount,
+                description: `Component Advance from payment ${receiptNo}`
+              }
+            });
+          }
         }
       }
 
@@ -140,7 +197,7 @@ export async function allocatePayment(data: {
         let anyPaid = false;
         
         for (const item of items) {
-          if (item.status !== "PAID") allPaid = false;
+          if (item.status !== "PAID" && item.status !== "WAIVED") allPaid = false;
           if (item.status === "PAID" || item.status === "PARTIAL") anyPaid = true;
         }
 

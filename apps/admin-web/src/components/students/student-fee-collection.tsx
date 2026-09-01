@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import { allocatePayment, waiveFeeChargeItem } from "@/lib/actions/fee-allocator";
 import { toast } from "sonner";
@@ -11,10 +11,11 @@ import {
   ChevronUp,
   Loader2,
   Receipt,
-  CreditCard,
+  Calendar,
   Eye,
   ArrowUpRight,
   Bus,
+  Sparkles,
 } from "lucide-react";
 import { Select } from "antd";
 
@@ -31,21 +32,24 @@ export function StudentFeeCollection({
   onPaymentSuccess,
   onWaiveSuccess,
 }: Readonly<StudentFeeCollectionProps>) {
-  const [selectedComponents, setSelectedComponents] = useState<Record<string, boolean>>({});
-  const [componentPayments, setComponentPayments] = useState<Record<string, string>>({});
+  const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>({});
+  const [monthPayments, setMonthPayments] = useState<Record<string, string>>({});
+  const [itemPayments, setItemPayments] = useState<Record<string, string>>({});
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
   const [generalAdvance, setGeneralAdvance] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [expandedComponents, setExpandedComponents] = useState<Record<string, boolean>>({});
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
 
-  // Filter charges for this student
-  const studentCharges = (student?.feeCharges || []).filter(
-    (c: any) => c.status !== "WAIVED"
-  );
+  // Filter non-waived charges for this student sorted by due date
+  const studentCharges = useMemo(() => {
+    return (student?.feeCharges || [])
+      .filter((c: any) => c.status !== "WAIVED")
+      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [student?.feeCharges]);
 
   const advanceBalance =
     student?.advanceLedgers?.reduce(
@@ -53,155 +57,269 @@ export function StudentFeeCollection({
       0
     ) || 0;
 
-  // Group by component
-  const componentSummary: Record<string, any> = {};
-  let totalOutstanding = 0;
+  // Process month-wise charge records with their items
+  const { monthList, totalOutstanding } = useMemo(() => {
+    let overallOutstanding = 0;
 
-  for (const charge of studentCharges) {
-    for (const item of charge.items || []) {
-      const compId = item.componentId || item.id;
-      const compName = item.component?.name || "Fee";
-      const due =
-        item.status === "WAIVED"
-          ? 0
-          : Number(item.amount || 0) - Number(item.paidAmount || 0);
-      const isLateFee =
-        item.component?.category === "LATE_FEE" ||
-        compName.toLowerCase().includes("late");
+    const list = studentCharges.map((charge: any) => {
+      let monthNetCharge = 0;
+      let monthAdvancePaid = 0;
+      let monthTotalDue = 0;
 
-      if (!componentSummary[compId]) {
-        componentSummary[compId] = {
-          id: compId,
-          name: compName,
-          totalDue: 0,
-          items: [],
+      const items = (charge.items || []).map((item: any) => {
+        const amt = Number(item.amount || 0);
+        const paid = Number(item.paidAmount || 0);
+        const due = item.status === "WAIVED" ? 0 : Math.max(0, amt - paid);
+        const compName = item.component?.name || "Fee";
+        const isLateFee =
+          item.component?.category === "LATE_FEE" ||
+          compName.toLowerCase().includes("late");
+
+        monthNetCharge += amt;
+        monthAdvancePaid += paid;
+        monthTotalDue += due;
+
+        return {
+          id: item.id,
+          componentId: item.componentId,
+          componentName: compName,
+          amount: amt,
+          paidAmount: paid,
+          due,
+          status:
+            item.status === "WAIVED"
+              ? "WAIVED"
+              : due <= 0
+              ? "PAID"
+              : paid > 0
+              ? "PARTIAL"
+              : "PENDING",
+          isLateFee,
         };
-      }
-
-      componentSummary[compId].items.push({
-        id: item.id,
-        chargeTitle: charge.title,
-        dueDate: charge.dueDate,
-        amount: Number(item.amount),
-        paidAmount: Number(item.paidAmount),
-        due: due,
-        status:
-          item.status === "WAIVED"
-            ? "WAIVED"
-            : due <= 0
-            ? "PAID"
-            : Number(item.paidAmount) > 0
-            ? "PARTIAL"
-            : "PENDING",
-        isLateFee,
       });
 
-      if (due > 0) {
-        componentSummary[compId].totalDue += due;
-        totalOutstanding += due;
+      overallOutstanding += monthTotalDue;
+
+      return {
+        id: charge.id,
+        title: charge.title,
+        dueDate: charge.dueDate,
+        status: charge.status,
+        netCharge: monthNetCharge,
+        advancePaid: monthAdvancePaid,
+        totalDue: monthTotalDue,
+        items,
+      };
+    });
+
+    const activeMonths = list.filter((m: any) => m.totalDue > 0);
+    return { monthList: activeMonths, totalOutstanding: overallOutstanding };
+  }, [studentCharges]);
+
+  // Handle Month Amount Change with Pro-Rata (Percentage) Auto-Distribution
+  const updateMonthPayment = (chargeId: string, amountStr: string) => {
+    const charge = monthList.find((m: any) => m.id === chargeId);
+    if (!charge) return;
+
+    setMonthPayments((prev) => ({ ...prev, [chargeId]: amountStr }));
+
+    const enteredAmount = Number(amountStr) || 0;
+
+    if (enteredAmount > 0) {
+      if (!selectedMonths[chargeId]) {
+        setSelectedMonths((prev) => ({ ...prev, [chargeId]: true }));
       }
+
+      const updatedItemAllocations: Record<string, string> = {};
+      const eligibleItems = charge.items.filter((it: any) => it.due > 0);
+
+      if (enteredAmount >= charge.totalDue) {
+        // If payment covers entire month due or more, allocate 100% to each item
+        for (const item of charge.items) {
+          if (item.due > 0) {
+            updatedItemAllocations[item.id] = item.due.toString();
+          } else {
+            updatedItemAllocations[item.id] = "";
+          }
+        }
+      } else if (charge.totalDue > 0 && eligibleItems.length > 0) {
+        // Pro-Rata (Percentage / Proportional) Split
+        let allocatedSum = 0;
+        const isIntegerPayment =
+          Number.isInteger(enteredAmount) &&
+          eligibleItems.every((it: any) => Number.isInteger(it.due));
+
+        eligibleItems.forEach((item: any, idx: number) => {
+          if (idx === eligibleItems.length - 1) {
+            // Last item receives remaining balance to ensure sum matches enteredAmount exactly
+            const remainingBalance = enteredAmount - allocatedSum;
+            const lastAlloc = Math.max(
+              0,
+              Math.min(
+                item.due,
+                Math.round(remainingBalance * 100) / 100
+              )
+            );
+            updatedItemAllocations[item.id] =
+              lastAlloc > 0
+                ? Number.isInteger(lastAlloc)
+                  ? lastAlloc.toString()
+                  : lastAlloc.toFixed(2)
+                : "";
+          } else {
+            const proportionalShare = (item.due / charge.totalDue) * enteredAmount;
+            const roundedAlloc = isIntegerPayment
+              ? Math.min(item.due, Math.round(proportionalShare))
+              : Math.min(item.due, Math.round(proportionalShare * 100) / 100);
+
+            allocatedSum += roundedAlloc;
+            updatedItemAllocations[item.id] =
+              roundedAlloc > 0 ? roundedAlloc.toString() : "";
+          }
+        });
+
+        // Set items with 0 due to empty
+        charge.items.forEach((item: any) => {
+          if (item.due <= 0) {
+            updatedItemAllocations[item.id] = "";
+          }
+        });
+      }
+
+      setItemPayments((prev) => ({ ...prev, ...updatedItemAllocations }));
+    } else {
+      setSelectedMonths((prev) => ({ ...prev, [chargeId]: false }));
+      const clearedItems: Record<string, string> = {};
+      charge.items.forEach((item: any) => {
+        clearedItems[item.id] = "";
+      });
+      setItemPayments((prev) => ({ ...prev, ...clearedItems }));
     }
-  }
+  };
 
-  const componentList = Object.values(componentSummary).filter(
-    (c) => c.totalDue > 0
-  );
+  // Handle manual fine-tuning of an individual item inside the uncollapsed month
+  const updateItemPayment = (chargeId: string, itemId: string, itemAmountStr: string) => {
+    const charge = monthList.find((m: any) => m.id === chargeId);
+    if (!charge) return;
 
-  const toggleComponent = (id: string, totalDue: number) => {
-    const isSelected = !selectedComponents[id];
-    setSelectedComponents((prev) => ({ ...prev, [id]: isSelected }));
+    const newItemPayments = { ...itemPayments, [itemId]: itemAmountStr };
+    setItemPayments(newItemPayments);
+
+    // Sum all item payments for this month
+    const totalForMonth = charge.items.reduce((sum: number, it: any) => {
+      const val = Number(newItemPayments[it.id]) || 0;
+      return sum + val;
+    }, 0);
+
+    setMonthPayments((prev) => ({
+      ...prev,
+      [chargeId]: totalForMonth > 0 ? totalForMonth.toString() : "",
+    }));
+
+    if (totalForMonth > 0) {
+      setSelectedMonths((prev) => ({ ...prev, [chargeId]: true }));
+    } else {
+      setSelectedMonths((prev) => ({ ...prev, [chargeId]: false }));
+    }
+  };
+
+  // Toggle single month checkbox
+  const toggleMonth = (chargeId: string, totalDue: number) => {
+    const isSelected = !selectedMonths[chargeId];
+    setSelectedMonths((prev) => ({ ...prev, [chargeId]: isSelected }));
 
     if (isSelected) {
-      setComponentPayments((prev) => ({ ...prev, [id]: totalDue.toString() }));
+      updateMonthPayment(chargeId, totalDue.toString());
     } else {
-      setComponentPayments((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      updateMonthPayment(chargeId, "");
     }
   };
 
-  const selectAllComponents = () => {
+  // Select / Deselect All Months
+  const selectAllMonths = () => {
     const allSelected =
-      componentList.length > 0 &&
-      componentList.every((c) => selectedComponents[c.id]);
+      monthList.length > 0 && monthList.every((m: any) => selectedMonths[m.id]);
 
     if (allSelected) {
-      setSelectedComponents({});
-      setComponentPayments({});
+      setSelectedMonths({});
+      setMonthPayments({});
+      setItemPayments({});
     } else {
       const newSelected: Record<string, boolean> = {};
-      const newPayments: Record<string, string> = {};
-      componentList.forEach((c) => {
-        newSelected[c.id] = true;
-        newPayments[c.id] = c.totalDue.toString();
+      const newMonthPayments: Record<string, string> = {};
+      const newItemPayments: Record<string, string> = {};
+
+      monthList.forEach((m: any) => {
+        newSelected[m.id] = true;
+        newMonthPayments[m.id] = m.totalDue.toString();
+
+        m.items.forEach((item: any) => {
+          if (item.due > 0) {
+            newItemPayments[item.id] = item.due.toString();
+          }
+        });
       });
-      setSelectedComponents(newSelected);
-      setComponentPayments(newPayments);
+
+      setSelectedMonths(newSelected);
+      setMonthPayments(newMonthPayments);
+      setItemPayments(newItemPayments);
     }
   };
 
-  const updateComponentPayment = (id: string, amount: string) => {
-    setComponentPayments((prev) => ({ ...prev, [id]: amount }));
-    if (Number(amount) > 0 && !selectedComponents[id]) {
-      setSelectedComponents((prev) => ({ ...prev, [id]: true }));
-    } else if (Number(amount) <= 0 && selectedComponents[id]) {
-      setSelectedComponents((prev) => ({ ...prev, [id]: false }));
-    }
-  };
+  // Total calculated payment across all selected months + extra advance
+  const totalPayment = useMemo(() => {
+    const monthsTotal = Object.entries(monthPayments).reduce((sum, [id, val]) => {
+      if (selectedMonths[id]) {
+        return sum + (Number(val) || 0);
+      }
+      return sum;
+    }, 0);
 
-  const totalPayment =
-    Object.values(componentPayments).reduce(
-      (sum, val) => sum + (Number(val) || 0),
-      0
-    ) + (Number(generalAdvance) || 0);
+    return monthsTotal + (Number(generalAdvance) || 0);
+  }, [monthPayments, selectedMonths, generalAdvance]);
 
+  // Generate real-time breakdown preview for modal
   const generatePreview = () => {
     const preview: any[] = [];
 
-    for (const [compId, amountStr] of Object.entries(componentPayments)) {
-      if (!selectedComponents[compId]) continue;
+    monthList.forEach((charge: any) => {
+      if (!selectedMonths[charge.id]) return;
 
-      let remaining = Number(amountStr);
-      if (remaining <= 0) continue;
+      const monthAllocations: any[] = [];
+      let totalAllocatedToMonth = 0;
 
-      const compData = componentSummary[compId];
-      if (!compData) continue;
-
-      const allocations = [];
-      const sortedItems = [...compData.items].sort(
-        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-      );
-
-      for (const item of sortedItems) {
-        if (remaining <= 0) break;
-
-        const allocAmount = Math.min(item.due, remaining);
-        let newStatus = "Partial";
-        if (item.paidAmount + allocAmount >= item.amount) {
-          newStatus = "Paid";
+      charge.items.forEach((item: any) => {
+        const payVal = Number(itemPayments[item.id]) || 0;
+        if (payVal > 0) {
+          totalAllocatedToMonth += payVal;
+          let newStatus = "Partial";
+          if (item.paidAmount + payVal >= item.amount) {
+            newStatus = "Paid";
+          }
+          monthAllocations.push({
+            componentName: item.componentName,
+            allocated: payVal,
+            newStatus,
+          });
         }
-
-        allocations.push({
-          title: item.chargeTitle,
-          allocated: allocAmount,
-          newStatus,
-        });
-
-        remaining -= allocAmount;
-      }
-
-      preview.push({
-        componentName: compData.name,
-        allocations,
-        advance: remaining > 0 ? remaining : 0,
       });
-    }
+
+      const monthEntered = Number(monthPayments[charge.id]) || 0;
+      const surplusAdvance = Math.max(0, monthEntered - totalAllocatedToMonth);
+
+      if (monthAllocations.length > 0 || surplusAdvance > 0) {
+        preview.push({
+          monthTitle: charge.title,
+          allocations: monthAllocations,
+          surplusAdvance,
+        });
+      }
+    });
 
     return preview;
   };
 
+  // Waive Late Fee Action
   const handleWaiveItem = async (itemId: string) => {
     setWaivingItemId(itemId);
     const toastId = `waive-${itemId}`;
@@ -222,6 +340,7 @@ export function StudentFeeCollection({
     }
   };
 
+  // Submit Payment Action
   const handlePayment = async () => {
     if (totalPayment <= 0) {
       toast.error("Please enter payment amounts to collect.");
@@ -233,14 +352,35 @@ export function StudentFeeCollection({
     toast.loading("Processing payment transaction...", { id: toastId });
 
     try {
-      const payloadPayments = Object.entries(componentPayments)
-        .filter(([id, val]) => selectedComponents[id] && Number(val) > 0)
-        .map(([id, val]) => ({ componentId: id, amount: Number(val) }));
+      // Collect all item-wise payments
+      const payloadItemPayments: { chargeItemId: string; amount: number }[] = [];
+      let extraSurplusAdvance = Number(generalAdvance) || 0;
+
+      monthList.forEach((charge: any) => {
+        if (!selectedMonths[charge.id]) return;
+
+        let allocatedInItems = 0;
+        charge.items.forEach((item: any) => {
+          const itemVal = Number(itemPayments[item.id]) || 0;
+          if (itemVal > 0) {
+            allocatedInItems += itemVal;
+            payloadItemPayments.push({
+              chargeItemId: item.id,
+              amount: itemVal,
+            });
+          }
+        });
+
+        const monthVal = Number(monthPayments[charge.id]) || 0;
+        if (monthVal > allocatedInItems) {
+          extraSurplusAdvance += monthVal - allocatedInItems;
+        }
+      });
 
       const res = await allocatePayment({
         studentId: student.id,
-        componentPayments: payloadPayments,
-        generalAdvanceAmount: Number(generalAdvance) || 0,
+        itemPayments: payloadItemPayments,
+        generalAdvanceAmount: extraSurplusAdvance > 0 ? extraSurplusAdvance : undefined,
         method: paymentMethod as any,
         reference: reference || undefined,
         remarks: remarks || undefined,
@@ -251,8 +391,9 @@ export function StudentFeeCollection({
       } else {
         const receipt = (res as any).receiptNo || "Receipt Created";
         toast.success(`Payment successful! Receipt: ${receipt}`, { id: toastId });
-        setComponentPayments({});
-        setSelectedComponents({});
+        setMonthPayments({});
+        setItemPayments({});
+        setSelectedMonths({});
         setGeneralAdvance("");
         setReference("");
         setRemarks("");
@@ -279,13 +420,13 @@ export function StudentFeeCollection({
               {formatCurrency(totalOutstanding)}
             </p>
           </div>
-          {componentList.length > 0 && canEdit && (
+          {monthList.length > 0 && canEdit && (
             <button
               type="button"
-              onClick={selectAllComponents}
+              onClick={selectAllMonths}
               className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors shadow-sm"
             >
-              {componentList.every((c) => selectedComponents[c.id])
+              {monthList.every((m: any) => selectedMonths[m.id])
                 ? "Clear All"
                 : "Pay Full Dues"}
             </button>
@@ -318,6 +459,7 @@ export function StudentFeeCollection({
         )}
       </div>
 
+      {/* Transport Alert if Opted-in */}
       {(() => {
         const activeTransport = student?.transports?.[0];
         if (!activeTransport) return null;
@@ -350,18 +492,18 @@ export function StudentFeeCollection({
         );
       })()}
 
-      {/* Component Due Table */}
+      {/* Month-Wise Fee Dues Table */}
       <div className="border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="p-3.5 border-b bg-muted/20 flex justify-between items-center">
           <h3 className="font-semibold text-sm flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-violet-600" /> Outstanding Fee Components
+            <Calendar className="w-4 h-4 text-violet-600" /> Outstanding Monthly Fee Dues
           </h3>
           <span className="text-xs text-muted-foreground font-medium">
-            {componentList.length} component{componentList.length === 1 ? "" : "s"} with dues
+            {monthList.length} month{monthList.length === 1 ? "" : "s"} with dues
           </span>
         </div>
 
-        <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
+        <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs text-muted-foreground border-b sticky top-0 bg-background z-10">
               <tr>
@@ -369,26 +511,30 @@ export function StudentFeeCollection({
                   <input
                     type="checkbox"
                     checked={
-                      componentList.length > 0 &&
-                      componentList.every((c) => selectedComponents[c.id])
+                      monthList.length > 0 &&
+                      monthList.every((m: any) => selectedMonths[m.id])
                     }
-                    onChange={selectAllComponents}
-                    disabled={componentList.length === 0 || !canEdit}
+                    onChange={selectAllMonths}
+                    disabled={monthList.length === 0 || !canEdit}
                     className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                   />
                 </th>
-                <th className="py-2.5 px-3 text-left font-medium">Component</th>
-                <th className="py-2.5 px-3 text-right font-medium">Total Due</th>
-                <th className="py-2.5 px-3 text-right font-medium w-36">Pay Amount (₹)</th>
+                <th className="py-2.5 px-3 text-left font-medium">Month / Charge</th>
+                <th className="py-2.5 px-3 text-left font-medium">Due Date</th>
+                <th className="py-2.5 px-3 text-right font-medium">Net Charge</th>
+                <th className="py-2.5 px-3 text-right font-medium">Advance Paid</th>
+                <th className="py-2.5 px-3 text-right font-medium">Payable</th>
+                <th className="py-2.5 px-3 text-right font-medium w-40">Pay Amount (₹)</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {componentList.map((c) => {
-                const isSelected = !!selectedComponents[c.id];
-                const isExpanded = !!expandedComponents[c.id];
+              {monthList.map((month: any) => {
+                const isSelected = !!selectedMonths[month.id];
+                const isExpanded = !!expandedMonths[month.id];
 
                 return (
-                  <React.Fragment key={c.id}>
+                  <React.Fragment key={month.id}>
+                    {/* Month Parent Row */}
                     <tr
                       className={`hover:bg-muted/30 transition-colors ${
                         isSelected ? "bg-violet-50/40 dark:bg-violet-950/10" : ""
@@ -398,7 +544,7 @@ export function StudentFeeCollection({
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleComponent(c.id, c.totalDue)}
+                          onChange={() => toggleMonth(month.id, month.totalDue)}
                           disabled={!canEdit}
                           className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                         />
@@ -408,12 +554,13 @@ export function StudentFeeCollection({
                           <button
                             type="button"
                             onClick={() =>
-                              setExpandedComponents((prev) => ({
+                              setExpandedMonths((prev) => ({
                                 ...prev,
-                                [c.id]: !prev[c.id],
+                                [month.id]: !prev[month.id],
                               }))
                             }
-                            className="p-1 rounded hover:bg-muted/60 text-muted-foreground"
+                            className="p-1 rounded hover:bg-muted/60 text-muted-foreground transition-colors"
+                            title="Expand / Collapse underlying components"
                           >
                             {isExpanded ? (
                               <ChevronUp className="w-3.5 h-3.5" />
@@ -421,57 +568,71 @@ export function StudentFeeCollection({
                               <ChevronDown className="w-3.5 h-3.5" />
                             )}
                           </button>
-                          <span>{c.name}</span>
+                          <span className="font-semibold text-foreground">{month.title}</span>
                           <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-                            {c.items.length} charge{c.items.length === 1 ? "" : "s"}
+                            {month.items.length} component{month.items.length === 1 ? "" : "s"}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3 px-3 text-right font-semibold">
-                        {formatCurrency(c.totalDue)}
+                      <td className="py-3 px-3 text-xs text-muted-foreground">
+                        {new Date(month.dueDate).toLocaleDateString("en-IN", {
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                      <td className="py-3 px-3 text-right font-medium">
+                        {formatCurrency(month.netCharge)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(month.advancePaid)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">
+                        {formatCurrency(month.totalDue)}
                       </td>
                       <td className="py-3 px-3 text-right">
                         <input
                           type="number"
                           placeholder="0"
-                          value={componentPayments[c.id] || ""}
-                          onChange={(e) => updateComponentPayment(c.id, e.target.value)}
+                          value={monthPayments[month.id] || ""}
+                          onChange={(e) => updateMonthPayment(month.id, e.target.value)}
                           disabled={!canEdit}
-                          className="w-28 h-8 px-2 text-right text-xs font-semibold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                          className="w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
                         />
                       </td>
                     </tr>
 
-                    {/* Expanded Items Breakdown */}
+                    {/* Uncollapsed / Expanded Underlying Components Breakdown */}
                     {isExpanded && (
                       <tr className="bg-muted/10 border-b">
-                        <td colSpan={4} className="p-3 pl-10">
-                          <div className="border rounded-lg bg-background/80 p-2.5 space-y-2">
-                            <p className="text-[11px] font-bold text-muted-foreground uppercase">
-                              Underlying Due Records
-                            </p>
+                        <td colSpan={7} className="p-3 pl-8 sm:pl-12">
+                          <div className="border rounded-xl bg-background/90 p-3 space-y-2 shadow-sm">
+                            <div className="flex items-center justify-between pb-1 border-b">
+                              <p className="text-[11px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wide flex items-center gap-1.5">
+                                <Sparkles className="w-3 h-3" /> Underlying Components for {month.title}
+                              </p>
+                              <span className="text-[10px] text-muted-foreground">
+                                Entering month amount pro-rata splits across components based on dues
+                              </span>
+                            </div>
+
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="text-muted-foreground border-b">
-                                  <th className="text-left pb-1 font-medium">Charge</th>
-                                  <th className="text-left pb-1 font-medium">Due Date</th>
+                                <tr className="text-muted-foreground border-b pb-1 text-left">
+                                  <th className="pb-1 font-medium">Component</th>
                                   <th className="text-right pb-1 font-medium">Net Charge</th>
                                   <th className="text-right pb-1 font-medium">Advance Paid</th>
                                   <th className="text-right pb-1 font-medium">Payable</th>
-                                  <th className="text-right pb-1 font-medium">Action</th>
+                                  <th className="text-right pb-1 font-medium w-36">Allocated Pay (₹)</th>
+                                  <th className="text-right pb-1 font-medium w-16">Action</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-muted/50">
-                                {c.items.map((item: any) => (
+                              <tbody className="divide-y divide-muted/40">
+                                {month.items.map((item: any) => (
                                   <tr key={item.id} className="py-1">
-                                    <td className="py-1.5 font-medium">{item.chargeTitle}</td>
-                                    <td className="py-1.5 text-muted-foreground">
-                                      {new Date(item.dueDate).toLocaleDateString("en-IN", {
-                                        month: "short",
-                                        year: "numeric",
-                                      })}
+                                    <td className="py-1.5 font-medium text-foreground">
+                                      {item.componentName}
                                     </td>
-                                    <td className="py-1.5 text-right font-medium">
+                                    <td className="py-1.5 text-right font-medium text-slate-700 dark:text-slate-300">
                                       {formatCurrency(item.amount)}
                                     </td>
                                     <td className="py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
@@ -479,6 +640,18 @@ export function StudentFeeCollection({
                                     </td>
                                     <td className={`py-1.5 text-right font-semibold ${item.due > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                                       {formatCurrency(item.due)}
+                                    </td>
+                                    <td className="py-1.5 text-right">
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={itemPayments[item.id] || ""}
+                                        onChange={(e) =>
+                                          updateItemPayment(month.id, item.id, e.target.value)
+                                        }
+                                        disabled={!canEdit}
+                                        className="w-28 h-7 px-2 text-right text-[11px] font-semibold rounded-md border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                      />
                                     </td>
                                     <td className="py-1.5 text-right">
                                       {item.isLateFee && item.due > 0 && canEdit && (
@@ -507,13 +680,13 @@ export function StudentFeeCollection({
                 );
               })}
 
-              {componentList.length === 0 && (
+              {monthList.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-10 text-center text-muted-foreground">
                     <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
                     <p className="font-semibold text-sm">No Outstanding Dues</p>
                     <p className="text-xs text-muted-foreground">
-                      This student has fully settled all current fee components.
+                      This student has fully settled all current fee charges.
                     </p>
                   </td>
                 </tr>
@@ -607,21 +780,21 @@ export function StudentFeeCollection({
                 {generatePreview().map((p, idx) => (
                   <div key={idx} className="space-y-1">
                     <p className="font-semibold text-violet-700 dark:text-violet-400">
-                      {p.componentName}
+                      {p.monthTitle}
                     </p>
                     <div className="pl-3 space-y-0.5">
                       {p.allocations.map((a: any, aIdx: number) => (
                         <div key={aIdx} className="flex justify-between text-muted-foreground">
-                          <span>{a.title} ({a.newStatus})</span>
+                          <span>{a.componentName} ({a.newStatus})</span>
                           <span className="font-medium text-foreground">
                             {formatCurrency(a.allocated)}
                           </span>
                         </div>
                       ))}
-                      {p.advance > 0 && (
+                      {p.surplusAdvance > 0 && (
                         <div className="flex justify-between text-emerald-600 font-medium">
-                          <span>Advance Credit (Overpayment)</span>
-                          <span>{formatCurrency(p.advance)}</span>
+                          <span>Advance Credit (Surplus)</span>
+                          <span>{formatCurrency(p.surplusAdvance)}</span>
                         </div>
                       )}
                     </div>
