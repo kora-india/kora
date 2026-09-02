@@ -1,23 +1,32 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
-import nodemailer from 'nodemailer';
-import { POST } from '../route';
-import { prisma } from '@schoolos/db';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  vi,
+} from "vitest";
+import nodemailer from "nodemailer";
+import { POST } from "../route";
+import { prisma } from "@schoolos/db";
 
-const testEmail = 'send-otp-' + Math.random().toString(36).substring(7) + '@example.com';
+const testEmail =
+  "send-otp-" + Math.random().toString(36).substring(7) + "@example.com";
 
 function makeRequest(body: unknown) {
-  return new Request('http://localhost/api/auth/send-otp', {
-    method: 'POST',
+  return new Request("http://localhost/api/auth/send-otp", {
+    method: "POST",
     body: JSON.stringify(body),
   });
 }
 
-describe('POST /api/auth/send-otp', () => {
+describe("POST /api/auth/send-otp", () => {
   beforeAll(() => {
-    process.env.SMTP_HOST = 'smtp.test.example.com';
-    process.env.SMTP_PORT = '587';
-    process.env.SMTP_USER = 'test-smtp-user';
-    process.env.SMTP_PASS = 'test-smtp-pass';
+    process.env.SMTP_HOST = "smtp.test.example.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_USER = "test-smtp-user";
+    process.env.SMTP_PASS = "test-smtp-pass";
   });
 
   beforeEach(async () => {
@@ -30,7 +39,7 @@ describe('POST /api/auth/send-otp', () => {
     await prisma.user.deleteMany({ where: { email: testEmail } });
   });
 
-  it('generates a 6-digit OTP, stores it with a ~10 minute expiry, and emails it', async () => {
+  it("generates a 6-digit OTP, stores it with a ~10 minute expiry, and emails it", async () => {
     const before = Date.now();
     const res = await POST(makeRequest({ email: testEmail }));
     const body = await res.json();
@@ -40,7 +49,7 @@ describe('POST /api/auth/send-otp', () => {
 
     const otpRow = await prisma.otp.findFirst({
       where: { email: testEmail },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     expect(otpRow).toBeDefined();
     expect(otpRow!.otp).toMatch(/^\d{6}$/);
@@ -52,13 +61,13 @@ describe('POST /api/auth/send-otp', () => {
     expect(nodemailer.createTransport).toHaveBeenCalled();
   });
 
-  it('rejects when the email already belongs to a registered user', async () => {
+  it("rejects when the email already belongs to a registered user", async () => {
     await prisma.user.create({
       data: {
         email: testEmail,
-        password: 'irrelevant-hash',
-        name: 'Existing User',
-        role: 'SCHOOL_ADMIN',
+        password: "irrelevant-hash",
+        name: "Existing User",
+        role: "SCHOOL_ADMIN",
       },
     });
 
@@ -71,23 +80,25 @@ describe('POST /api/auth/send-otp', () => {
     await prisma.user.deleteMany({ where: { email: testEmail } });
   });
 
-  it('rejects an invalid email format', async () => {
-    const res = await POST(makeRequest({ email: 'not-an-email' }));
+  it("rejects an invalid email format", async () => {
+    const res = await POST(makeRequest({ email: "not-an-email" }));
     expect(res.status).toBe(400);
   });
 
-  it('invalidates the previous OTP when a new one is requested for the same email', async () => {
+  it("invalidates the previous OTP when a new one is requested for the same email", async () => {
     await POST(makeRequest({ email: testEmail }));
     const first = await prisma.otp.findFirst({ where: { email: testEmail } });
 
     await POST(makeRequest({ email: testEmail }));
 
-    const remaining = await prisma.otp.findMany({ where: { email: testEmail } });
+    const remaining = await prisma.otp.findMany({
+      where: { email: testEmail },
+    });
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).not.toBe(first!.id);
   });
 
-  it('KNOWN GAP: leaves the OTP row in place even when the email fails to send', async () => {
+  it("KNOWN GAP: leaves the OTP row in place even when the email fails to send", async () => {
     // Documents current behavior rather than desired behavior — the route writes
     // the Otp row *before* attempting delivery and never rolls it back on
     // failure, so the user ends up with an OTP they never received and can't
@@ -95,7 +106,9 @@ describe('POST /api/auth/send-otp', () => {
     // to know it exists). Flagged in DOCUMENTATION.md's production-readiness
     // gaps; update this test once the route is fixed to clean up on failure.
     const { sendMail } = nodemailer.createTransport({} as any);
-    vi.mocked(sendMail).mockRejectedValueOnce(new Error('SMTP connection failed'));
+    vi.mocked(sendMail).mockRejectedValueOnce(
+      new Error("SMTP connection failed"),
+    );
 
     const res = await POST(makeRequest({ email: testEmail }));
     expect(res.status).toBe(500);
