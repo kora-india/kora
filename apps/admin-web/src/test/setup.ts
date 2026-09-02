@@ -5,6 +5,12 @@ import path from 'path';
 // Load .env.test
 dotenv.config({ path: path.resolve(__dirname, '../../.env.test') });
 
+// Set default test SMTP variables
+process.env.SMTP_HOST = process.env.SMTP_HOST || 'smtp.test.example.com';
+process.env.SMTP_PORT = process.env.SMTP_PORT || '587';
+process.env.SMTP_USER = process.env.SMTP_USER || 'test-smtp-user';
+process.env.SMTP_PASS = process.env.SMTP_PASS || 'test-smtp-pass';
+
 // Mock Next.js Cache
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),

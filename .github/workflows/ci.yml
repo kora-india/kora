@@ -38,6 +38,10 @@ jobs:
       NEXTAUTH_URL: "http://localhost:3000"
       UPSTASH_REDIS_REST_URL: "https://fake.upstash.io"
       UPSTASH_REDIS_REST_TOKEN: "fake-token"
+      SMTP_HOST: "smtp.test.example.com"
+      SMTP_PORT: "587"
+      SMTP_USER: "test-smtp-user"
+      SMTP_PASS: "test-smtp-pass"
 
     steps:
       - name: Checkout repository

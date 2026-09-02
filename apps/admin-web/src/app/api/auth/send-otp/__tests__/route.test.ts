@@ -13,6 +13,13 @@ function makeRequest(body: unknown) {
 }
 
 describe('POST /api/auth/send-otp', () => {
+  beforeAll(() => {
+    process.env.SMTP_HOST = 'smtp.test.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'test-smtp-user';
+    process.env.SMTP_PASS = 'test-smtp-pass';
+  });
+
   beforeEach(async () => {
     await prisma.otp.deleteMany({ where: { email: testEmail } });
     vi.clearAllMocks();
