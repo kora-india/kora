@@ -53,6 +53,7 @@ model School {
   transportRoutes  TransportRoute[]
   studentTransports StudentTransport[]
   teacherSections  TeacherSection[]
+  exams            Exam[]
 
   @@map("schools")
 }
@@ -130,6 +131,7 @@ model Class {
   students           Student[]
   teachers           Teacher[]           @relation("LegacyAssignedClass")
   teacherSections    TeacherSection[]
+  examSubjects       ExamSubject[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -186,6 +188,7 @@ model Student {
   feeAssignments  StudentFeeAssignment[]
   feeOverrides    StudentFeeOverride[]
   transports      StudentTransport[]
+  examMarks       ExamMark[]
   class           Class                  @relation(fields: [classId], references: [id])
   school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section         Section                @relation(fields: [sectionId], references: [id])
@@ -848,4 +851,80 @@ model StudentTransport {
   @@index([schoolId, status])
   @@map("student_transports")
 }
+
+enum ExamType {
+  UNIT_TEST
+  HALF_YEARLY
+  TERM_1
+  TERM_2
+  FINAL
+  PERIODIC_TEST
+  MONTHLY_TEST
+}
+
+enum GradingSystem {
+  CBSE_9_POINT
+  PERCENTAGE_LETTER
+  MARKS_ONLY
+}
+
+model Exam {
+  id            String         @id @default(cuid())
+  schoolId      String
+  name          String
+  type          ExamType       @default(TERM_1)
+  academicYear  String
+  gradingSystem GradingSystem  @default(CBSE_9_POINT)
+  startDate     DateTime
+  endDate       DateTime
+  isPublished   Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subjects      ExamSubject[]
+  school        School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([schoolId, academicYear])
+  @@map("exams")
+}
+
+model ExamSubject {
+  id          String     @id @default(cuid())
+  examId      String
+  classId     String
+  subjectName String
+  maxMarks    Decimal    @default(100) @db.Decimal(5, 2)
+  passMarks   Decimal    @default(33) @db.Decimal(5, 2)
+  examDate    DateTime?
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  exam        Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  class       Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  marks       ExamMark[]
+
+  @@unique([examId, classId, subjectName])
+  @@index([examId])
+  @@index([classId])
+  @@map("exam_subjects")
+}
+
+model ExamMark {
+  id            String      @id @default(cuid())
+  examSubjectId String
+  studentId     String
+  marksObtained Decimal?    @db.Decimal(5, 2)
+  isAbsent      Boolean     @default(false)
+  remarks       String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  examSubject   ExamSubject @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examSubjectId, studentId])
+  @@index([studentId])
+  @@index([examSubjectId])
+  @@map("exam_marks")
+}
+
 
