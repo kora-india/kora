@@ -16,10 +16,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: schoolos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/schoolos' }}
-      AUTH_SECRET: ${{ secrets.AUTH_SECRET || 'test-secret-value-32-chars-long-at-least' }}
+      DATABASE_URL: "postgresql://postgres:password@localhost:5432/schoolos_test?schema=public"
+      DIRECT_URL: "postgresql://postgres:password@localhost:5432/schoolos_test?schema=public"
+      AUTH_SECRET: "test-secret-value-32-chars-long-at-least"
       NEXTAUTH_URL: "http://localhost:3000"
+      UPSTASH_REDIS_REST_URL: "https://fake.upstash.io"
+      UPSTASH_REDIS_REST_TOKEN: "fake-token"
 
     steps:
       - name: Checkout repository
@@ -43,6 +61,9 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm run db:generate
 
+      - name: Push Schema to Test Database
+        run: pnpm --filter @schoolos/db run db:push --accept-data-loss
+
       - name: Run Type Checking
         run: pnpm run type-check
 
@@ -53,6 +74,9 @@ jobs:
         run: pnpm --filter @schoolos/admin-web run test
         env:
           NODE_ENV: test
+          DATABASE_URL: "postgresql://postgres:password@localhost:5432/schoolos_test?schema=public"
 
       - name: Run Production Build
         run: pnpm run build
+        env:
+          NODE_ENV: production
