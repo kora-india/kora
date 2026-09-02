@@ -17,6 +17,7 @@ import {
   Users,
   Search,
 } from "lucide-react";
+import { Input, Select } from "antd";
 
 interface ResultsTabProps {
   exams: any[];
@@ -123,17 +124,15 @@ export function ResultsTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               1. Examination
             </label>
-            <select
+            <Select
               value={selectedExamId}
-              onChange={(e) => setSelectedExamId(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              {exams.map((ex) => (
-                <option key={ex.id} value={ex.id}>
-                  {ex.name} ({ex.academicYear})
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedExamId}
+              className="w-full"
+              options={exams.map((ex) => ({
+                label: `${ex.name} (${ex.academicYear})`,
+                value: ex.id,
+              }))}
+            />
           </div>
 
           {/* Class Selector */}
@@ -141,17 +140,15 @@ export function ResultsTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               2. Class
             </label>
-            <select
+            <Select
               value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedClassId}
+              className="w-full"
+              options={classes.map((c) => ({
+                label: c.name,
+                value: c.id,
+              }))}
+            />
           </div>
 
           {/* Section Selector */}
@@ -159,30 +156,28 @@ export function ResultsTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               3. Section
             </label>
-            <select
+            <Select
               value={selectedSectionId}
-              onChange={(e) => setSelectedSectionId(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              {(activeClass?.sections || []).map((sec: any) => (
-                <option key={sec.id} value={sec.id}>
-                  Section {sec.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedSectionId}
+              className="w-full"
+              options={(activeClass?.sections || []).map((sec: any) => ({
+                label: `Section ${sec.name}`,
+                value: sec.id,
+              }))}
+            />
           </div>
         </div>
 
         {/* Action Header & Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-muted-foreground" />
-            <input
-              type="text"
+          <div className="flex-1 max-w-xs">
+            <Input
               placeholder="Search by student name or roll #..."
+              prefix={<Search className="w-4 h-4 text-muted-foreground mr-1" />}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border bg-background"
+              allowClear
+              className="w-full"
             />
           </div>
 

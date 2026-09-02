@@ -21,6 +21,7 @@ import {
 import { togglePublishExam, deleteExam } from "@/lib/actions/exams";
 import { toast } from "sonner";
 import { ExamType } from "@schoolos/db";
+import { Input, Select } from "antd";
 
 interface ExamsListTabProps {
   exams: any[];
@@ -111,31 +112,32 @@ export function ExamsListTab({
       {/* Search & Filter Toolbar */}
       {exams.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-card border shadow-xs">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-muted-foreground" />
-            <input
-              type="text"
+          <div className="flex-1 max-w-sm">
+            <Input
               placeholder="Search examinations by title or year..."
+              prefix={<Search className="w-4 h-4 text-muted-foreground mr-1" />}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border bg-background"
+              allowClear
+              className="w-full"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <select
+            <Select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-3 py-2 text-xs font-medium rounded-xl border bg-background"
-            >
-              <option value="ALL">All Categories</option>
-              <option value={ExamType.TERM_1}>Term 1</option>
-              <option value={ExamType.TERM_2}>Term 2</option>
-              <option value={ExamType.HALF_YEARLY}>Half-Yearly</option>
-              <option value={ExamType.FINAL}>Final Exam</option>
-              <option value={ExamType.UNIT_TEST}>Unit Test</option>
-              <option value={ExamType.MONTHLY_TEST}>Monthly Test</option>
-            </select>
+              onChange={setTypeFilter}
+              className="w-44"
+              options={[
+                { label: "All Categories", value: "ALL" },
+                { label: "Term 1", value: ExamType.TERM_1 },
+                { label: "Term 2", value: ExamType.TERM_2 },
+                { label: "Half-Yearly", value: ExamType.HALF_YEARLY },
+                { label: "Final Exam", value: ExamType.FINAL },
+                { label: "Unit Test", value: ExamType.UNIT_TEST },
+                { label: "Monthly Test", value: ExamType.MONTHLY_TEST },
+              ]}
+            />
           </div>
         </div>
       )}

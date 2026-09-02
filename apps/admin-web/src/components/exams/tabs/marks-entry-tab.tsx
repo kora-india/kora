@@ -14,6 +14,7 @@ import {
   Sparkles,
   RotateCcw,
 } from "lucide-react";
+import { Select } from "antd";
 
 interface MarksEntryTabProps {
   exams: any[];
@@ -219,17 +220,15 @@ export function MarksEntryTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               1. Examination
             </label>
-            <select
+            <Select
               value={selectedExamId}
-              onChange={(e) => setSelectedExamId(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              {exams.map((ex) => (
-                <option key={ex.id} value={ex.id}>
-                  {ex.name} ({ex.academicYear})
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedExamId}
+              className="w-full"
+              options={exams.map((ex) => ({
+                label: `${ex.name} (${ex.academicYear})`,
+                value: ex.id,
+              }))}
+            />
           </div>
 
           {/* Class Selector */}
@@ -237,20 +236,18 @@ export function MarksEntryTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               2. Class
             </label>
-            <select
+            <Select
               value={selectedClassId}
-              onChange={(e) => {
-                setSelectedClassId(e.target.value);
+              onChange={(val) => {
+                setSelectedClassId(val);
                 setSelectedSectionId("all");
               }}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              className="w-full"
+              options={classes.map((c) => ({
+                label: c.name,
+                value: c.id,
+              }))}
+            />
           </div>
 
           {/* Section Selector */}
@@ -258,18 +255,18 @@ export function MarksEntryTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               3. Section
             </label>
-            <select
+            <Select
               value={selectedSectionId}
-              onChange={(e) => setSelectedSectionId(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20"
-            >
-              <option value="all">All Sections</option>
-              {(activeClass?.sections || []).map((sec: any) => (
-                <option key={sec.id} value={sec.id}>
-                  Section {sec.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedSectionId}
+              className="w-full"
+              options={[
+                { label: "All Sections", value: "all" },
+                ...(activeClass?.sections || []).map((sec: any) => ({
+                  label: `Section ${sec.name}`,
+                  value: sec.id,
+                })),
+              ]}
+            />
           </div>
 
           {/* Subject Selector */}
@@ -277,19 +274,21 @@ export function MarksEntryTab({
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
               4. Subject
             </label>
-            <select
-              value={selectedSubjectId}
-              onChange={(e) => setSelectedSubjectId(e.target.value)}
+            <Select
+              value={selectedSubjectId || undefined}
+              onChange={setSelectedSubjectId}
               disabled={availableSubjects.length === 0}
-              className="w-full px-3 py-2 text-xs rounded-xl border bg-background font-semibold focus:ring-2 focus:ring-violet-500/20 disabled:opacity-50"
-            >
-              {availableSubjects.map((sub: any) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.subjectName} (Max: {Number(sub.maxMarks)}, Pass:{" "}
-                  {Number(sub.passMarks)})
-                </option>
-              ))}
-            </select>
+              placeholder={
+                availableSubjects.length === 0
+                  ? "No subjects configured"
+                  : "Select Subject"
+              }
+              className="w-full"
+              options={availableSubjects.map((sub: any) => ({
+                label: `${sub.subjectName} (Max: ${Number(sub.maxMarks)}, Pass: ${Number(sub.passMarks)})`,
+                value: sub.id,
+              }))}
+            />
           </div>
         </div>
 

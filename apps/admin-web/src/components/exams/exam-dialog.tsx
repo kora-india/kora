@@ -13,6 +13,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { Select } from "antd";
 
 interface ExamDialogProps {
   isOpen: boolean;
@@ -213,19 +214,20 @@ export function ExamDialog({
             <label className="text-xs font-semibold text-foreground">
               Exam Category
             </label>
-            <select
+            <Select
               value={type}
-              onChange={(e) => setType(e.target.value as ExamType)}
-              className="w-full px-3 py-2 text-xs font-medium rounded-xl border bg-background focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition"
-            >
-              <option value={ExamType.TERM_1}>Term 1</option>
-              <option value={ExamType.TERM_2}>Term 2</option>
-              <option value={ExamType.HALF_YEARLY}>Half-Yearly</option>
-              <option value={ExamType.FINAL}>Final Exam</option>
-              <option value={ExamType.UNIT_TEST}>Unit Test</option>
-              <option value={ExamType.PERIODIC_TEST}>Periodic Test</option>
-              <option value={ExamType.MONTHLY_TEST}>Monthly Test</option>
-            </select>
+              onChange={(val) => setType(val as ExamType)}
+              className="w-full"
+              options={[
+                { label: "Term 1", value: ExamType.TERM_1 },
+                { label: "Term 2", value: ExamType.TERM_2 },
+                { label: "Half-Yearly", value: ExamType.HALF_YEARLY },
+                { label: "Final Exam", value: ExamType.FINAL },
+                { label: "Unit Test", value: ExamType.UNIT_TEST },
+                { label: "Periodic Test", value: ExamType.PERIODIC_TEST },
+                { label: "Monthly Test", value: ExamType.MONTHLY_TEST },
+              ]}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -246,23 +248,25 @@ export function ExamDialog({
             <label className="text-xs font-semibold text-foreground">
               Grading Standard
             </label>
-            <select
+            <Select
               value={gradingSystem}
-              onChange={(e) =>
-                setGradingSystem(e.target.value as GradingSystem)
-              }
-              className="w-full px-3 py-2 text-xs font-medium rounded-xl border bg-background focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition"
-            >
-              <option value={GradingSystem.CBSE_9_POINT}>
-                CBSE 9-Point (A1 to E)
-              </option>
-              <option value={GradingSystem.PERCENTAGE_LETTER}>
-                Letter Scale (A+ to F)
-              </option>
-              <option value={GradingSystem.MARKS_ONLY}>
-                Marks Only (Pass/Fail)
-              </option>
-            </select>
+              onChange={(val) => setGradingSystem(val as GradingSystem)}
+              className="w-full"
+              options={[
+                {
+                  label: "CBSE 9-Point (A1 to E)",
+                  value: GradingSystem.CBSE_9_POINT,
+                },
+                {
+                  label: "Letter Scale (A+ to F)",
+                  value: GradingSystem.PERCENTAGE_LETTER,
+                },
+                {
+                  label: "Marks Only (Pass/Fail)",
+                  value: GradingSystem.MARKS_ONLY,
+                },
+              ]}
+            />
           </div>
         </div>
 
