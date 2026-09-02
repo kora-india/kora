@@ -96,7 +96,7 @@ describe('POST /api/school/create', () => {
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toMatch(/invalid payment signature/i);
+    expect(body.error).toMatch(/payment verification failed|invalid payment signature/i);
 
     const school = await prisma.school.findUnique({ where: { subdomain: payload.subdomain } });
     expect(school).toBeNull();

@@ -34,6 +34,17 @@ vi.mock('@/lib/redis', () => ({
   invalidateFeesCache: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock Ratelimiting
+vi.mock('@/lib/ratelimit', () => ({
+  otpRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  authRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  paymentRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  subdomainRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  schoolCreateRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  apiRatelimit: { limit: vi.fn().mockResolvedValue({ success: true, limit: 100, remaining: 99, reset: 0 }) },
+  createRateLimitResponse: vi.fn(),
+}));
+
 // Mock Nodemailer (prevent real emails from being sent during tests).
 // Tests that need to assert on send behavior can import `nodemailer` and use
 // `vi.mocked(...)` against these same mock functions.
@@ -45,3 +56,4 @@ vi.mock('nodemailer', () => {
     createTransport,
   };
 });
+

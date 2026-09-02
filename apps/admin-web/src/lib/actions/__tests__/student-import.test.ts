@@ -54,6 +54,7 @@ describe('Bulk Student Import', () => {
   });
 
   it('should successfully bulk import students', async () => {
+    const runKey = Math.random().toString(36).substring(7);
     const data = [
       {
         name: 'John Doe',
@@ -61,7 +62,7 @@ describe('Bulk Student Import', () => {
         sectionId,
         parentName: 'Mr. Doe',
         parentPhone: '1234567890',
-        admissionNumber: 'ADM-001',
+        admissionNumber: 'ADM-001-' + runKey,
         rollNumber: '1',
       },
       {
@@ -70,7 +71,7 @@ describe('Bulk Student Import', () => {
         sectionId,
         parentName: 'Mrs. Doe',
         parentPhone: '0987654321',
-        admissionNumber: 'ADM-002',
+        admissionNumber: 'ADM-002-' + runKey,
         rollNumber: '2',
       }
     ];
@@ -106,6 +107,7 @@ describe('Bulk Student Import', () => {
   });
 
   it('should skip duplicate admission numbers', async () => {
+    const dupeAdm = 'ADM-DUPE-' + Math.random().toString(36).substring(7);
     // Insert an existing student
     await prisma.student.create({
       data: {
@@ -115,28 +117,28 @@ describe('Bulk Student Import', () => {
         name: 'Existing',
         parentName: 'Parent',
         parentPhone: '123',
-        admissionNumber: 'ADM-DUPE',
+        admissionNumber: dupeAdm,
         rollNumber: '99',
       }
     });
 
     const data = [
       {
+        name: 'Duplicate',
+        classId,
+        sectionId,
+        parentName: 'Parent',
+        parentPhone: '123',
+        admissionNumber: dupeAdm, // duplicate
+        rollNumber: '100',
+      },
+      {
         name: 'New Student',
         classId,
         sectionId,
         parentName: 'Parent',
-        parentPhone: '1234567890',
-        admissionNumber: 'ADM-DUPE', // Duplicate
-        rollNumber: '100',
-      },
-      {
-        name: 'Valid Student',
-        classId,
-        sectionId,
-        parentName: 'Parent',
-        parentPhone: '1234567890',
-        admissionNumber: 'ADM-VALID',
+        parentPhone: '123',
+        admissionNumber: 'ADM-NEW-' + Math.random().toString(36).substring(7),
         rollNumber: '101',
       }
     ];

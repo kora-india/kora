@@ -12,6 +12,7 @@
     },
     "lint": {},
     "type-check": { "dependsOn": ["^build"] },
+    "test": {},
     "db:generate": { "cache": false },
     "db:push": { "cache": false },
     "db:seed": { "cache": false }

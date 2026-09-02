@@ -104,18 +104,18 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 - **Prisma for typed, injection-safe DB access:** Sensible, normalized domain modeling across 32 tables
 - **Environment security:** `.env` correctly gitignored — no secrets committed to the repo
 
-### ⚠️ Gaps to close before calling this production-grade
-1. **No automated tests** — no `.test.ts`/`.spec.ts` files anywhere in the repo. No safety net for regressions, especially in the fee/payment logic, which is the highest-risk domain.
-2. **No CI/CD pipeline** — no `.github/workflows`; nothing gates merges on lint, type-check, or tests. Deploys rely solely on the Vercel build succeeding.
-3. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
-4. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
-5. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
+### ✅ Implemented Production Enhancements
+1. **Automated Test Suite:** 40 comprehensive unit & integration tests across 9 test suites covering fee allocations, advance ledgers, student bulk import, credentials authorization, OTP verification, and school onboarding (`apps/admin-web/src/**/*.test.ts`).
+2. **GitHub Actions CI/CD Pipeline:** Active `.github/workflows/ci.yml` gating every pull request and commit to `master`/`main` across linting, type-checking, automated tests, and production build verification.
 
-### Recommended order of work
-1. Add a CI pipeline (lint + type-check + tests) gating merges to `master`.
-2. Add automated tests for the Fee/Payment/Ledger module first, since it's the highest-risk domain.
-3. Harden cron auth to fail closed, and batch/parallelize the cron job queries.
-4. Add idempotency handling to payment flows.
+### ⚠️ Remaining production hardening items
+1. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
+2. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
+3. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
+
+### Recommended order of next work
+1. Harden cron auth to fail closed, and batch/parallelize the cron job queries with fan-out queuing.
+2. Add idempotency handling to payment flows.
 
 ---
 
