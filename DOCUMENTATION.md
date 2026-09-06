@@ -9,6 +9,7 @@ This document provides a comprehensive overview of the current state of **School
 SchoolOS is built as a highly scalable, multi-tenant SaaS application using a modern Turborepo monorepo structure.
 
 ### Tech Stack
+
 - **Framework:** Next.js 15 (App Router)
 - **Language:** TypeScript 5
 - **Database ORM:** Prisma 5 + PostgreSQL
@@ -17,6 +18,7 @@ SchoolOS is built as a highly scalable, multi-tenant SaaS application using a mo
 - **Tooling:** pnpm workspaces
 
 ### Repository Structure
+
 - **`apps/admin-web`**: The main administrative dashboard for super admins, school admins, and accountants.
 - **`apps/teacher-pwa`**: A mobile-first Progressive Web App designed specifically for teachers to manage day-to-day classroom activities.
 - **`packages/db`**: Centralized database schemas, Prisma client generation, and seed scripts.
@@ -31,37 +33,45 @@ SchoolOS is built as a highly scalable, multi-tenant SaaS application using a mo
 The core foundation of the multi-tenant school management platform is fully operational, encompassing several critical modules:
 
 ### 🏢 Core Multi-Tenancy & Subscriptions
+
 - **School Management:** Support for multiple schools within the same database, logically separated by `schoolId`.
 - **Subscription Plans:** Built-in support for different tiers (FREE, BASIC, PRO, ENTERPRISE) with enforcement on limits (`plan_limits` like max students/teachers).
 - **Academic Sessions:** Ability to manage multiple academic years and assign structures to specific sessions.
 
 ### 🔐 Authentication & RBAC
+
 - **NextAuth Integration:** Secure, credential-based authentication using hashed passwords (bcrypt).
 - **Role-Based Access Control:** Four distinct roles: `SUPER_ADMIN`, `SCHOOL_ADMIN`, `TEACHER`, and `ACCOUNTANT`.
 - **Role Scoping:** Strict data access rules ensuring users only see data pertaining to their assigned school and allowed role.
 
 ### 👥 People Management
+
 - **Users:** Unified user account model.
 - **Teachers:** Detailed teacher profiles mapped to user accounts, with subject specialization and class/section assignments.
 - **Students:** Comprehensive student records including admission numbers, parent details, DOB, and active status.
 
 ### 🏫 Academics & Classrooms
+
 - **Classes & Sections:** Hierarchical structure grouping students into specific classes and sections.
 - **Assignments:** Teachers can create assignments with due dates and descriptions, targeted at specific classes/sections.
 
 ### 📅 Operations
+
 - **Attendance Management:** Robust attendance tracking (Present, Absent, Late, Excused) recorded by date, student, and marked by a specific user.
 - **Notices/Announcements:** System for publishing notices with varying priorities (LOW, MEDIUM, HIGH) and targeted visibility.
 
 ### 💰 Comprehensive Fee & Finance Module
+
 - **Fee Components & Structures:** Granular fee creation (monthly, quarterly, yearly, one-time) and grouping into reusable structures.
 - **Student Assignments & Overrides:** Assigning fee structures to students, with the ability to provide specific discounts or exemptions.
 - **Billing & Charges:** Generation of fee charges and charge items.
 - **Payments & Ledgers:** Processing of payments (Cash, UPI, Bank Transfer, etc.), generation of receipts, payment allocations to specific fee items, and tracking of advance payments (Ledger).
 
 ### 📱 Applications
+
 **Admin Dashboard (`admin-web`)**
 Fully functional dashboard routes for managing:
+
 - Analytics
 - Schools (Super Admin only)
 - Students & Teachers
@@ -73,6 +83,7 @@ Fully functional dashboard routes for managing:
 
 **Teacher PWA (`teacher-pwa`)**
 Mobile-optimized experience featuring:
+
 - Fast attendance marking
 - Assignment creation and tracking
 - Notice board viewing
@@ -86,11 +97,13 @@ Mobile-optimized experience featuring:
 SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo with shared packages and a single Postgres database), not microservices — appropriate for its current stage, but the assessment below covers how close the system is to being production-grade.
 
 ### Architecture Classification
+
 - **Type:** Modular monolith (multiple Next.js apps — `admin-web`, `teacher-pwa`, `marketing` — sharing one database via `packages/db` and one auth layer via `packages/auth`).
 - **Not microservices:** all domains (Students, Fees, Payments, Transport, Attendance, etc.) live in one Prisma schema (32 models) and are accessed via direct DB calls / Server Actions, not internal service APIs.
 - Splitting into true microservices would be a large effort (roughly 8–12 weeks for one engineer), mainly due to breaking apart the tightly-related Fee/Payment/Ledger data model, introducing an inter-service communication layer, and handling distributed transactions that are currently single DB transactions. Not recommended until there's a concrete scaling or team-ownership reason to do so — a tighter modular monolith (enforced domain boundaries inside `packages/`) gets most of the benefit at a fraction of the cost.
 
 ### ✅ Already in place
+
 - **Transport & Fleet Management:** Multi-category vehicle fleet (`BUS`, `VAN`, `RICKSHAW`), sequenced stops, per-km distance auto-calculation via Google Maps, vehicle capacity utilization meters, printable driver passenger manifests (`window.print()`), CSV export, and seamless integration with monthly fee generation.
 - **Multi-Region Backup & Disaster Recovery (DR):** Hot standby replica (`ap-southeast-1` alongside primary `us-east-1`), automated cross-region sync (`pnpm db:dr:sync`), row count parity verifier (`pnpm db:dr:verify`), offline snapshot dumper (`pnpm db:dr:dump`), and comprehensive runbook in [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md) with $<5\text{min}$ RTO failover.
 - **Version-Controlled Prisma Migrations:** Schema managed via `prisma migrate dev` and `prisma migrate deploy` with baseline `0_init` and `20260826121700_add_transport_management` migrations in `packages/db/prisma/migrations` and unpooled `DIRECT_URL` support.
@@ -105,15 +118,18 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 - **Environment security:** `.env` correctly gitignored — no secrets committed to the repo
 
 ### ✅ Implemented Production Enhancements
+
 1. **Automated Test Suite:** 40 comprehensive unit & integration tests across 9 test suites covering fee allocations, advance ledgers, student bulk import, credentials authorization, OTP verification, and school onboarding (`apps/admin-web/src/**/*.test.ts`).
 2. **GitHub Actions CI/CD Pipeline:** Active `.github/workflows/ci.yml` gating every pull request and commit to `master`/`main` across linting, type-checking, automated tests, and production build verification.
 
 ### ⚠️ Remaining production hardening items
+
 1. **Cron auth fails open** — if `CRON_SECRET` is unset, the cron routes log a warning but still execute unauthenticated. Safe default should be to reject the request when the secret is missing in a production environment.
 2. **N+1 / sequential loops in cron jobs** — `generate-fees` and `apply-late-fees` iterate schools → classes → charges one at a time with individually-awaited queries. Will slow down and risk timeouts as the number of schools grows.
 3. **No documented retry/idempotency handling** around payment gateway calls — payment creation/webhooks typically need idempotency keys to avoid double-charging on retries.
 
 ### Recommended order of next work
+
 1. Harden cron auth to fail closed, and batch/parallelize the cron job queries with fan-out queuing.
 2. Add idempotency handling to payment flows.
 
@@ -124,15 +140,18 @@ SchoolOS today is architected as a **modular monolith** (a Turborepo monorepo wi
 While the core functionality is robust, several modules are planned for future development to make SchoolOS a complete end-to-end educational ecosystem:
 
 ### Academics & Assessment
-- **Exam & Gradebook Module:** Creation of exams, grading structures, automatic report card generation, and performance analytics.
-- **Timetable Generator:** Automated or manual scheduling of classes, teacher assignments, and conflict resolution.
+
+- **Exam & Gradebook Module:** [Completed] Creation of exams, grading structures, automatic report card generation, and performance analytics.
+- **Timetable Generator:** [Completed] Automated heuristic constraint scheduling, manual slot management, teacher assignments, multi-perspective views, and conflict resolution engine.
 - **Library Management:** Tracking of physical/digital books, issuance, returns, and late fee calculations.
 
 ### Communication & Engagement
+
 - **Parent Portal / App:** A dedicated interface for parents to view their child's attendance, pay fees online, view grades, and communicate with teachers.
 - **SMS & Email Notifications:** Automated alerts for fee dues, absent students, important notices, and exam results.
 
 ### Advanced Operations
+
 - **Live Vehicle GPS Tracking (Mobile App):** Real-time GPS location streaming from driver devices to parent app during morning pickup and afternoon drop.
 - **Biometric Attendance Integration:** Connecting physical biometric/RFID scanners to the attendance module for automatic logging.
 - **Custom Report Builder:** A drag-and-drop interface for admins to generate custom data exports and analytical reports.
@@ -140,4 +159,4 @@ While the core functionality is robust, several modules are planned for future d
 
 ---
 
-*This document is intended to be a living document and should be updated as new features are merged into the main branch.*
+_This document is intended to be a living document and should be updated as new features are merged into the main branch._

@@ -54,6 +54,8 @@ model School {
   studentTransports StudentTransport[]
   teacherSections  TeacherSection[]
   exams            Exam[]
+  timetablePeriods TimetablePeriod[]
+  timetableSlots   TimetableSlot[]
 
   @@map("schools")
 }
@@ -132,6 +134,7 @@ model Class {
   teachers           Teacher[]           @relation("LegacyAssignedClass")
   teacherSections    TeacherSection[]
   examSubjects       ExamSubject[]
+  timetableSlots     TimetableSlot[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -152,6 +155,7 @@ model Section {
   students        Student[]
   teachers        Teacher[]        @relation("LegacyAssignedSection")
   teacherSections TeacherSection[]
+  timetableSlots  TimetableSlot[]
 
   @@unique([classId, name])
   @@index([schoolId])
@@ -222,6 +226,7 @@ model Teacher {
   assignedSection   Section?         @relation("LegacyAssignedSection", fields: [assignedSectionId], references: [id])
   classTeacherOf    Class[]          @relation("ClassTeacher")
   assignedSections  TeacherSection[]
+  timetableSlots    TimetableSlot[]
   school            School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -925,6 +930,52 @@ model ExamMark {
   @@index([studentId])
   @@index([examSubjectId])
   @@map("exam_marks")
+}
+
+model TimetablePeriod {
+  id           String          @id @default(cuid())
+  schoolId     String
+  name         String
+  periodNumber Int
+  startTime    String
+  endTime      String
+  isBreak      Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  school       School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  slots        TimetableSlot[]
+
+  @@unique([schoolId, startTime])
+  @@index([schoolId])
+  @@map("timetable_periods")
+}
+
+model TimetableSlot {
+  id           String           @id @default(cuid())
+  schoolId     String
+  classId      String
+  sectionId    String
+  teacherId    String?
+  periodId     String?
+  dayOfWeek    Int              // 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  startTime    String           // "08:30"
+  endTime      String           // "09:15"
+  subjectName  String
+  room         String?
+  academicYear String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  school       School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class        Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section      Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  teacher      Teacher?         @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  period       TimetablePeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
+
+  @@unique([schoolId, sectionId, dayOfWeek, startTime])
+  @@index([schoolId, teacherId, dayOfWeek, startTime])
+  @@index([schoolId, classId, sectionId])
+  @@map("timetable_slots")
 }
 
 

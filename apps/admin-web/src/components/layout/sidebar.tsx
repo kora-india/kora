@@ -23,6 +23,7 @@ import {
   Loader2,
   Bus,
   Award,
+  Clock,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -37,6 +38,7 @@ const adminNavItems = [
   { label: "Students", href: "/students", icon: Users },
   { label: "Teachers / Staff", href: "/teachers", icon: GraduationCap },
   { label: "Classes", href: "/classes", icon: BookOpen },
+  { label: "Timetable", href: "/timetable", icon: Clock },
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Exams & Results", href: "/exams", icon: Award },
   { label: "Fees", href: "/fees", icon: DollarSign },
@@ -58,6 +60,7 @@ const superAdminNavItems = [
 
 const teacherNavItems = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Timetable", href: "/timetable", icon: Clock },
   { label: "Attendance", href: "/attendance", icon: Calendar },
   { label: "Exams & Marks", href: "/exams", icon: Award },
   { label: "Students", href: "/students", icon: Users },
