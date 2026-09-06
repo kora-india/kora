@@ -35,7 +35,9 @@ The core foundation of the multi-tenant school management platform is fully oper
 ### 🏢 Core Multi-Tenancy & Subscriptions
 
 - **School Management:** Support for multiple schools within the same database, logically separated by `schoolId`.
-- **Subscription Plans:** Built-in support for different tiers (FREE, BASIC, PRO, ENTERPRISE) with enforcement on limits (`plan_limits` like max students/teachers).
+- **Subscription Plans & Quota Enforcement:** Built-in support for multiple tiers (`FREE`, `BASIC`, `PRO`, `ENTERPRISE`) with strict server-side quota enforcement on active students, teachers, and classes via `plan_limits` guardrails. See the complete specification in [PLANS_AND_SUBSCRIPTIONS.md](file:///Users/kanhaiyapandey/projects/schoolos/PLANS_AND_SUBSCRIPTIONS.md).
+- **Plan Validity & State Lifecycle:** Automated subscription tracking supporting `TRIAL`, `ACTIVE`, `PAST_DUE`, `EXPIRED`, and `CANCELLED` states with validity windows (`currentPeriodStart` to `currentPeriodEnd`), 7-day grace periods, and `/suspended` route protection.
+- **Free Trial Functionality:** 14-day full-featured Pro trial upon registration without upfront credit card requirements, countdown indicators, and graceful downgrade or checkout transitions.
 - **Academic Sessions:** Ability to manage multiple academic years and assign structures to specific sessions.
 
 ### 🔐 Authentication & RBAC
