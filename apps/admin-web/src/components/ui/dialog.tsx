@@ -11,16 +11,36 @@ interface DialogProps {
   description?: string;
   children: React.ReactNode;
   className?: string;
+  zIndex?: number;
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, className }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  className,
+  zIndex,
+}: DialogProps) {
+  const overlayStyle = zIndex ? { zIndex } : undefined;
+  const contentStyle = zIndex ? { zIndex: zIndex + 1 } : undefined;
+
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <RadixDialog.Content
+        <RadixDialog.Overlay
+          style={overlayStyle}
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+            "fixed inset-0 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            !zIndex && "z-50",
+          )}
+        />
+        <RadixDialog.Content
+          style={contentStyle}
+          className={cn(
+            "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+            !zIndex && "z-50",
             "w-full max-w-lg max-h-[90vh] overflow-y-auto",
             "rounded-2xl border bg-card shadow-2xl",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
@@ -28,12 +48,14 @@ export function Dialog({ open, onOpenChange, title, description, children, class
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
             "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-1/2",
             "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2",
-            className
+            className,
           )}
         >
           <div className="flex items-center justify-between p-5 border-b">
             <div>
-              <RadixDialog.Title className="text-base font-semibold">{title}</RadixDialog.Title>
+              <RadixDialog.Title className="text-base font-semibold">
+                {title}
+              </RadixDialog.Title>
               {description && (
                 <RadixDialog.Description className="text-xs text-muted-foreground mt-0.5">
                   {description}

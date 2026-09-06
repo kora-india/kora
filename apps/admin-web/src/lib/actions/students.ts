@@ -6,6 +6,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkStudentLimit, planLimitMessage } from "@/lib/plan-limits";
 import { getCache, invalidateCache } from "@/lib/redis";
+import {
+  calculateSubjectGrade,
+  calculateReportCardSummary,
+} from "@/lib/grading";
 
 const StudentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -39,7 +43,12 @@ async function getStaffSession() {
   if (!session?.user) return null;
   const user = session.user;
   if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER"].includes(user.role)) return null;
+  if (
+    !["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER"].includes(
+      user.role,
+    )
+  )
+    return null;
   return { ...user, schoolId: user.schoolId };
 }
 
@@ -103,7 +112,9 @@ export async function createStudent(data: unknown) {
 
   const limit = await checkStudentLimit(user.schoolId);
   if (!limit.allowed) {
-    return { error: planLimitMessage("students", limit.current, limit.max, limit.plan) };
+    return {
+      error: planLimitMessage("students", limit.current, limit.max, limit.plan),
+    };
   }
 
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
@@ -128,7 +139,10 @@ export async function createStudent(data: unknown) {
     revalidatePath("/analytics");
     return { success: true, id: student.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
+    if (e.code === "P2002")
+      return {
+        error: "A student with this admission or roll number already exists",
+      };
     return { error: e.message };
   }
 }
@@ -162,7 +176,10 @@ export async function updateStudent(id: string, data: unknown) {
     revalidatePath("/analytics");
     return { success: true, id: student.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "A student with this admission or roll number already exists" };
+    if (e.code === "P2002")
+      return {
+        error: "A student with this admission or roll number already exists",
+      };
     return { error: e.message };
   }
 }
@@ -196,42 +213,190 @@ export async function getStudentDetails(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    const student = await getCache(`cache:${user.schoolId}:students:details:${id}`, () => 
-      prisma.student.findUnique({
-        where: { id, schoolId: user.schoolId },
-        include: {
-          class: true,
-          section: true,
-          fees: {
-            orderBy: { dueDate: "desc" },
-          },
-          feeCharges: {
-            orderBy: { createdAt: "desc" },
-            include: {
-              items: {
-                include: {
-                  component: true
-                }
+    const student = await getCache(
+      `cache:${user.schoolId}:students:details:v4:${id}`,
+      async () => {
+        const s = await prisma.student.findUnique({
+          where: { id, schoolId: user.schoolId },
+          include: {
+            class: true,
+            section: true,
+            fees: {
+              orderBy: { dueDate: "desc" },
+            },
+            feeCharges: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                items: {
+                  include: {
+                    component: true,
+                  },
+                },
+              },
+            },
+            paymentTxs: {
+              orderBy: { date: "desc" },
+            },
+            advanceLedgers: {
+              orderBy: { createdAt: "desc" },
+            },
+            transports: {
+              where: { status: "ACTIVE" },
+              include: {
+                route: true,
+                stop: true,
+                vehicle: true,
+              },
+            },
+            attendances: {
+              orderBy: { date: "desc" },
+              take: 120,
+              select: {
+                id: true,
+                date: true,
+                status: true,
+                remarks: true,
               },
             },
           },
-          paymentTxs: {
-            orderBy: { date: "desc" },
-          },
-          advanceLedgers: {
-            orderBy: { createdAt: "desc" },
-          },
-          transports: {
-            where: { status: "ACTIVE" },
-            include: {
-              route: true,
-              stop: true,
-              vehicle: true,
+        });
+
+        if (!s) return null;
+
+        // Fetch exams applicable to the student's class
+        const exams = await prisma.exam.findMany({
+          where: {
+            schoolId: user.schoolId,
+            subjects: {
+              some: {
+                classId: s.classId,
+              },
             },
           },
-        },
-      })
+          include: {
+            subjects: {
+              where: {
+                classId: s.classId,
+              },
+              orderBy: { order: "asc" },
+              include: {
+                marks: {
+                  where: { studentId: s.id },
+                },
+              },
+            },
+          },
+          orderBy: { startDate: "desc" },
+        });
+
+        const processedExams = exams.map((exam) => {
+          const subjectsWithMarks = exam.subjects.map((subj) => {
+            const markRecord = subj.marks[0];
+            const marksObtained =
+              markRecord?.marksObtained !== null &&
+              markRecord?.marksObtained !== undefined
+                ? Number(markRecord.marksObtained)
+                : null;
+            const isAbsent = markRecord?.isAbsent ?? false;
+
+            const gradeInfo = calculateSubjectGrade(
+              marksObtained,
+              Number(subj.maxMarks),
+              Number(subj.passMarks),
+              isAbsent,
+              exam.gradingSystem as any,
+            );
+
+            const percentage =
+              marksObtained !== null && Number(subj.maxMarks) > 0
+                ? Number(
+                    ((marksObtained / Number(subj.maxMarks)) * 100).toFixed(1),
+                  )
+                : 0;
+
+            return {
+              id: subj.id,
+              subjectName: subj.subjectName,
+              maxMarks: Number(subj.maxMarks),
+              passMarks: Number(subj.passMarks),
+              examDate: subj.examDate ? subj.examDate.toISOString() : null,
+              marksObtained,
+              isAbsent,
+              percentage,
+              grade: gradeInfo.grade,
+              gradePoint: gradeInfo.gradePoint,
+              remark: gradeInfo.remark,
+              isPass: gradeInfo.isPass,
+              remarks: markRecord?.remarks || null,
+              isEvaluated:
+                markRecord !== undefined &&
+                (isAbsent || marksObtained !== null),
+            };
+          });
+
+          const evaluatedSubjects = subjectsWithMarks.filter(
+            (subj) => subj.isEvaluated,
+          );
+          const summary = calculateReportCardSummary(
+            subjectsWithMarks.map((subj) => ({
+              maxMarks: subj.maxMarks,
+              passMarks: subj.passMarks,
+              marksObtained: subj.marksObtained,
+              isAbsent: subj.isAbsent,
+            })),
+            exam.gradingSystem as any,
+          );
+
+          return {
+            id: exam.id,
+            name: exam.name,
+            type: exam.type,
+            academicYear: exam.academicYear,
+            gradingSystem: exam.gradingSystem,
+            startDate: exam.startDate.toISOString(),
+            endDate: exam.endDate.toISOString(),
+            isPublished: exam.isPublished,
+            hasMarks: evaluatedSubjects.length > 0,
+            evaluatedCount: evaluatedSubjects.length,
+            totalSubjectsCount: subjectsWithMarks.length,
+            summary,
+            subjects: subjectsWithMarks,
+          };
+        });
+
+        const totalDays = s.attendances?.length ?? 0;
+        const presentDays =
+          s.attendances?.filter((a: any) => a.status === "PRESENT").length ?? 0;
+        const absentDays =
+          s.attendances?.filter((a: any) => a.status === "ABSENT").length ?? 0;
+        const lateDays =
+          s.attendances?.filter((a: any) => a.status === "LATE").length ?? 0;
+        const excusedDays =
+          s.attendances?.filter((a: any) => a.status === "EXCUSED").length ?? 0;
+        const attendedDays = presentDays + lateDays + excusedDays;
+        const attendanceRate =
+          totalDays > 0
+            ? Number(((attendedDays / totalDays) * 100).toFixed(1))
+            : 100;
+
+        const attendanceSummary = {
+          totalDays,
+          presentDays,
+          absentDays,
+          lateDays,
+          excusedDays,
+          attendedDays,
+          attendanceRate,
+        };
+
+        return {
+          ...s,
+          exams: processedExams,
+          attendanceSummary,
+        };
+      },
     );
+
     return { success: true, student };
   } catch (e: any) {
     return { error: e.message };

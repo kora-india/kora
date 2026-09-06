@@ -16,6 +16,7 @@ interface ReportCardModalProps {
   onClose: () => void;
   reportCard: any;
   bulkReportCards?: any[];
+  zIndex?: number;
 }
 
 export function ReportCardModal({
@@ -23,6 +24,7 @@ export function ReportCardModal({
   onClose,
   reportCard,
   bulkReportCards,
+  zIndex = 1100,
 }: Readonly<ReportCardModalProps>) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +52,7 @@ export function ReportCardModal({
       }
       description="Official institutional marksheet and scholastic assessment"
       className="max-w-4xl"
+      zIndex={zIndex}
     >
       <div className="space-y-4">
         {/* Top Print Trigger */}
