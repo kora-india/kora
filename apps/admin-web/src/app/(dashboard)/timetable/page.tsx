@@ -19,6 +19,7 @@ export default async function TimetablePage() {
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
     select: {
+      name: true,
       plan: true,
       subscription: { select: { plan: true, status: true } },
     },
@@ -71,6 +72,7 @@ export default async function TimetablePage() {
 
   return (
     <TimetableContent
+      schoolName={school?.name}
       initialClasses={classes}
       initialTeachers={teachers}
       initialPeriods={periods as any}

@@ -61,19 +61,19 @@ export default async function DashboardRootLayout({
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
       <Sidebar
         userRole={user.role}
         schoolName={schoolName}
         schoolPlan={schoolPlan}
       />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
         <Topbar
           user={user}
           subscription={subscriptionEvaluation}
           schoolPlan={schoolPlan}
         />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto print:h-auto print:overflow-visible print:block print:p-0">
           <PageTransition>{children}</PageTransition>
         </main>
       </div>

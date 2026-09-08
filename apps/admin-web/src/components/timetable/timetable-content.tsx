@@ -49,6 +49,7 @@ import {
 import { PeriodDefinition } from "@/lib/timetable-generator";
 
 interface TimetableContentProps {
+  schoolName?: string;
   initialClasses: any[];
   initialTeachers: any[];
   initialPeriods: PeriodDefinition[];
@@ -57,6 +58,7 @@ interface TimetableContentProps {
 }
 
 export function TimetableContent({
+  schoolName,
   initialClasses,
   initialTeachers,
   initialPeriods,
@@ -250,9 +252,9 @@ export function TimetableContent({
         },
       }}
     >
-      <div className="p-6 md:p-8 space-y-6 pb-12">
+      <div className="p-6 md:p-8 space-y-6 pb-12 print:p-0 print:space-y-0 print:m-0 print:pb-0">
         {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
               <Calendar className="w-7 h-7 text-violet-600" />
@@ -326,7 +328,7 @@ export function TimetableContent({
         </div>
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:hidden">
           <Card className="rounded-2xl border bg-card shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400">
@@ -424,7 +426,7 @@ export function TimetableContent({
         </div>
 
         {/* View Mode & Selection Controls */}
-        <div className="bg-card border rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="bg-card border rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 print:hidden">
           <div className="flex items-center gap-3 flex-wrap">
             <Segmented
               value={viewMode}
@@ -523,8 +525,35 @@ export function TimetableContent({
           </div>
         </div>
 
+        {/* Print-Only Official Timetable Header */}
+        <div className="hidden print:block mb-3 pb-2 border-b-2 border-black">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-black tracking-tight uppercase">
+                {schoolName || "SchoolOS"}
+              </h1>
+              <p className="text-sm font-semibold text-black mt-0.5">
+                {currentTargetName} · Academic Timetable
+              </p>
+            </div>
+            <div className="text-right text-xs text-black">
+              <div className="font-semibold text-black">
+                Academic Year 2024–2025
+              </div>
+              <div className="text-[11px] text-gray-700 mt-0.5">
+                Generated:{" "}
+                {new Date().toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Timetable Grid Matrix */}
-        <div className="print:m-0">
+        <div className="print:m-0 print:w-full">
           {loading ? (
             <TimetableSkeleton
               periods={periods}

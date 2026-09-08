@@ -52,13 +52,21 @@
 }
 
 @layer base {
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground antialiased; }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
 }
 
 /* Sidebar animation */
-.sidebar-expanded { width: var(--sidebar-width); }
-.sidebar-collapsed { width: var(--sidebar-collapsed); }
+.sidebar-expanded {
+  width: var(--sidebar-width);
+}
+.sidebar-collapsed {
+  width: var(--sidebar-collapsed);
+}
 
 /* Hide native number-input spin buttons for a cleaner look */
 input[type="number"] {
@@ -81,3 +89,71 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
+@media print {
+  @page {
+    size: landscape;
+    margin: 6mm 8mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force clean black & white styling on printed timetable */
+  .timetable-print-table {
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    width: 100% !important;
+  }
+
+  .timetable-print-table th,
+  .timetable-print-table td {
+    border: 1px solid #000000 !important;
+    color: #000000 !important;
+  }
+
+  .timetable-print-table th {
+    background-color: #f1f5f9 !important;
+    color: #000000 !important;
+  }
+
+  /* High contrast, ink-friendly black & white badge */
+  .timetable-print-table .ant-tag {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    box-shadow: none !important;
+    font-weight: 700 !important;
+    padding: 1px 4px !important;
+    white-space: normal !important;
+    height: auto !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Break periods (Recess / Lunch) high contrast B&W styling */
+  .timetable-print-table .break-cell {
+    background-color: #f8fafc !important;
+    color: #000000 !important;
+  }
+
+  .timetable-print-table .break-cell * {
+    color: #000000 !important;
+  }
+
+  /* Hide ant portals and floating toolbars in print */
+  .ant-modal-root,
+  .ant-drawer,
+  .ant-tooltip,
+  .ant-popover,
+  .ant-message,
+  .ant-notification {
+    display: none !important;
+  }
+}

@@ -40,7 +40,7 @@ export function Topbar({
   const activePlan = subscription?.plan || schoolPlan;
 
   return (
-    <header className="h-14 border-b bg-card/60 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-10">
+    <header className="h-14 border-b bg-card/60 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-10 print:hidden">
       {breadcrumb && (
         <p className="text-sm text-muted-foreground">
           <span className="text-foreground font-medium">{breadcrumb}</span>

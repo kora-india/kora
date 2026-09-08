@@ -180,7 +180,7 @@ export function Sidebar({
     <motion.aside
       animate={{ width: collapsed ? 64 : 240 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative flex flex-col h-screen bg-card border-r overflow-hidden flex-shrink-0"
+      className="relative flex flex-col h-screen bg-card border-r overflow-hidden flex-shrink-0 print:hidden"
     >
       {/* Logo */}
       <div
