@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
@@ -29,7 +30,14 @@ import { deleteStudent, getStudentDetails } from "@/lib/actions/students";
 import { StudentPerformanceTab } from "./student-performance-tab";
 import { ReportCardModal } from "@/components/exams/report-card-modal";
 import { getStudentReportCard } from "@/lib/actions/exams";
-import { Modal, Tabs, ConfigProvider, Spin, Select } from "antd";
+import {
+  Modal,
+  Tabs,
+  ConfigProvider,
+  Spin,
+  Select,
+  theme as antTheme,
+} from "antd";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -128,6 +136,15 @@ export function StudentsContent({
   canEdit,
 }: Readonly<Props>) {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = mounted && resolvedTheme === "dark";
+
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
@@ -395,7 +412,19 @@ export function StudentsContent({
 
   return (
     <ConfigProvider
-      theme={{ token: { colorPrimary: "#7c3aed", borderRadius: 8 } }}
+      theme={{
+        algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
+        token: {
+          colorPrimary: "#7c3aed",
+          borderRadius: 8,
+          colorBgContainer: isDark ? "#09090b" : "#ffffff",
+          colorBgElevated: isDark ? "#18181b" : "#ffffff",
+          colorBorder: isDark ? "#27272a" : "#e4e4e7",
+          colorBorderSecondary: isDark ? "#27272a" : "#f4f4f5",
+          colorText: isDark ? "#f4f4f5" : "#09090b",
+          colorTextSecondary: isDark ? "#a1a1aa" : "#71717a",
+        },
+      }}
     >
       <div className="p-6 space-y-5 max-w-[1400px]">
         <div className="flex items-start justify-between flex-wrap gap-4">
