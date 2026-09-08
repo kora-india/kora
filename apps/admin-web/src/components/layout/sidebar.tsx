@@ -24,6 +24,10 @@ import {
   Bus,
   Award,
   Clock,
+  Zap,
+  Crown,
+  Shield,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -31,6 +35,7 @@ import { UserRole } from "@schoolos/types";
 interface SidebarProps {
   userRole: UserRole;
   schoolName?: string;
+  schoolPlan?: string;
 }
 
 const adminNavItems = [
@@ -120,12 +125,52 @@ function getRoleBadge(role: UserRole) {
   }
 }
 
-export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
+function getPlanBadge(plan?: string) {
+  if (!plan) return null;
+  const p = plan.toUpperCase();
+  switch (p) {
+    case "ENTERPRISE":
+      return {
+        label: "Enterprise",
+        className:
+          "bg-amber-500/15 text-amber-800 border-amber-300/60 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700/50",
+        icon: Crown,
+      };
+    case "PRO":
+      return {
+        label: "PRO",
+        className:
+          "bg-violet-500/15 text-violet-700 border-violet-300/60 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-700/50",
+        icon: Zap,
+      };
+    case "BASIC":
+      return {
+        label: "Basic",
+        className:
+          "bg-blue-500/15 text-blue-700 border-blue-300/60 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-700/50",
+        icon: Shield,
+      };
+    default:
+      return {
+        label: "Free",
+        className:
+          "bg-slate-500/15 text-slate-700 border-slate-300/60 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-700/50",
+        icon: Sparkles,
+      };
+  }
+}
+
+export function Sidebar({
+  userRole,
+  schoolName,
+  schoolPlan,
+}: Readonly<SidebarProps>) {
   const [collapsed, setCollapsed] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
   const navItems = getNavItems(userRole);
   const roleBadge = getRoleBadge(userRole);
+  const planBadge = getPlanBadge(schoolPlan);
 
   useEffect(() => {
     setNavigatingTo(null);
@@ -164,16 +209,31 @@ export function Sidebar({ userRole, schoolName }: Readonly<SidebarProps>) {
       {/* School info */}
       {!collapsed && schoolName && (
         <div className="px-3 py-2.5 border-b">
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <p className="text-xs font-medium truncate">{schoolName}</p>
-            <span
-              className={cn(
-                "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                roleBadge.className,
+          <div className="bg-muted/50 rounded-lg px-3 py-2 space-y-1.5">
+            <p className="text-xs font-semibold truncate text-foreground">
+              {schoolName}
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className={cn(
+                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                  roleBadge.className,
+                )}
+              >
+                {roleBadge.label}
+              </span>
+              {planBadge && (
+                <span
+                  className={cn(
+                    "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 uppercase tracking-wider",
+                    planBadge.className,
+                  )}
+                >
+                  <planBadge.icon className="w-2.5 h-2.5 fill-current" />
+                  {planBadge.label}
+                </span>
               )}
-            >
-              {roleBadge.label}
-            </span>
+            </div>
           </div>
         </div>
       )}

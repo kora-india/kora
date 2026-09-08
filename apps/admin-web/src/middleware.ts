@@ -1,7 +1,17 @@
 import { auth } from "@schoolos/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/suspended", "/api/health", "/api/auth", "/api/cron"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/suspended",
+  "/expired",
+  "/api/health",
+  "/api/auth",
+  "/api/cron",
+];
 
 function isPublic(pathname: string) {
   if (pathname === "/") return true;
@@ -18,7 +28,10 @@ export default auth((req) => {
   if (canonicalOrigin) {
     const canonical = new URL(canonicalOrigin);
     if (req.nextUrl.hostname !== canonical.hostname) {
-      const target = new URL(req.nextUrl.pathname + req.nextUrl.search, canonical.origin);
+      const target = new URL(
+        req.nextUrl.pathname + req.nextUrl.search,
+        canonical.origin,
+      );
       return NextResponse.redirect(target, { status: 301 });
     }
   }
@@ -26,7 +39,12 @@ export default auth((req) => {
   // Always allow public paths
   if (isPublic(pathname)) {
     // Redirect authenticated users away from login, register, and landing page
-    if (req.auth && (pathname.startsWith("/login") || pathname.startsWith("/register") || pathname === "/")) {
+    if (
+      req.auth &&
+      (pathname.startsWith("/login") ||
+        pathname.startsWith("/register") ||
+        pathname === "/")
+    ) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
@@ -41,10 +59,18 @@ export default auth((req) => {
   // SUPER_ADMIN has no schoolId, so school-scoped pages have nothing to show them.
   // Redirect stray direct navigation to the page built for their role.
   const user = req.auth.user;
-  const SUPER_ADMIN_ALLOWED = ["/dashboard", "/schools", "/subscriptions", "/analytics", "/settings"];
+  const SUPER_ADMIN_ALLOWED = [
+    "/dashboard",
+    "/schools",
+    "/subscriptions",
+    "/analytics",
+    "/settings",
+  ];
   if (
     user?.role === "SUPER_ADMIN" &&
-    !SUPER_ADMIN_ALLOWED.some((p) => pathname === p || pathname.startsWith(p + "/"))
+    !SUPER_ADMIN_ALLOWED.some(
+      (p) => pathname === p || pathname.startsWith(p + "/"),
+    )
   ) {
     return NextResponse.redirect(new URL("/schools", req.url));
   }
@@ -59,7 +85,9 @@ export default auth((req) => {
 
 export const config = {
   // Exclude Next.js internals and common static assets; otherwise CSS/JS can get redirected.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico)$).*)",
+  ],
   // Next.js 15.2+ supports Node.js middleware runtime (experimental).
   // This avoids Edge runtime limitations when importing Node-only deps.
   runtime: "nodejs",

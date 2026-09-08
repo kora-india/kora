@@ -26,17 +26,26 @@ const stagger = {
   container: { hidden: {}, visible: { transition: { staggerChildren: 0.05 } } },
   item: {
     hidden: { opacity: 0, y: 10 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.25, ease: "easeOut" },
+    },
   },
 };
 
 const FEE_BADGE: Record<string, string> = {
   PAID: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800",
-  OVERDUE: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800",
-  PARTIAL: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800",
-  WAIVED: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-800",
-  "NO DUES": "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
+  PENDING:
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800",
+  OVERDUE:
+    "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800",
+  PARTIAL:
+    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800",
+  WAIVED:
+    "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-800",
+  "NO DUES":
+    "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
 };
 
 interface DashboardContentProps {
@@ -60,12 +69,18 @@ function StatCard({ title, value, icon: Icon, trend, color, href }: any) {
         )}
       </div>
       <div className="mt-3">
-        <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 font-medium">{title}</p>
+        <p className="text-2xl font-bold tracking-tight text-foreground">
+          {value}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+          {title}
+        </p>
         {trend && (
           <div
             className={`flex items-center gap-1 mt-2 text-[11px] font-semibold ${
-              trend.up ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+              trend.up
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-amber-600 dark:text-amber-400"
             }`}
           >
             {trend.label}
@@ -81,7 +96,11 @@ function StatCard({ title, value, icon: Icon, trend, color, href }: any) {
   return content;
 }
 
-export function DashboardContent({ data, userRole, userName }: Readonly<DashboardContentProps>) {
+export function DashboardContent({
+  data,
+  userRole,
+  userName,
+}: Readonly<DashboardContentProps>) {
   const stats = data?.stats;
   const revenueAreaData = data?.revenueAreaData || [];
   const classAttendance = data?.classAttendance || [];
@@ -90,7 +109,11 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
 
   const currentHour = new Date().getHours();
   const greeting =
-    currentHour < 12 ? "Good morning" : currentHour < 17 ? "Good afternoon" : "Good evening";
+    currentHour < 12
+      ? "Good morning"
+      : currentHour < 17
+        ? "Good afternoon"
+        : "Good evening";
 
   const hasRevenueData = revenueAreaData.some((d: any) => d.amount > 0);
 
@@ -170,7 +193,10 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
           value={stats?.totalTeachers?.toLocaleString() || "0"}
           icon={GraduationCap}
           color="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-          trend={{ up: true, label: `${stats?.activeClasses || 0} active classes` }}
+          trend={{
+            up: true,
+            label: `${stats?.activeClasses || 0} active classes`,
+          }}
           href="/teachers"
         />
         <StatCard
@@ -221,21 +247,26 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-violet-600" /> Fee Collection & Financial Trend
+                <CreditCard className="w-4 h-4 text-violet-600" /> Fee
+                Collection & Financial Trend
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly revenue collected vs operational expenses & pending balances (AntV Area)
+                Monthly revenue collected vs operational expenses & pending
+                balances (AntV Area)
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
               <span className="flex items-center gap-1 text-violet-600 dark:text-violet-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" /> Collected
+                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />{" "}
+                Collected
               </span>
               <span className="flex items-center gap-1 text-rose-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Expenses
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />{" "}
+                Expenses
               </span>
               <span className="flex items-center gap-1 text-amber-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Pending
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{" "}
+                Pending
               </span>
             </div>
           </div>
@@ -258,9 +289,13 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
-                <CalendarCheck className="w-4 h-4 text-emerald-600" /> Attendance Overview
+                <CalendarCheck className="w-4 h-4 text-emerald-600" />{" "}
+                Attendance Overview
               </h3>
-              <Link href="/attendance" className="text-xs text-violet-600 hover:underline font-medium">
+              <Link
+                href="/attendance"
+                className="text-xs text-violet-600 hover:underline font-medium"
+              >
                 Details →
               </Link>
             </div>
@@ -285,7 +320,10 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                     stroke="#10b981"
                     strokeWidth="9"
                     strokeDasharray={`${
-                      2 * Math.PI * 40 * ((stats?.attendancePercentage || 0) / 100)
+                      2 *
+                      Math.PI *
+                      40 *
+                      ((stats?.attendancePercentage || 0) / 100)
                     } ${2 * Math.PI * 40}`}
                     strokeLinecap="round"
                   />
@@ -309,7 +347,9 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                 <div key={c.label} className="space-y-1 text-xs">
                   <div className="flex justify-between text-muted-foreground font-medium">
                     <span>{c.label}</span>
-                    <span className="font-semibold text-foreground">{c.pct}%</span>
+                    <span className="font-semibold text-foreground">
+                      {c.pct}%
+                    </span>
                   </div>
                   <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                     <div
@@ -317,8 +357,8 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                         c.pct >= 90
                           ? "bg-emerald-500"
                           : c.pct >= 75
-                          ? "bg-amber-500"
-                          : "bg-rose-500"
+                            ? "bg-amber-500"
+                            : "bg-rose-500"
                       }`}
                       style={{ width: `${Math.min(100, Math.max(5, c.pct))}%` }}
                     />
@@ -358,10 +398,18 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
-                  <th className="h-9 px-4 text-left font-medium uppercase">Student</th>
-                  <th className="h-9 px-4 text-left font-medium uppercase">Class & Section</th>
-                  <th className="h-9 px-4 text-left font-medium uppercase">Fee Status</th>
-                  <th className="h-9 px-4 text-right font-medium uppercase">Action</th>
+                  <th className="h-9 px-4 text-left font-medium uppercase">
+                    Student
+                  </th>
+                  <th className="h-9 px-4 text-left font-medium uppercase">
+                    Class & Section
+                  </th>
+                  <th className="h-9 px-4 text-left font-medium uppercase">
+                    Fee Status
+                  </th>
+                  <th className="h-9 px-4 text-right font-medium uppercase">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -370,7 +418,10 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                   const badgeCls = FEE_BADGE[feeStatus] || FEE_BADGE.PAID;
 
                   return (
-                    <tr key={s.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={s.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="h-12 px-4">
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[10px] font-bold text-violet-700 dark:text-violet-300 flex-shrink-0">
@@ -382,7 +433,9 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                               .toUpperCase()}
                           </div>
                           <div>
-                            <span className="text-xs font-semibold block">{s.name}</span>
+                            <span className="text-xs font-semibold block">
+                              {s.name}
+                            </span>
                             <span className="text-[10px] text-muted-foreground">
                               Roll #{s.rollNumber || "—"}
                             </span>
@@ -413,7 +466,10 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
 
                 {recentStudents.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
+                    <td
+                      colSpan={4}
+                      className="py-8 text-center text-xs text-muted-foreground"
+                    >
                       No enrolled students found.
                     </td>
                   </tr>
@@ -455,13 +511,15 @@ export function DashboardContent({ data, userRole, userName }: Readonly<Dashboar
                         n.priority === "HIGH"
                           ? "bg-rose-500"
                           : n.priority === "MEDIUM"
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
                       }`}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
-                        <p className="text-xs font-semibold truncate">{n.title}</p>
+                        <p className="text-xs font-semibold truncate">
+                          {n.title}
+                        </p>
                         <span className="text-[10px] text-muted-foreground flex-shrink-0">
                           {new Date(n.createdAt).toLocaleDateString("en-IN", {
                             month: "short",

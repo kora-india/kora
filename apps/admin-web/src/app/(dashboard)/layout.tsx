@@ -5,7 +5,9 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { PageTransition } from "@/components/layout/page-transition";
 
-export default async function DashboardRootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function DashboardRootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -19,26 +21,58 @@ export default async function DashboardRootLayout({ children }: Readonly<{ child
   }
 
   let schoolName = "";
+  let schoolPlan = "";
+  let subscriptionEvaluation = null;
 
   if (schoolId) {
     const school = await prisma.school.findUnique({
       where: { id: schoolId },
-      select: { isActive: true, name: true },
+      select: {
+        isActive: true,
+        name: true,
+        plan: true,
+        subscription: true,
+      },
     });
-    
+
     if (school) {
       schoolName = school.name;
-      if (user.role !== "SUPER_ADMIN" && !school.isActive) {
-        redirect("/suspended");
+      schoolPlan = school.plan;
+
+      if (user.role !== "SUPER_ADMIN") {
+        if (!school.isActive) {
+          redirect("/suspended");
+        }
+
+        const { evaluateSubscriptionValidity } =
+          await import("@/lib/subscription");
+        subscriptionEvaluation = evaluateSubscriptionValidity(
+          school.subscription || { plan: school.plan },
+        );
+
+        // If subscription or trial has fully expired, redirect to renewal
+        if (subscriptionEvaluation.isExpired) {
+          redirect("/expired");
+        }
+
+        schoolPlan = subscriptionEvaluation.plan;
       }
     }
   }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar userRole={user.role} schoolName={schoolName} />
+      <Sidebar
+        userRole={user.role}
+        schoolName={schoolName}
+        schoolPlan={schoolPlan}
+      />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Topbar user={user} />
+        <Topbar
+          user={user}
+          subscription={subscriptionEvaluation}
+          schoolPlan={schoolPlan}
+        />
         <main className="flex-1 overflow-y-auto">
           <PageTransition>{children}</PageTransition>
         </main>

@@ -9,19 +9,33 @@ import { getCache } from "@/lib/redis";
 export const metadata = { title: "Dashboard" };
 
 async function getDashboardData(schoolId: string) {
-  const totalStudents = await prisma.student.count({ where: { schoolId, isActive: true } });
-  const totalTeachers = await prisma.teacher.count({ where: { schoolId, isActive: true } });
+  const totalStudents = await prisma.student.count({
+    where: { schoolId, isActive: true },
+  });
+  const totalTeachers = await prisma.teacher.count({
+    where: { schoolId, isActive: true },
+  });
   const totalClasses = await prisma.class.count({ where: { schoolId } });
   const pendingFeeItems = await prisma.feeChargeItem.findMany({
-    where: { charge: { schoolId }, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+    where: {
+      charge: { schoolId },
+      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+    },
     select: { amount: true, paidAmount: true },
   });
-  const totalPendingFees = pendingFeeItems.reduce((acc, item) => acc + (Number(item.amount) - Number(item.paidAmount)), 0);
+  const totalPendingFees = pendingFeeItems.reduce(
+    (acc, item) => acc + (Number(item.amount) - Number(item.paidAmount)),
+    0,
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const present = await prisma.attendance.count({ where: { schoolId, date: today, status: "PRESENT" } });
-  const total = await prisma.attendance.count({ where: { schoolId, date: today } });
+  const present = await prisma.attendance.count({
+    where: { schoolId, date: today, status: "PRESENT" },
+  });
+  const total = await prisma.attendance.count({
+    where: { schoolId, date: today },
+  });
   const todayAttendance = { present, total };
 
   const recentActivity = await prisma.student.findMany({
@@ -31,7 +45,11 @@ async function getDashboardData(schoolId: string) {
     include: {
       class: { select: { name: true } },
       section: { select: { name: true } },
-      feeCharges: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      feeCharges: {
+        select: { status: true },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
     },
   });
 
@@ -53,8 +71,15 @@ async function getDashboardData(schoolId: string) {
   });
 
   const pendingFeeRows = await prisma.feeChargeItem.findMany({
-    where: { charge: { schoolId, dueDate: { gte: sixMonthsAgo } }, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
-    select: { amount: true, paidAmount: true, charge: { select: { dueDate: true } } },
+    where: {
+      charge: { schoolId, dueDate: { gte: sixMonthsAgo } },
+      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+    },
+    select: {
+      amount: true,
+      paidAmount: true,
+      charge: { select: { dueDate: true } },
+    },
   });
 
   const expensesList = await prisma.expense.findMany({
@@ -62,7 +87,11 @@ async function getDashboardData(schoolId: string) {
     select: { amount: true, date: true },
   });
 
-  const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
+  const monthKey = (d: Date) =>
+    new Intl.DateTimeFormat("en-IN", {
+      month: "short",
+      year: "numeric",
+    }).format(d);
 
   const revenueByMonth: Record<string, number> = {};
   payments.forEach((p: (typeof payments)[number]) => {
@@ -73,7 +102,8 @@ async function getDashboardData(schoolId: string) {
   const pendingByMonth: Record<string, number> = {};
   pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
     const key = monthKey(new Date(f.charge.dueDate));
-    pendingByMonth[key] = (pendingByMonth[key] ?? 0) + (Number(f.amount) - Number(f.paidAmount));
+    pendingByMonth[key] =
+      (pendingByMonth[key] ?? 0) + (Number(f.amount) - Number(f.paidAmount));
   });
 
   const expenseByMonth: Record<string, number> = {};
@@ -85,7 +115,10 @@ async function getDashboardData(schoolId: string) {
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i));
-    return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
+    return {
+      label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d),
+      key: monthKey(d),
+    };
   });
 
   const revenueAreaData: { month: string; type: string; amount: number }[] = [];
@@ -93,7 +126,11 @@ async function getDashboardData(schoolId: string) {
     const collected = revenueByMonth[key] ?? 0;
     const expenses = expenseByMonth[key] ?? 0;
     const pending = pendingByMonth[key] ?? 0;
-    revenueAreaData.push({ month: label, type: "Collected", amount: collected });
+    revenueAreaData.push({
+      month: label,
+      type: "Collected",
+      amount: collected,
+    });
     revenueAreaData.push({ month: label, type: "Expenses", amount: expenses });
     revenueAreaData.push({ month: label, type: "Pending", amount: pending });
     return {
@@ -118,16 +155,20 @@ async function getDashboardData(schoolId: string) {
     },
   });
 
-  const attendancePercentage = todayAttendance.total > 0
-    ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
-    : 0;
+  const attendancePercentage =
+    todayAttendance.total > 0
+      ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
+      : 0;
 
   const classAttendance = classesList.map((c) => {
     const totalStudents = c._count.students;
-    const presentStudents = c.attendances.filter((a) => a.status === "PRESENT").length;
-    const pct = c.attendances.length > 0
-      ? Math.round((presentStudents / c.attendances.length) * 100)
-      : attendancePercentage;
+    const presentStudents = c.attendances.filter(
+      (a) => a.status === "PRESENT",
+    ).length;
+    const pct =
+      c.attendances.length > 0
+        ? Math.round((presentStudents / c.attendances.length) * 100)
+        : attendancePercentage;
     return {
       label: c.name,
       pct,
@@ -135,10 +176,21 @@ async function getDashboardData(schoolId: string) {
     };
   });
 
-  const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { name: true } });
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { name: true, plan: true, subscription: true },
+  });
+
+  const { evaluateSubscriptionValidity } = await import("@/lib/subscription");
+  const subEval = school
+    ? evaluateSubscriptionValidity(school.subscription || { plan: school.plan })
+    : null;
 
   return {
     schoolName: school?.name ?? "School",
+    schoolPlan: subEval?.plan ?? school?.plan ?? "FREE",
+    isTrial: subEval?.isTrial ?? false,
+    trialDaysRemaining: subEval?.daysRemaining ?? 0,
     stats: {
       totalStudents,
       totalTeachers,
@@ -170,10 +222,12 @@ export default async function DashboardPage() {
     const superAdminData = await getCache(
       "cache:superadmin:dashboard",
       () => getSuperAdminDashboardData(),
-      120 // 2 minutes TTL
+      120, // 2 minutes TTL
     );
 
-    return <SuperAdminDashboardContent data={superAdminData} userName={user.name} />;
+    return (
+      <SuperAdminDashboardContent data={superAdminData} userName={user.name} />
+    );
   }
 
   const schoolId = user.schoolId;
@@ -184,7 +238,7 @@ export default async function DashboardPage() {
   const data = await getCache(
     `cache:${schoolId}:dashboard`,
     () => getDashboardData(schoolId),
-    300 // 5 minutes TTL
+    300, // 5 minutes TTL
   );
 
   return (
@@ -194,4 +248,3 @@ export default async function DashboardPage() {
     </>
   );
 }
-

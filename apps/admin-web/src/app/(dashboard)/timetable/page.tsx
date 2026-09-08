@@ -16,6 +16,39 @@ export default async function TimetablePage() {
     return <div className="p-6">No school assigned.</div>;
   }
 
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      plan: true,
+      subscription: { select: { plan: true, status: true } },
+    },
+  });
+
+  const { hasFeatureAccess } = await import("@/lib/subscription");
+  const canAccess = hasFeatureAccess(
+    school?.plan || "FREE",
+    school?.subscription?.status || "ACTIVE",
+    "TIMETABLE",
+  );
+
+  if (!canAccess && user.role !== "SUPER_ADMIN") {
+    const { PlanUpgradeGate } =
+      await import("@/components/subscriptions/plan-upgrade-gate");
+    return (
+      <PlanUpgradeGate
+        featureName="Automated Timetable & Scheduling"
+        description="Automated constraint-satisfaction scheduling of classes, teacher assignments, and real-time conflict detection."
+        requiredPlan="PRO"
+        highlights={[
+          "AI constraint solver allocating complete week in seconds",
+          "Strict teacher double-booking and room overlap prevention",
+          "Dual perspective grid for classes and individual teachers",
+          "Custom bell schedule and recess configuration",
+        ]}
+      />
+    );
+  }
+
   const [classes, teachers, periods] = await Promise.all([
     prisma.class.findMany({
       where: { schoolId },

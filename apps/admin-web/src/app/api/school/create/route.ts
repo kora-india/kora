@@ -3,7 +3,10 @@ import * as Sentry from "@sentry/nextjs";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
-import { schoolCreateRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import {
+  schoolCreateRatelimit,
+  createRateLimitResponse,
+} from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 import crypto from "crypto";
@@ -12,7 +15,10 @@ const schoolLogger = createLogger("school-create");
 
 const SetupSchema = z.object({
   name: z.string().min(3),
-  subdomain: z.string().min(3).regex(/^[a-z0-9-]+$/),
+  subdomain: z
+    .string()
+    .min(3)
+    .regex(/^[a-z0-9-]+$/),
   address: z.string().optional(),
   pincode: z.string().optional(),
   city: z.string().optional(),
@@ -42,10 +48,9 @@ export async function POST(req: Request) {
       schoolLogger.warn({ identifier }, "School creation rate limit exceeded");
       return createRateLimitResponse(
         rateLimitResult,
-        "Too many school creation attempts. Please wait an hour before creating another school."
+        "Too many school creation attempts. Please wait an hour before creating another school.",
       );
     }
-
 
     const body = await req.json();
     const parsed = SetupSchema.safeParse(body);
@@ -53,7 +58,7 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid data", details: parsed.error.format() },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -83,8 +88,14 @@ export async function POST(req: Request) {
       .digest("hex");
 
     if (generated_signature !== razorpay_signature) {
-      schoolLogger.warn({ subdomain, razorpay_order_id }, "Invalid Razorpay payment signature");
-      return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
+      schoolLogger.warn(
+        { subdomain, razorpay_order_id },
+        "Invalid Razorpay payment signature",
+      );
+      return NextResponse.json(
+        { error: "Payment verification failed" },
+        { status: 400 },
+      );
     }
 
     // 2. Check Subdomain Availability
@@ -93,7 +104,10 @@ export async function POST(req: Request) {
     });
 
     if (existing) {
-      return NextResponse.json({ error: "Subdomain is already taken" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Subdomain is already taken" },
+        { status: 400 },
+      );
     }
 
     // 3. Create School & Initial Subscription Transaction
@@ -115,13 +129,20 @@ export async function POST(req: Request) {
         },
       });
 
+      const isPaid = Boolean(razorpay_payment_id && razorpay_order_id);
+      const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      const oneMonthLater = new Date(
+        new Date().setMonth(new Date().getMonth() + 1),
+      );
+
       await tx.subscription.create({
         data: {
           schoolId: newSchool.id,
           plan: plan as any,
-          status: "ACTIVE",
+          status: isPaid ? "ACTIVE" : "TRIAL",
+          trialEndsAt: isPaid ? null : trialEndsAt,
           currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(new Date().setMonth(new Date().getMonth() + 1)), // 1 month validity
+          currentPeriodEnd: isPaid ? oneMonthLater : trialEndsAt,
         },
       });
 
@@ -135,7 +156,7 @@ export async function POST(req: Request) {
 
     schoolLogger.info(
       { schoolId: school.id, subdomain, plan, userId: session.user.id },
-      `[School Created] ${name} (${subdomain}) on plan ${plan}`
+      `[School Created] ${name} (${subdomain}) on plan ${plan}`,
     );
 
     return NextResponse.json({ success: true, schoolId: school.id });
@@ -147,6 +168,9 @@ export async function POST(req: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

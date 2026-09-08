@@ -54,14 +54,25 @@ async function getAnalyticsData(schoolId: string) {
   });
 
   // 4. Student Counts
-  const activeStudentCount = await prisma.student.count({ where: { schoolId, isActive: true } });
-  const newStudentCount = await prisma.student.count({ where: { schoolId, createdAt: { gte: thirtyDaysAgo } } });
+  const activeStudentCount = await prisma.student.count({
+    where: { schoolId, isActive: true },
+  });
+  const newStudentCount = await prisma.student.count({
+    where: { schoolId, createdAt: { gte: thirtyDaysAgo } },
+  });
 
-  const monthKey = (d: Date) => new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric" }).format(d);
+  const monthKey = (d: Date) =>
+    new Intl.DateTimeFormat("en-IN", {
+      month: "short",
+      year: "numeric",
+    }).format(d);
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i));
-    return { label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d), key: monthKey(d) };
+    return {
+      label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d),
+      key: monthKey(d),
+    };
   });
 
   // Collected amounts by month (from PaymentTransaction)
@@ -112,7 +123,11 @@ async function getAnalyticsData(schoolId: string) {
   const revenueData = months.map(({ label, key }) => {
     const collected = collectedByMonth[key] ?? 0;
     const pending = pendingByMonth[key] ?? 0;
-    revenueAreaData.push({ month: label, type: "Collected", amount: collected });
+    revenueAreaData.push({
+      month: label,
+      type: "Collected",
+      amount: collected,
+    });
     revenueAreaData.push({ month: label, type: "Pending", amount: pending });
     return {
       month: label,
@@ -128,12 +143,18 @@ async function getAnalyticsData(schoolId: string) {
   attendanceRows.forEach((a) => {
     const key = monthKey(new Date(a.date));
     totalAttendanceByMonth[key] = (totalAttendanceByMonth[key] ?? 0) + 1;
-    if (a.status === "PRESENT") presentByMonth[key] = (presentByMonth[key] ?? 0) + 1;
+    if (a.status === "PRESENT")
+      presentByMonth[key] = (presentByMonth[key] ?? 0) + 1;
   });
 
   const attendanceData = months.map(({ label, key }) => ({
     month: label,
-    rate: totalAttendanceByMonth[key] > 0 ? Math.round(((presentByMonth[key] ?? 0) / totalAttendanceByMonth[key]) * 100) : 0,
+    rate:
+      totalAttendanceByMonth[key] > 0
+        ? Math.round(
+            ((presentByMonth[key] ?? 0) / totalAttendanceByMonth[key]) * 100,
+          )
+        : 0,
     totalRecords: totalAttendanceByMonth[key] ?? 0,
   }));
 
@@ -146,27 +167,40 @@ async function getAnalyticsData(schoolId: string) {
   const feeDistribution = sortedCompList.map((c) => ({
     name: c.name,
     value: c.value,
-    percentage: totalCompSum > 0 ? Math.round((c.value / totalCompSum) * 100) : 0,
+    percentage:
+      totalCompSum > 0 ? Math.round((c.value / totalCompSum) * 100) : 0,
   }));
 
   // Attendance in last 30 days
-  const last30 = attendanceRows.filter((a) => new Date(a.date) >= thirtyDaysAgo);
+  const last30 = attendanceRows.filter(
+    (a) => new Date(a.date) >= thirtyDaysAgo,
+  );
   const daysSeen = new Set(last30.map((a) => new Date(a.date).toDateString()));
   const presentLast30 = last30.filter((a) => a.status === "PRESENT").length;
-  const avgAttendanceRate = last30.length > 0 ? Math.round((presentLast30 / last30.length) * 100) : 0;
-  const avgPresentPerDay = daysSeen.size > 0 ? Math.round(presentLast30 / daysSeen.size) : 0;
+  const avgAttendanceRate =
+    last30.length > 0 ? Math.round((presentLast30 / last30.length) * 100) : 0;
+  const avgPresentPerDay =
+    daysSeen.size > 0 ? Math.round(presentLast30 / daysSeen.size) : 0;
 
   // Revenue this month vs last month
   const thisMonthKey = months[months.length - 1].key;
   const lastMonthKey = months[months.length - 2]?.key;
   const thisMonthRevenue = collectedByMonth[thisMonthKey] ?? 0;
-  const lastMonthRevenue = lastMonthKey ? collectedByMonth[lastMonthKey] ?? 0 : 0;
-  const revenueChangePct = lastMonthRevenue > 0
-    ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 1000) / 10
-    : null;
+  const lastMonthRevenue = lastMonthKey
+    ? (collectedByMonth[lastMonthKey] ?? 0)
+    : 0;
+  const revenueChangePct =
+    lastMonthRevenue > 0
+      ? Math.round(
+          ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 1000,
+        ) / 10
+      : null;
 
   // Overall collection rate
-  const feeCollectionRate = totalBilledFee > 0 ? Math.round((totalCollectedFee / totalBilledFee) * 1000) / 10 : 0;
+  const feeCollectionRate =
+    totalBilledFee > 0
+      ? Math.round((totalCollectedFee / totalBilledFee) * 1000) / 10
+      : 0;
 
   // Payment Methods
   const paymentMethods = Object.entries(methodMap).map(([method, amount]) => ({
@@ -209,21 +243,54 @@ export default async function AnalyticsPage() {
     const superAdminAnalytics = await getCache(
       "cache:superadmin:analytics",
       () => getSuperAdminAnalyticsData(),
-      120 // 2 minutes TTL
+      120, // 2 minutes TTL
     );
 
     return <SuperAdminAnalytics {...superAdminAnalytics} />;
   }
 
   const schoolId = user.schoolId;
-  if (!schoolId) return <div className="p-6 text-muted-foreground">No school assigned.</div>;
+  if (!schoolId)
+    return <div className="p-6 text-muted-foreground">No school assigned.</div>;
+
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      plan: true,
+      subscription: { select: { plan: true, status: true } },
+    },
+  });
+
+  const { hasFeatureAccess } = await import("@/lib/subscription");
+  const canAccess = hasFeatureAccess(
+    school?.plan || "FREE",
+    school?.subscription?.status || "ACTIVE",
+    "ANALYTICS",
+  );
+
+  if (!canAccess) {
+    const { PlanUpgradeGate } =
+      await import("@/components/subscriptions/plan-upgrade-gate");
+    return (
+      <PlanUpgradeGate
+        featureName="Advanced Analytics & Trends"
+        description="Unlock comprehensive fee collections, attendance rate trends, cohort metrics, and cash flow projections."
+        requiredPlan="PRO"
+        highlights={[
+          "Real-time fee collection vs pending trends",
+          "Student attendance rate and absence metrics",
+          "Fee distribution across components",
+          "Exportable analytical reports",
+        ]}
+      />
+    );
+  }
 
   const data = await getCache(
     `cache:${schoolId}:analytics`,
     () => getAnalyticsData(schoolId),
-    300 // 5 minutes TTL
+    300, // 5 minutes TTL
   );
 
   return <AnalyticsContent {...data} />;
 }
-
