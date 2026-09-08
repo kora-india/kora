@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useQueryState } from "@/hooks/use-query-state";
 import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
@@ -145,13 +146,18 @@ export function StudentsContent({
 
   const isDark = mounted && resolvedTheme === "dark";
 
-  const [search, setSearch] = useState("");
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSection, setSelectedSection] = useState("");
-  const [selectedFeeStatus, setSelectedFeeStatus] = useState("all");
-  const [selectedAttendanceStatus, setSelectedAttendanceStatus] =
-    useState("all");
-  const [sortBy, setSortBy] = useState("default");
+  const [search, setSearch] = useQueryState("q", "");
+  const [selectedClass, setSelectedClass] = useQueryState("classId", "");
+  const [selectedSection, setSelectedSection] = useQueryState("sectionId", "");
+  const [selectedFeeStatus, setSelectedFeeStatus] = useQueryState(
+    "feeStatus",
+    "all",
+  );
+  const [selectedAttendanceStatus, setSelectedAttendanceStatus] = useQueryState(
+    "attendanceStatus",
+    "all",
+  );
+  const [sortBy, setSortBy] = useQueryState("sortBy", "default");
   const [page, setPage] = useState(1);
 
   const [dialog, setDialog] = useState<"closed" | "create" | "edit" | "import">(

@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { ConfigProvider, theme as antTheme } from "antd";
 import { useTheme } from "next-themes";
 
@@ -32,10 +33,17 @@ export function ExamsContent({
   userRole,
 }: Readonly<ExamsContentProps>) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"schedule" | "marks" | "results">(
-    "schedule",
+  const [activeTab, setActiveTab] = useQueryTab<
+    "schedule" | "marks" | "results"
+  >({
+    paramKey: "tab",
+    validTabs: ["schedule", "marks", "results"],
+    defaultTab: "schedule",
+  });
+  const [selectedExamIdForTab, setSelectedExamIdForTab] = useQueryState<string>(
+    "examId",
+    "",
   );
-  const [selectedExamIdForTab, setSelectedExamIdForTab] = useState<string>("");
 
   // Dialog State
   const [isExamDialogOpen, setIsExamDialogOpen] = useState(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQueryState } from "@/hooks/use-query-state";
 import {
   getSectionReportCards,
   getStudentReportCard,
@@ -30,7 +31,8 @@ export function ResultsTab({
   classes,
   selectedExamIdProp,
 }: Readonly<ResultsTabProps>) {
-  const [selectedExamId, setSelectedExamId] = useState<string>(
+  const [selectedExamId, setSelectedExamId] = useQueryState<string>(
+    "examId",
     selectedExamIdProp || exams[0]?.id || "",
   );
 
@@ -38,15 +40,20 @@ export function ResultsTab({
     if (selectedExamIdProp) {
       setSelectedExamId(selectedExamIdProp);
     }
-  }, [selectedExamIdProp]);
-  const [selectedClassId, setSelectedClassId] = useState<string>(
+  }, [selectedExamIdProp, setSelectedExamId]);
+
+  const [selectedClassId, setSelectedClassId] = useQueryState<string>(
+    "classId",
     classes[0]?.id || "",
   );
-  const [selectedSectionId, setSelectedSectionId] = useState<string>("");
+  const [selectedSectionId, setSelectedSectionId] = useQueryState<string>(
+    "sectionId",
+    "",
+  );
 
   const [loading, setLoading] = useState(false);
   const [reportCards, setReportCards] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useQueryState<string>("q", "");
 
   // Modal State
   const [activeModalReportCard, setActiveModalReportCard] = useState<any>(null);

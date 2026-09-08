@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { TeacherDialog } from "./teacher-dialog";
 import { StaffDialog } from "./staff-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -38,10 +39,17 @@ import { formatCurrency } from "@schoolos/utils";
 interface Props {
   teachers: any[];
   staffList?: any[];
-  classes: { id: string; name: string; sections: { id: string; name: string }[] }[];
+  classes: {
+    id: string;
+    name: string;
+    sections: { id: string; name: string }[];
+  }[];
 }
 
-const OCCUPATION_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+const OCCUPATION_COLORS: Record<
+  string,
+  { bg: string; text: string; border: string }
+> = {
   Accountant: {
     bg: "bg-blue-50 dark:bg-blue-950/40",
     text: "text-blue-700 dark:text-blue-300",
@@ -79,19 +87,34 @@ const OCCUPATION_COLORS: Record<string, { bg: string; text: string; border: stri
   },
 };
 
-export function TeachersContent({ teachers, staffList = [], classes }: Readonly<Props>) {
+export function TeachersContent({
+  teachers,
+  staffList = [],
+  classes,
+}: Readonly<Props>) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"teachers" | "staff">("teachers");
-  const [search, setSearch] = useState("");
-  const [selectedOccupation, setSelectedOccupation] = useState<string>("ALL");
+  const [activeTab, setActiveTab] = useQueryTab<"teachers" | "staff">({
+    paramKey: "tab",
+    validTabs: ["teachers", "staff"],
+    defaultTab: "teachers",
+  });
+  const [search, setSearch] = useQueryState("q", "");
+  const [selectedOccupation, setSelectedOccupation] = useQueryState(
+    "occupation",
+    "ALL",
+  );
 
   // Teacher Dialog & Delete States
-  const [teacherDialog, setTeacherDialog] = useState<"closed" | "create" | "edit">("closed");
+  const [teacherDialog, setTeacherDialog] = useState<
+    "closed" | "create" | "edit"
+  >("closed");
   const [editTeacher, setEditTeacher] = useState<any>(null);
   const [deleteTeacherTarget, setDeleteTeacherTarget] = useState<any>(null);
 
   // Staff Dialog & Delete States
-  const [staffDialog, setStaffDialog] = useState<"closed" | "create" | "edit">("closed");
+  const [staffDialog, setStaffDialog] = useState<"closed" | "create" | "edit">(
+    "closed",
+  );
   const [editStaff, setEditStaff] = useState<any>(null);
   const [deleteStaffTarget, setDeleteStaffTarget] = useState<any>(null);
 
@@ -107,7 +130,9 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
   });
 
   // Staff filtering
-  const staffOccupations = Array.from(new Set(staffList.map((s) => s.occupation).filter(Boolean)));
+  const staffOccupations = Array.from(
+    new Set(staffList.map((s) => s.occupation).filter(Boolean)),
+  );
 
   const filteredStaff = staffList.filter((s) => {
     const q = search.toLowerCase();
@@ -118,7 +143,8 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
       (s.qualification && s.qualification.toLowerCase().includes(q)) ||
       (s.email && s.email.toLowerCase().includes(q));
 
-    const matchesOccupation = selectedOccupation === "ALL" || s.occupation === selectedOccupation;
+    const matchesOccupation =
+      selectedOccupation === "ALL" || s.occupation === selectedOccupation;
 
     return matchesSearch && matchesOccupation;
   });
@@ -146,7 +172,9 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Teachers & Staff</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Teachers & Staff
+          </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Manage your school's faculty and non-teaching support personnel
           </p>
@@ -300,7 +328,9 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{t.name}</p>
-                      <p className="text-xs text-muted-foreground font-medium">{t.subject}</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {t.subject}
+                      </p>
                     </div>
                   </div>
 
@@ -349,7 +379,8 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                   )}
                   {t.qualification && (
                     <p className="flex items-center gap-2 truncate text-[11px] text-muted-foreground">
-                      <GraduationCap className="w-3.5 h-3.5 flex-shrink-0" /> {t.qualification}
+                      <GraduationCap className="w-3.5 h-3.5 flex-shrink-0" />{" "}
+                      {t.qualification}
                     </p>
                   )}
                   {t.salary && (
@@ -366,7 +397,8 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                   <div>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
                       <Award className="w-3 h-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                      Class Teacher: {t.classTeacherOf.map((c: any) => c.name).join(", ")}
+                      Class Teacher:{" "}
+                      {t.classTeacherOf.map((c: any) => c.name).join(", ")}
                     </span>
                   </div>
                 )}
@@ -381,7 +413,8 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                         key={as.id || `${as.classId}-${as.sectionId}`}
                         className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800"
                       >
-                        {as.class?.name || "Class"} · {as.section?.name || "Sec"}
+                        {as.class?.name || "Class"} ·{" "}
+                        {as.section?.name || "Sec"}
                       </span>
                     ))}
                   </div>
@@ -389,7 +422,8 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                   <div>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
                       <GraduationCap className="w-2.5 h-2.5" />
-                      Class: {t.assignedClass.name} · {t.assignedSection?.name ?? "—"}
+                      Class: {t.assignedClass.name} ·{" "}
+                      {t.assignedSection?.name ?? "—"}
                     </span>
                   </div>
                 ) : null}
@@ -418,7 +452,9 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                 <GraduationCap className="w-6 h-6 text-muted-foreground opacity-50" />
               </div>
               <p className="text-sm font-semibold mb-1">
-                {search ? "No teachers match your search" : "No teachers added yet"}
+                {search
+                  ? "No teachers match your search"
+                  : "No teachers added yet"}
               </p>
               <p className="text-xs text-muted-foreground mb-4 max-w-xs">
                 {search
@@ -476,7 +512,9 @@ export function TeachersContent({ teachers, staffList = [], classes }: Readonly<
                           .toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{s.name}</p>
+                        <p className="text-sm font-semibold truncate">
+                          {s.name}
+                        </p>
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border mt-0.5 ${occStyle.bg} ${occStyle.text} ${occStyle.border}`}
                         >

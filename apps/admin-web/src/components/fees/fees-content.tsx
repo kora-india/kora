@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryTab } from "@/hooks/use-query-state";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings, Users, IndianRupee, FileText } from "lucide-react";
 import { CollectionTab } from "./tabs/collection-tab";
@@ -23,7 +24,11 @@ interface Props {
 }
 
 export function FeesContent(props: Readonly<Props>) {
-  const [activeTab, setActiveTab] = useState("collection");
+  const [activeTab, setActiveTab] = useQueryTab<string>({
+    paramKey: "tab",
+    validTabs: ["collection", "generator", "logs", "assignments", "settings"],
+    defaultTab: "collection",
+  });
 
   const TABS = [
     { id: "collection", label: "Fee Collection", icon: IndianRupee },
@@ -39,7 +44,8 @@ export function FeesContent(props: Readonly<Props>) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Fee Management</h1>
           <p className="text-muted-foreground mt-1">
-            Complete financial control for academic sessions, fee structures, and collections.
+            Complete financial control for academic sessions, fee structures,
+            and collections.
           </p>
         </div>
       </div>
@@ -52,7 +58,9 @@ export function FeesContent(props: Readonly<Props>) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors z-10 ${
-                isActive ? "text-violet-700 dark:text-violet-300" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                isActive
+                  ? "text-violet-700 dark:text-violet-300"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -78,11 +86,17 @@ export function FeesContent(props: Readonly<Props>) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "collection" && <CollectionTab {...props} onNavigate={setActiveTab} />}
-            { activeTab === "generator" && <GeneratorTab {...props} /> }
-            { activeTab === "logs" && <LogsTab transactions={props.transactions} /> }
-            { activeTab === "assignments" && <AssignmentsTab {...props} /> }
-            {activeTab === "settings" && <SetupTab {...props} school={props.school} />}
+            {activeTab === "collection" && (
+              <CollectionTab {...props} onNavigate={setActiveTab} />
+            )}
+            {activeTab === "generator" && <GeneratorTab {...props} />}
+            {activeTab === "logs" && (
+              <LogsTab transactions={props.transactions} />
+            )}
+            {activeTab === "assignments" && <AssignmentsTab {...props} />}
+            {activeTab === "settings" && (
+              <SetupTab {...props} school={props.school} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>

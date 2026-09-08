@@ -25,14 +25,34 @@ import {
   Fuel,
   SlidersHorizontal,
 } from "lucide-react";
-import { Button, Input, Select, Tag, ConfigProvider, theme as antTheme, Dropdown, MenuProps } from "antd";
+import {
+  Button,
+  Input,
+  Select,
+  Tag,
+  ConfigProvider,
+  theme as antTheme,
+  Dropdown,
+  MenuProps,
+} from "antd";
 import { useTheme } from "next-themes";
+import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { VehicleDialog } from "./vehicle-dialog";
 import { RouteDialog } from "./route-dialog";
 import { StudentTransportDialog } from "./student-transport-dialog";
 import { PassengerListDialog } from "./passenger-list-dialog";
-import { VehicleType, VehicleStatus, RouteStatus, TransportEnrollmentStatus, TransportTripType } from "@schoolos/db";
-import { deleteVehicle, deleteRoute, cancelStudentTransport } from "@/lib/actions/transport";
+import {
+  VehicleType,
+  VehicleStatus,
+  RouteStatus,
+  TransportEnrollmentStatus,
+  TransportTripType,
+} from "@schoolos/db";
+import {
+  deleteVehicle,
+  deleteRoute,
+  cancelStudentTransport,
+} from "@/lib/actions/transport";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatCurrency } from "@schoolos/utils";
@@ -48,18 +68,29 @@ interface TransportContentProps {
   };
 }
 
-export function TransportContent({ initialData }: Readonly<TransportContentProps>) {
+export function TransportContent({
+  initialData,
+}: Readonly<TransportContentProps>) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const [activeTab, setActiveTab] = useState<"routes" | "students" | "vehicles">("routes");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [routeFilter, setRouteFilter] = useState<string>("all");
-  const [vehicleCategoryFilter, setVehicleCategoryFilter] = useState<string>("ALL");
-  const [tripTypeFilter, setTripTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("default");
+  const [activeTab, setActiveTab] = useQueryTab<
+    "routes" | "students" | "vehicles"
+  >({
+    paramKey: "tab",
+    validTabs: ["routes", "students", "vehicles"],
+    defaultTab: "routes",
+  });
+  const [searchQuery, setSearchQuery] = useQueryState("q", "");
+  const [routeFilter, setRouteFilter] = useQueryState("routeId", "all");
+  const [vehicleCategoryFilter, setVehicleCategoryFilter] = useQueryState(
+    "category",
+    "ALL",
+  );
+  const [tripTypeFilter, setTripTypeFilter] = useQueryState("tripType", "all");
+  const [statusFilter, setStatusFilter] = useQueryState("status", "all");
+  const [sortBy, setSortBy] = useQueryState("sortBy", "default");
 
   // Pagination for Student Roster
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,7 +135,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
   };
 
   const handleDeleteRoute = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this route? This will unassign any active stops.")) return;
+    if (
+      !confirm(
+        "Are you sure you want to delete this route? This will unassign any active stops.",
+      )
+    )
+      return;
     const toastId = `delete-route-${id}`;
     toast.loading("Deleting route...", { id: toastId });
     try {
@@ -144,7 +180,18 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
       return;
     }
 
-    const headers = ["Student Name", "Roll No", "Class", "Route", "Stop", "Vehicle", "Trip Type", "Distance (km)", "Monthly Fee (INR)", "Status"];
+    const headers = [
+      "Student Name",
+      "Roll No",
+      "Class",
+      "Route",
+      "Stop",
+      "Vehicle",
+      "Trip Type",
+      "Distance (km)",
+      "Monthly Fee (INR)",
+      "Status",
+    ];
     const rows = enrollments.map((e: any) => [
       `"${(e.student?.name || "").replace(/"/g, '""')}"`,
       `"${e.student?.rollNumber || ""}"`,
@@ -158,11 +205,16 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
       e.status,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r: any) => r.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r: any) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `transport_roster_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute(
+      "download",
+      `transport_roster_${new Date().toISOString().split("T")[0]}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -178,8 +230,11 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
         const matchCode = r.code?.toLowerCase().includes(q);
         const matchStart = r.startPoint?.toLowerCase().includes(q);
         const matchEnd = r.endPoint?.toLowerCase().includes(q);
-        const matchStop = r.stops?.some((s: any) => s.stopName?.toLowerCase().includes(q));
-        if (!matchName && !matchCode && !matchStart && !matchEnd && !matchStop) return false;
+        const matchStop = r.stops?.some((s: any) =>
+          s.stopName?.toLowerCase().includes(q),
+        );
+        if (!matchName && !matchCode && !matchStart && !matchEnd && !matchStop)
+          return false;
       }
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
       return true;
@@ -197,22 +252,42 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
           const matchRoute = e.route?.name?.toLowerCase().includes(q);
           const matchStop = e.stop?.stopName?.toLowerCase().includes(q);
           const matchVeh = e.vehicle?.registrationNo?.toLowerCase().includes(q);
-          if (!matchName && !matchRoll && !matchRoute && !matchStop && !matchVeh) return false;
+          if (
+            !matchName &&
+            !matchRoll &&
+            !matchRoute &&
+            !matchStop &&
+            !matchVeh
+          )
+            return false;
         }
         if (routeFilter !== "all" && e.routeId !== routeFilter) return false;
-        if (tripTypeFilter !== "all" && e.tripType !== tripTypeFilter) return false;
+        if (tripTypeFilter !== "all" && e.tripType !== tripTypeFilter)
+          return false;
         if (statusFilter !== "all" && e.status !== statusFilter) return false;
         return true;
       })
       .sort((a: any, b: any) => {
-        if (sortBy === "name_asc") return (a.student?.name || "").localeCompare(b.student?.name || "");
-        if (sortBy === "name_desc") return (b.student?.name || "").localeCompare(a.student?.name || "");
-        if (sortBy === "fee_desc") return Number(b.monthlyFee || 0) - Number(a.monthlyFee || 0);
-        if (sortBy === "fee_asc") return Number(a.monthlyFee || 0) - Number(b.monthlyFee || 0);
-        if (sortBy === "dist_desc") return Number(b.distanceKm || 0) - Number(a.distanceKm || 0);
+        if (sortBy === "name_asc")
+          return (a.student?.name || "").localeCompare(b.student?.name || "");
+        if (sortBy === "name_desc")
+          return (b.student?.name || "").localeCompare(a.student?.name || "");
+        if (sortBy === "fee_desc")
+          return Number(b.monthlyFee || 0) - Number(a.monthlyFee || 0);
+        if (sortBy === "fee_asc")
+          return Number(a.monthlyFee || 0) - Number(b.monthlyFee || 0);
+        if (sortBy === "dist_desc")
+          return Number(b.distanceKm || 0) - Number(a.distanceKm || 0);
         return 0;
       });
-  }, [enrollments, searchQuery, routeFilter, tripTypeFilter, statusFilter, sortBy]);
+  }, [
+    enrollments,
+    searchQuery,
+    routeFilter,
+    tripTypeFilter,
+    statusFilter,
+    sortBy,
+  ]);
 
   // Paginated Enrollments
   const paginatedEnrollments = useMemo(() => {
@@ -229,9 +304,11 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
         const matchDriver = v.driverName?.toLowerCase().includes(q);
         const matchModel = v.model?.toLowerCase().includes(q);
         const matchPhone = v.driverPhone?.toLowerCase().includes(q);
-        if (!matchReg && !matchDriver && !matchModel && !matchPhone) return false;
+        if (!matchReg && !matchDriver && !matchModel && !matchPhone)
+          return false;
       }
-      if (vehicleCategoryFilter !== "ALL" && v.type !== vehicleCategoryFilter) return false;
+      if (vehicleCategoryFilter !== "ALL" && v.type !== vehicleCategoryFilter)
+        return false;
       if (statusFilter !== "all" && v.status !== statusFilter) return false;
       return true;
     });
@@ -257,9 +334,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Transport</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Transport
+            </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Track vehicle fleets, sequenced routes, stops, and student fee allocations
+              Track vehicle fleets, sequenced routes, stops, and student fee
+              allocations
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -318,12 +398,15 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
           {/* Card 1: Total Fleet */}
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Fleet Breakdown</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Fleet Breakdown
+              </p>
               <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
                 {metrics.totalVehicles} Vehicles
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {metrics.totalBuses} Buses · {metrics.totalVans} Vans · {metrics.totalRickshaws} Auto
+                {metrics.totalBuses} Buses · {metrics.totalVans} Vans ·{" "}
+                {metrics.totalRickshaws} Auto
               </p>
             </div>
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400">
@@ -334,12 +417,15 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
           {/* Card 2: Occupancy */}
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Capacity Occupancy</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Capacity Occupancy
+              </p>
               <p className="text-2xl font-bold text-foreground mt-1">
                 {metrics.totalEnrolled} Students
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {metrics.overallOccupancyPct}% of {metrics.totalCapacity} total seats
+                {metrics.overallOccupancyPct}% of {metrics.totalCapacity} total
+                seats
               </p>
             </div>
             <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
@@ -350,12 +436,19 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
           {/* Card 3: Monthly Transport Revenue */}
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Monthly Transport Fee</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Monthly Transport Fee
+              </p>
               <p className="text-2xl font-bold text-foreground mt-1">
                 ₹{metrics.totalMonthlyRevenue.toLocaleString("en-IN")}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                {routes.length} routes ({routes.filter((r: any) => r.status === RouteStatus.ACTIVE).length} active)
+                {routes.length} routes (
+                {
+                  routes.filter((r: any) => r.status === RouteStatus.ACTIVE)
+                    .length
+                }{" "}
+                active)
               </p>
             </div>
             <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
@@ -370,9 +463,21 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
             <div className="flex flex-wrap items-center gap-2">
               {[
-                { key: "routes", label: `Routes & Stops (${routes.length})`, icon: RouteIcon },
-                { key: "students", label: `Student Roster (${enrollments.length})`, icon: Users },
-                { key: "vehicles", label: `Vehicles & Fleet (${vehicles.length})`, icon: Bus },
+                {
+                  key: "routes",
+                  label: `Routes & Stops (${routes.length})`,
+                  icon: RouteIcon,
+                },
+                {
+                  key: "students",
+                  label: `Student Roster (${enrollments.length})`,
+                  icon: Users,
+                },
+                {
+                  key: "vehicles",
+                  label: `Vehicles & Fleet (${vehicles.length})`,
+                  icon: Bus,
+                },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.key;
@@ -407,13 +512,15 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                 Search
               </label>
               <Input
-                prefix={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
+                prefix={
+                  <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                }
                 placeholder={
                   activeTab === "routes"
                     ? "Search route name, stop landmark, code..."
                     : activeTab === "students"
-                    ? "Search student name, roll no, route, stop..."
-                    : "Search registration no, driver name, model..."
+                      ? "Search student name, roll no, route, stop..."
+                      : "Search registration no, driver name, model..."
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -454,7 +561,10 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                     { label: "All Fleet", value: "ALL" },
                     { label: "🚌 Buses", value: VehicleType.BUS },
                     { label: "🚐 Vans", value: VehicleType.VAN },
-                    { label: "🛺 Auto / Rickshaws", value: VehicleType.RICKSHAW },
+                    {
+                      label: "🛺 Auto / Rickshaws",
+                      value: VehicleType.RICKSHAW,
+                    },
                   ]}
                 />
               </div>
@@ -551,9 +661,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
               {processedRoutes.length === 0 ? (
                 <div className="text-center py-16 bg-muted/20 border border-border rounded-xl p-8">
                   <RouteIcon className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-                  <h3 className="text-lg font-bold text-foreground">No transport routes found</h3>
+                  <h3 className="text-lg font-bold text-foreground">
+                    No transport routes found
+                  </h3>
                   <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-4">
-                    Define pickup routes, sequenced stops, per-km billing rates, and assigned fleet vehicles.
+                    Define pickup routes, sequenced stops, per-km billing rates,
+                    and assigned fleet vehicles.
                   </p>
                   {canMutate && (
                     <Button
@@ -574,8 +687,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                   {processedRoutes.map((route: any) => {
                     const passengerCount = route.enrollments?.length || 0;
                     const vehicleCapacity = route.vehicle?.capacity || 0;
-                    const occupancyPct = vehicleCapacity > 0 ? Math.round((passengerCount / vehicleCapacity) * 100) : 0;
-                    const isOverCapacity = vehicleCapacity > 0 && passengerCount > vehicleCapacity;
+                    const occupancyPct =
+                      vehicleCapacity > 0
+                        ? Math.round((passengerCount / vehicleCapacity) * 100)
+                        : 0;
+                    const isOverCapacity =
+                      vehicleCapacity > 0 && passengerCount > vehicleCapacity;
 
                     const menuItems: MenuProps["items"] = [
                       {
@@ -606,9 +723,14 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-base text-foreground">{route.name}</span>
+                                <span className="font-bold text-base text-foreground">
+                                  {route.name}
+                                </span>
                                 {route.code && (
-                                  <Tag color="purple" className="font-mono text-[10px] m-0">
+                                  <Tag
+                                    color="purple"
+                                    className="font-mono text-[10px] m-0"
+                                  >
                                     {route.code}
                                   </Tag>
                                 )}
@@ -620,8 +742,18 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                             </div>
 
                             {canMutate && (
-                              <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={["click"]}>
-                                <Button type="text" size="small" icon={<MoreVertical className="h-4 w-4 text-muted-foreground" />} />
+                              <Dropdown
+                                menu={{ items: menuItems }}
+                                placement="bottomRight"
+                                trigger={["click"]}
+                              >
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  icon={
+                                    <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                  }
+                                />
                               </Dropdown>
                             )}
                           </div>
@@ -630,16 +762,24 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           <div className="p-2.5 bg-muted/40 rounded-lg text-xs space-y-1">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                {route.vehicle?.type === VehicleType.BUS && "🚌 Bus:"}
-                                {route.vehicle?.type === VehicleType.VAN && "🚐 Van:"}
-                                {route.vehicle?.type === VehicleType.RICKSHAW && "🛺 Auto:"}
+                                {route.vehicle?.type === VehicleType.BUS &&
+                                  "🚌 Bus:"}
+                                {route.vehicle?.type === VehicleType.VAN &&
+                                  "🚐 Van:"}
+                                {route.vehicle?.type === VehicleType.RICKSHAW &&
+                                  "🛺 Auto:"}
                                 {!route.vehicle && "❌ No Vehicle:"}
                                 <span className="font-mono font-bold text-foreground">
-                                  {route.vehicle?.registrationNo || "Unassigned"}
+                                  {route.vehicle?.registrationNo ||
+                                    "Unassigned"}
                                 </span>
                               </span>
                               <Tag
-                                color={route.status === RouteStatus.ACTIVE ? "green" : "default"}
+                                color={
+                                  route.status === RouteStatus.ACTIVE
+                                    ? "green"
+                                    : "default"
+                                }
                                 className="text-[10px] m-0 font-semibold"
                               >
                                 {route.status}
@@ -648,7 +788,8 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                             {route.vehicle && (
                               <p className="text-muted-foreground text-[11px] flex items-center gap-1">
                                 <Phone className="h-3 w-3 text-muted-foreground/70" />
-                                {route.vehicle.driverName} ({route.vehicle.driverPhone})
+                                {route.vehicle.driverName} (
+                                {route.vehicle.driverPhone})
                               </p>
                             )}
                           </div>
@@ -656,9 +797,14 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           {/* Capacity Meter */}
                           <div>
                             <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-muted-foreground">Seat Occupancy:</span>
-                              <span className={`font-bold ${isOverCapacity ? "text-rose-600" : "text-foreground"}`}>
-                                {passengerCount} / {vehicleCapacity || "∞"} seats ({occupancyPct}%)
+                              <span className="text-muted-foreground">
+                                Seat Occupancy:
+                              </span>
+                              <span
+                                className={`font-bold ${isOverCapacity ? "text-rose-600" : "text-foreground"}`}
+                              >
+                                {passengerCount} / {vehicleCapacity || "∞"}{" "}
+                                seats ({occupancyPct}%)
                               </span>
                             </div>
                             <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
@@ -667,15 +813,19 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                                   isOverCapacity
                                     ? "bg-rose-500"
                                     : occupancyPct > 85
-                                    ? "bg-amber-500"
-                                    : "bg-violet-600"
+                                      ? "bg-amber-500"
+                                      : "bg-violet-600"
                                 }`}
-                                style={{ width: `${Math.min(100, occupancyPct || 0)}%` }}
+                                style={{
+                                  width: `${Math.min(100, occupancyPct || 0)}%`,
+                                }}
                               />
                             </div>
                             {isOverCapacity && (
                               <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
-                                <AlertCircle className="h-3 w-3" /> Over capacity by {passengerCount - vehicleCapacity} students!
+                                <AlertCircle className="h-3 w-3" /> Over
+                                capacity by {passengerCount - vehicleCapacity}{" "}
+                                students!
                               </p>
                             )}
                           </div>
@@ -686,14 +836,19 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                               Stops Sequence ({route.stops?.length || 0})
                             </span>
                             <div className="flex flex-wrap gap-1">
-                              {route.stops?.slice(0, 4).map((s: any, idx: number) => (
-                                <span
-                                  key={s.id}
-                                  className="text-[10px] bg-muted text-foreground px-2 py-0.5 rounded flex items-center gap-1"
-                                >
-                                  <span className="font-bold text-violet-600">{idx + 1}.</span> {s.stopName}
-                                </span>
-                              ))}
+                              {route.stops
+                                ?.slice(0, 4)
+                                .map((s: any, idx: number) => (
+                                  <span
+                                    key={s.id}
+                                    className="text-[10px] bg-muted text-foreground px-2 py-0.5 rounded flex items-center gap-1"
+                                  >
+                                    <span className="font-bold text-violet-600">
+                                      {idx + 1}.
+                                    </span>{" "}
+                                    {s.stopName}
+                                  </span>
+                                ))}
                               {(route.stops?.length || 0) > 4 && (
                                 <span className="text-[10px] text-muted-foreground self-center">
                                   +{route.stops.length - 4} more
@@ -706,7 +861,9 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                         {/* Footer */}
                         <div className="pt-3 border-t border-border flex items-center justify-between">
                           <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
-                            {route.flatRate ? `₹${route.flatRate}/mo Flat` : `₹${route.defaultRatePerKm}/km Rate`}
+                            {route.flatRate
+                              ? `₹${route.flatRate}/mo Flat`
+                              : `₹${route.defaultRatePerKm}/km Rate`}
                           </span>
 
                           <Button
@@ -735,9 +892,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
               {processedEnrollments.length === 0 ? (
                 <div className="text-center py-16 bg-muted/20 border border-border rounded-xl p-8">
                   <Users className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-                  <h3 className="text-lg font-bold text-foreground">No students allocated to transport</h3>
+                  <h3 className="text-lg font-bold text-foreground">
+                    No students allocated to transport
+                  </h3>
                   <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-4">
-                    Opt-in students for morning/afternoon bus service, select stops, and calculate monthly transport fees.
+                    Opt-in students for morning/afternoon bus service, select
+                    stops, and calculate monthly transport fees.
                   </p>
                   {canEnroll && (
                     <Button
@@ -767,7 +927,9 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           <th className="p-3">Distance</th>
                           <th className="p-3 text-right">Monthly Fee</th>
                           <th className="p-3">Status</th>
-                          {canEnroll && <th className="p-3 text-right">Actions</th>}
+                          {canEnroll && (
+                            <th className="p-3 text-right">Actions</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -796,16 +958,26 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           ];
 
                           return (
-                            <tr key={e.id} className="hover:bg-muted/30 transition-colors">
+                            <tr
+                              key={e.id}
+                              className="hover:bg-muted/30 transition-colors"
+                            >
                               <td className="p-3">
-                                <span className="font-semibold text-foreground block">{e.student?.name}</span>
-                                <span className="text-[11px] text-muted-foreground font-mono">Roll: {e.student?.rollNumber || "-"}</span>
+                                <span className="font-semibold text-foreground block">
+                                  {e.student?.name}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground font-mono">
+                                  Roll: {e.student?.rollNumber || "-"}
+                                </span>
                               </td>
                               <td className="p-3 text-muted-foreground">
-                                {e.student?.class?.name || "-"} {e.student?.section?.name || ""}
+                                {e.student?.class?.name || "-"}{" "}
+                                {e.student?.section?.name || ""}
                               </td>
                               <td className="p-3">
-                                <span className="font-medium text-foreground block">{e.route?.name}</span>
+                                <span className="font-medium text-foreground block">
+                                  {e.route?.name}
+                                </span>
                                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                                   <MapPin className="h-3 w-3 text-violet-500" />
                                   {e.stop?.stopName || "Main Campus"}
@@ -815,17 +987,28 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                                 {e.vehicle?.registrationNo || "Unassigned"}
                               </td>
                               <td className="p-3">
-                                <Tag color="geekblue" className="text-[11px] font-semibold m-0">
+                                <Tag
+                                  color="geekblue"
+                                  className="text-[11px] font-semibold m-0"
+                                >
                                   {e.tripType}
                                 </Tag>
                               </td>
-                              <td className="p-3 font-semibold text-foreground">{e.distanceKm} km</td>
+                              <td className="p-3 font-semibold text-foreground">
+                                {e.distanceKm} km
+                              </td>
                               <td className="p-3 text-right font-extrabold text-violet-600 dark:text-violet-400">
-                                ₹{Number(e.monthlyFee).toLocaleString("en-IN")}/mo
+                                ₹{Number(e.monthlyFee).toLocaleString("en-IN")}
+                                /mo
                               </td>
                               <td className="p-3">
                                 <Tag
-                                  color={e.status === TransportEnrollmentStatus.ACTIVE ? "green" : "default"}
+                                  color={
+                                    e.status ===
+                                    TransportEnrollmentStatus.ACTIVE
+                                      ? "green"
+                                      : "default"
+                                  }
                                   className="text-[11px] font-semibold m-0"
                                 >
                                   {e.status}
@@ -833,8 +1016,18 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                               </td>
                               {canEnroll && (
                                 <td className="p-3 text-right">
-                                  <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={["click"]}>
-                                    <Button type="text" size="small" icon={<MoreVertical className="h-4 w-4 text-muted-foreground" />} />
+                                  <Dropdown
+                                    menu={{ items: menuItems }}
+                                    placement="bottomRight"
+                                    trigger={["click"]}
+                                  >
+                                    <Button
+                                      type="text"
+                                      size="small"
+                                      icon={
+                                        <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                      }
+                                    />
                                   </Dropdown>
                                 </td>
                               )}
@@ -848,9 +1041,25 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                   {/* Pagination Footer */}
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 border-t border-border text-xs text-muted-foreground">
                     <p>
-                      Showing <span className="font-semibold text-foreground">{Math.min(processedEnrollments.length, (currentPage - 1) * pageSize + 1)}</span> to{" "}
-                      <span className="font-semibold text-foreground">{Math.min(processedEnrollments.length, currentPage * pageSize)}</span> of{" "}
-                      <span className="font-semibold text-foreground">{processedEnrollments.length}</span> students
+                      Showing{" "}
+                      <span className="font-semibold text-foreground">
+                        {Math.min(
+                          processedEnrollments.length,
+                          (currentPage - 1) * pageSize + 1,
+                        )}
+                      </span>{" "}
+                      to{" "}
+                      <span className="font-semibold text-foreground">
+                        {Math.min(
+                          processedEnrollments.length,
+                          currentPage * pageSize,
+                        )}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-semibold text-foreground">
+                        {processedEnrollments.length}
+                      </span>{" "}
+                      students
                     </p>
 
                     <div className="flex items-center gap-2">
@@ -881,7 +1090,10 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                         </span>
                         <Button
                           size="small"
-                          disabled={currentPage * pageSize >= processedEnrollments.length}
+                          disabled={
+                            currentPage * pageSize >=
+                            processedEnrollments.length
+                          }
                           onClick={() => setCurrentPage((p) => p + 1)}
                         >
                           &gt;
@@ -900,9 +1112,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
               {processedVehicles.length === 0 ? (
                 <div className="text-center py-16 bg-muted/20 border border-border rounded-xl p-8">
                   <Bus className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-                  <h3 className="text-lg font-bold text-foreground">No fleet vehicles in this category</h3>
+                  <h3 className="text-lg font-bold text-foreground">
+                    No fleet vehicles in this category
+                  </h3>
                   <p className="text-sm text-muted-foreground max-w-md mx-auto mt-1 mb-4">
-                    Register school buses, vans, and rickshaws to allocate them to routes and drivers.
+                    Register school buses, vans, and rickshaws to allocate them
+                    to routes and drivers.
                   </p>
                   {canMutate && (
                     <Button
@@ -921,8 +1136,14 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {processedVehicles.map((vehicle: any) => {
-                    const assignedPassengerCount = vehicle.enrollments?.length || 0;
-                    const occupancyPct = vehicle.capacity > 0 ? Math.round((assignedPassengerCount / vehicle.capacity) * 100) : 0;
+                    const assignedPassengerCount =
+                      vehicle.enrollments?.length || 0;
+                    const occupancyPct =
+                      vehicle.capacity > 0
+                        ? Math.round(
+                            (assignedPassengerCount / vehicle.capacity) * 100,
+                          )
+                        : 0;
 
                     const menuItems: MenuProps["items"] = [
                       {
@@ -952,16 +1173,23 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2.5">
                               <div className="p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
-                                {vehicle.type === VehicleType.BUS && <Bus className="h-5 w-5" />}
-                                {vehicle.type === VehicleType.VAN && <Truck className="h-5 w-5" />}
-                                {vehicle.type === VehicleType.RICKSHAW && <Car className="h-5 w-5" />}
+                                {vehicle.type === VehicleType.BUS && (
+                                  <Bus className="h-5 w-5" />
+                                )}
+                                {vehicle.type === VehicleType.VAN && (
+                                  <Truck className="h-5 w-5" />
+                                )}
+                                {vehicle.type === VehicleType.RICKSHAW && (
+                                  <Car className="h-5 w-5" />
+                                )}
                               </div>
                               <div>
                                 <span className="font-bold text-sm text-foreground block font-mono">
                                   {vehicle.registrationNo}
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                  {vehicle.model || `${vehicle.type}`} · {vehicle.capacity} Seats
+                                  {vehicle.model || `${vehicle.type}`} ·{" "}
+                                  {vehicle.capacity} Seats
                                 </span>
                               </div>
                             </div>
@@ -971,17 +1199,28 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                                 color={
                                   vehicle.status === VehicleStatus.ACTIVE
                                     ? "green"
-                                    : vehicle.status === VehicleStatus.MAINTENANCE
-                                    ? "gold"
-                                    : "default"
+                                    : vehicle.status ===
+                                        VehicleStatus.MAINTENANCE
+                                      ? "gold"
+                                      : "default"
                                 }
                                 className="text-[10px] m-0 font-semibold"
                               >
                                 {vehicle.status}
                               </Tag>
                               {canMutate && (
-                                <Dropdown menu={{ items: menuItems }} placement="bottomRight" trigger={["click"]}>
-                                  <Button type="text" size="small" icon={<MoreVertical className="h-4 w-4 text-muted-foreground" />} />
+                                <Dropdown
+                                  menu={{ items: menuItems }}
+                                  placement="bottomRight"
+                                  trigger={["click"]}
+                                >
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={
+                                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                                    }
+                                  />
                                 </Dropdown>
                               )}
                             </div>
@@ -990,7 +1229,9 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           {/* Crew / Contacts */}
                           <div className="p-2.5 bg-muted/40 rounded-lg text-xs space-y-1.5">
                             <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">Driver:</span>
+                              <span className="text-muted-foreground">
+                                Driver:
+                              </span>
                               <span className="font-semibold text-foreground flex items-center gap-1">
                                 {vehicle.driverName} ({vehicle.driverPhone})
                               </span>
@@ -998,7 +1239,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                             {vehicle.helperName && (
                               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                                 <span>Attendant:</span>
-                                <span>{vehicle.helperName} {vehicle.helperPhone ? `(${vehicle.helperPhone})` : ""}</span>
+                                <span>
+                                  {vehicle.helperName}{" "}
+                                  {vehicle.helperPhone
+                                    ? `(${vehicle.helperPhone})`
+                                    : ""}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1006,9 +1252,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                           {/* Seat Capacity Progress */}
                           <div>
                             <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="text-muted-foreground">Assigned Seats:</span>
+                              <span className="text-muted-foreground">
+                                Assigned Seats:
+                              </span>
                               <span className="font-bold text-foreground">
-                                {assignedPassengerCount} / {vehicle.capacity} seats ({occupancyPct}%)
+                                {assignedPassengerCount} / {vehicle.capacity}{" "}
+                                seats ({occupancyPct}%)
                               </span>
                             </div>
                             <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
@@ -1017,10 +1266,12 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                                   occupancyPct > 100
                                     ? "bg-rose-500"
                                     : occupancyPct > 85
-                                    ? "bg-amber-500"
-                                    : "bg-violet-600"
+                                      ? "bg-amber-500"
+                                      : "bg-violet-600"
                                 }`}
-                                style={{ width: `${Math.min(100, occupancyPct)}%` }}
+                                style={{
+                                  width: `${Math.min(100, occupancyPct)}%`,
+                                }}
                               />
                             </div>
                           </div>
@@ -1029,9 +1280,14 @@ export function TransportContent({ initialData }: Readonly<TransportContentProps
                         {/* Footer Notes */}
                         <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Insured & Verified
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />{" "}
+                            Insured & Verified
                           </span>
-                          {vehicle.notes && <span className="truncate max-w-[150px]">{vehicle.notes}</span>}
+                          {vehicle.notes && (
+                            <span className="truncate max-w-[150px]">
+                              {vehicle.notes}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

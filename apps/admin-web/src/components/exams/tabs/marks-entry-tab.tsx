@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useQueryState } from "@/hooks/use-query-state";
 import { getExamMarksSheet, saveBatchMarks } from "@/lib/actions/exams";
 import { calculateSubjectGrade } from "@/lib/grading";
 import { toast } from "sonner";
@@ -27,7 +28,8 @@ export function MarksEntryTab({
   classes,
   selectedExamIdProp,
 }: Readonly<MarksEntryTabProps>) {
-  const [selectedExamId, setSelectedExamId] = useState<string>(
+  const [selectedExamId, setSelectedExamId] = useQueryState<string>(
+    "examId",
     selectedExamIdProp || exams[0]?.id || "",
   );
 
@@ -35,12 +37,20 @@ export function MarksEntryTab({
     if (selectedExamIdProp) {
       setSelectedExamId(selectedExamIdProp);
     }
-  }, [selectedExamIdProp]);
-  const [selectedClassId, setSelectedClassId] = useState<string>(
+  }, [selectedExamIdProp, setSelectedExamId]);
+
+  const [selectedClassId, setSelectedClassId] = useQueryState<string>(
+    "classId",
     classes[0]?.id || "",
   );
-  const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
+  const [selectedSectionId, setSelectedSectionId] = useQueryState<string>(
+    "sectionId",
+    "all",
+  );
+  const [selectedSubjectId, setSelectedSubjectId] = useQueryState<string>(
+    "subjectId",
+    "",
+  );
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

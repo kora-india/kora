@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { format, isToday, isThisWeek, isThisMonth, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import {
+  format,
+  isToday,
+  isThisWeek,
+  isThisMonth,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+} from "date-fns";
 import {
   Plus,
   Settings,
@@ -19,12 +27,22 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { Table, Button, Input, Select, Tag, DatePicker, ConfigProvider, theme as antTheme } from "antd";
+import {
+  Table,
+  Button,
+  Input,
+  Select,
+  Tag,
+  DatePicker,
+  ConfigProvider,
+  theme as antTheme,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { deleteExpense } from "@/lib/actions/expenses";
 import { formatCurrency } from "@schoolos/utils";
+import { useQueryState } from "@/hooks/use-query-state";
 import dayjs, { type Dayjs } from "dayjs";
 
 import { AddExpenseModal } from "./add-expense-modal";
@@ -66,9 +84,21 @@ const PAYMENT_METHOD_TAGS: Record<string, { color: string; label: string }> = {
   OTHER: { color: "default", label: "OTHER" },
 };
 
-const CATEGORY_COLORS = ["blue", "purple", "cyan", "geekblue", "volcano", "orange", "magenta", "green"];
+const CATEGORY_COLORS = [
+  "blue",
+  "purple",
+  "cyan",
+  "geekblue",
+  "volcano",
+  "orange",
+  "magenta",
+  "green",
+];
 
-export function ExpensesContent({ categories, expenses }: Readonly<ExpensesContentProps>) {
+export function ExpensesContent({
+  categories,
+  expenses,
+}: Readonly<ExpensesContentProps>) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -77,13 +107,21 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Filters State
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
-  const [datePreset, setDatePreset] = useState<string>("all");
-  const [customDateRange, setCustomDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  const [amountRangeFilter, setAmountRangeFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("date_desc");
+  const [search, setSearch] = useQueryState("q", "");
+  const [categoryFilter, setCategoryFilter] = useQueryState("category", "all");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useQueryState(
+    "method",
+    "all",
+  );
+  const [datePreset, setDatePreset] = useQueryState("datePreset", "all");
+  const [customDateRange, setCustomDateRange] = useState<
+    [Dayjs | null, Dayjs | null] | null
+  >(null);
+  const [amountRangeFilter, setAmountRangeFilter] = useQueryState(
+    "amountRange",
+    "all",
+  );
+  const [sortBy, setSortBy] = useQueryState("sortBy", "date_desc");
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -112,7 +150,9 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
 
   // Distinct payment methods from existing data + defaults
   const availablePaymentMethods = useMemo(() => {
-    const fromData = Array.from(new Set(expenses.map((e) => e.paymentMethod).filter(Boolean)));
+    const fromData = Array.from(
+      new Set(expenses.map((e) => e.paymentMethod).filter(Boolean)),
+    );
     const defaults = ["CASH", "UPI", "ONLINE", "BANK_TRANSFER", "CHEQUE"];
     return Array.from(new Set([...defaults, ...fromData]));
   }, [expenses]);
@@ -127,10 +167,19 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           const matchesTitle = e.title.toLowerCase().includes(q);
           const matchesDesc = e.description?.toLowerCase().includes(q) || false;
           const matchesCat = e.category.name.toLowerCase().includes(q);
-          const matchesMethod = e.paymentMethod?.toLowerCase().includes(q) || false;
+          const matchesMethod =
+            e.paymentMethod?.toLowerCase().includes(q) || false;
           const matchesRef = e.referenceNo?.toLowerCase().includes(q) || false;
-          const matchesRecorded = e.recordedBy?.name?.toLowerCase().includes(q) || false;
-          if (!matchesTitle && !matchesDesc && !matchesCat && !matchesMethod && !matchesRef && !matchesRecorded) {
+          const matchesRecorded =
+            e.recordedBy?.name?.toLowerCase().includes(q) || false;
+          if (
+            !matchesTitle &&
+            !matchesDesc &&
+            !matchesCat &&
+            !matchesMethod &&
+            !matchesRef &&
+            !matchesRecorded
+          ) {
             return false;
           }
         }
@@ -141,7 +190,10 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
         }
 
         // 3. Payment method filter
-        if (paymentMethodFilter !== "all" && e.paymentMethod !== paymentMethodFilter) {
+        if (
+          paymentMethodFilter !== "all" &&
+          e.paymentMethod !== paymentMethodFilter
+        ) {
           return false;
         }
 
@@ -158,7 +210,11 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           const start = startOfMonth(lastMonth);
           const end = endOfMonth(lastMonth);
           if (expDate < start || expDate > end) return false;
-        } else if (datePreset === "custom" && customDateRange?.[0] && customDateRange?.[1]) {
+        } else if (
+          datePreset === "custom" &&
+          customDateRange?.[0] &&
+          customDateRange?.[1]
+        ) {
           const start = customDateRange[0].startOf("day").toDate();
           const end = customDateRange[1].endOf("day").toDate();
           if (expDate < start || expDate > end) return false;
@@ -167,8 +223,10 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
         // 5. Amount Range filter
         const amt = Number(e.amount || 0);
         if (amountRangeFilter === "under_1k" && amt >= 1000) return false;
-        if (amountRangeFilter === "1k_5k" && (amt < 1000 || amt > 5000)) return false;
-        if (amountRangeFilter === "5k_20k" && (amt < 5000 || amt > 20000)) return false;
+        if (amountRangeFilter === "1k_5k" && (amt < 1000 || amt > 5000))
+          return false;
+        if (amountRangeFilter === "5k_20k" && (amt < 5000 || amt > 20000))
+          return false;
         if (amountRangeFilter === "above_20k" && amt <= 20000) return false;
 
         return true;
@@ -197,10 +255,22 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
             return dateB - dateA;
         }
       });
-  }, [expenses, search, categoryFilter, paymentMethodFilter, datePreset, customDateRange, amountRangeFilter, sortBy]);
+  }, [
+    expenses,
+    search,
+    categoryFilter,
+    paymentMethodFilter,
+    datePreset,
+    customDateRange,
+    amountRangeFilter,
+    sortBy,
+  ]);
 
   // Paginated records
-  const totalPages = Math.max(1, Math.ceil(processedExpenses.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(processedExpenses.length / pageSize),
+  );
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedExpenses = useMemo(() => {
     const start = (safeCurrentPage - 1) * pageSize;
@@ -213,7 +283,9 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
   }, [processedExpenses]);
 
   const avgAmount = useMemo(() => {
-    return processedExpenses.length > 0 ? totalAmount / processedExpenses.length : 0;
+    return processedExpenses.length > 0
+      ? totalAmount / processedExpenses.length
+      : 0;
   }, [processedExpenses, totalAmount]);
 
   const handleDelete = async (id: string) => {
@@ -242,7 +314,16 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
       return;
     }
 
-    const headers = ["Date", "Category", "Title", "Description", "Payment Method", "Reference No", "Amount (INR)", "Recorded By"];
+    const headers = [
+      "Date",
+      "Category",
+      "Title",
+      "Description",
+      "Payment Method",
+      "Reference No",
+      "Amount (INR)",
+      "Recorded By",
+    ];
     const rows = processedExpenses.map((e) => [
       format(new Date(e.date), "yyyy-MM-dd"),
       `"${e.category.name.replace(/"/g, '""')}"`,
@@ -254,11 +335,16 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
       `"${(e.recordedBy?.name || "").replace(/"/g, '""')}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `expenses_report_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    link.setAttribute(
+      "download",
+      `expenses_report_${format(new Date(), "yyyy-MM-dd")}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -285,9 +371,13 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
       width: 150,
       render: (name, record) => {
         const catIdx = categories.findIndex((c) => c.id === record.category.id);
-        const color = CATEGORY_COLORS[catIdx % CATEGORY_COLORS.length] || "blue";
+        const color =
+          CATEGORY_COLORS[catIdx % CATEGORY_COLORS.length] || "blue";
         return (
-          <Tag color={color} className="font-semibold text-xs rounded-full px-2.5 py-0.5">
+          <Tag
+            color={color}
+            className="font-semibold text-xs rounded-full px-2.5 py-0.5"
+          >
             {name}
           </Tag>
         );
@@ -299,13 +389,20 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
       key: "title",
       render: (_, record) => (
         <div className="min-w-[180px]">
-          <p className="font-semibold text-sm text-foreground leading-snug">{record.title}</p>
+          <p className="font-semibold text-sm text-foreground leading-snug">
+            {record.title}
+          </p>
           {record.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{record.description}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+              {record.description}
+            </p>
           )}
           {record.recordedBy?.name && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              By: <span className="font-medium text-foreground/80">{record.recordedBy.name}</span>
+              By:{" "}
+              <span className="font-medium text-foreground/80">
+                {record.recordedBy.name}
+              </span>
             </p>
           )}
         </div>
@@ -334,7 +431,8 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           </div>
         );
       },
-      sorter: (a, b) => (a.paymentMethod || "").localeCompare(b.paymentMethod || ""),
+      sorter: (a, b) =>
+        (a.paymentMethod || "").localeCompare(b.paymentMethod || ""),
     },
     {
       title: "Amount",
@@ -390,7 +488,8 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Expenses</h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Track operational costs, recurring utility bills, and vendor payments
+              Track operational costs, recurring utility bills, and vendor
+              payments
             </p>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -423,7 +522,9 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Total Expenses</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Total Expenses
+              </p>
               <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
                 {formatCurrency(totalAmount)}
               </p>
@@ -438,11 +539,15 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
 
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Average Expense</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Average Expense
+              </p>
               <p className="text-2xl font-bold text-foreground mt-1">
                 {formatCurrency(avgAmount)}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Per recorded transaction</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Per recorded transaction
+              </p>
             </div>
             <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
               <Receipt className="w-5 h-5" />
@@ -451,11 +556,15 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
 
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Categories Active</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                Categories Active
+              </p>
               <p className="text-2xl font-bold text-foreground mt-1">
                 {categories.length}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Configured budget heads</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Configured budget heads
+              </p>
             </div>
             <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
               <TagIcon className="w-5 h-5" />
@@ -474,7 +583,9 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                   Search
                 </label>
                 <Input
-                  prefix={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
+                  prefix={
+                    <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                  }
                   placeholder="Search title, category, ref no..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -493,7 +604,10 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                   onChange={setCategoryFilter}
                   className="w-full"
                   options={[
-                    { label: `All Categories (${expenses.length})`, value: "all" },
+                    {
+                      label: `All Categories (${expenses.length})`,
+                      value: "all",
+                    },
                     ...categories.map((cat) => ({
                       label: `${cat.name} (${expenses.filter((e) => e.category.id === cat.id).length})`,
                       value: cat.id,
@@ -638,14 +752,21 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                 <span>
                   Showing{" "}
                   <strong className="text-foreground font-semibold">
-                    {processedExpenses.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}
+                    {processedExpenses.length === 0
+                      ? 0
+                      : (safeCurrentPage - 1) * pageSize + 1}
                   </strong>{" "}
                   to{" "}
                   <strong className="text-foreground font-semibold">
-                    {Math.min(safeCurrentPage * pageSize, processedExpenses.length)}
+                    {Math.min(
+                      safeCurrentPage * pageSize,
+                      processedExpenses.length,
+                    )}
                   </strong>{" "}
                   of{" "}
-                  <strong className="text-foreground font-semibold">{processedExpenses.length}</strong>{" "}
+                  <strong className="text-foreground font-semibold">
+                    {processedExpenses.length}
+                  </strong>{" "}
                   expenses
                 </span>
               </div>
@@ -692,7 +813,11 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                       const showEllipsis = prev && p - prev > 1;
                       return (
                         <div key={p} className="flex items-center">
-                          {showEllipsis && <span className="px-1 text-muted-foreground">…</span>}
+                          {showEllipsis && (
+                            <span className="px-1 text-muted-foreground">
+                              …
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={() => setCurrentPage(p)}
@@ -711,7 +836,9 @@ export function ExpensesContent({ categories, expenses }: Readonly<ExpensesConte
                   <button
                     type="button"
                     disabled={safeCurrentPage >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
                     aria-label="Next Page"
                     className="w-7 h-7 flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
                   >

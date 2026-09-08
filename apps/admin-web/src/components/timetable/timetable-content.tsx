@@ -19,6 +19,7 @@ import {
   message,
 } from "antd";
 import { useTheme } from "next-themes";
+import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import {
   Calendar,
   Clock,
@@ -68,16 +69,23 @@ export function TimetableContent({
   const { theme } = useTheme();
 
   // Mode: class vs teacher perspective
-  const [viewMode, setViewMode] = useState<"class" | "teacher">("class");
+  const [viewMode, setViewMode] = useQueryTab<"class" | "teacher">({
+    paramKey: "tab",
+    validTabs: ["class", "teacher"],
+    defaultTab: "class",
+  });
 
   // Selection states
-  const [selectedClassId, setSelectedClassId] = useState<string>(
+  const [selectedClassId, setSelectedClassId] = useQueryState<string>(
+    "classId",
     initialClasses[0]?.id || "",
   );
-  const [selectedSectionId, setSelectedSectionId] = useState<string>(
+  const [selectedSectionId, setSelectedSectionId] = useQueryState<string>(
+    "sectionId",
     initialClasses[0]?.sections?.[0]?.id || "",
   );
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(
+  const [selectedTeacherId, setSelectedTeacherId] = useQueryState<string>(
+    "teacherId",
     initialTeachers[0]?.id || "",
   );
 
@@ -97,7 +105,11 @@ export function TimetableContent({
   const [periodSettingsOpen, setPeriodSettingsOpen] = useState(false);
   const [conflictAuditOpen, setConflictAuditOpen] = useState(false);
 
-  const isInitialMount = useRef(true);
+  const isCustomInitial =
+    viewMode === "teacher" ||
+    (selectedSectionId &&
+      selectedSectionId !== initialClasses[0]?.sections?.[0]?.id);
+  const isInitialMount = useRef(!isCustomInitial);
   const activeRequestIdRef = useRef(0);
 
   // Sections for the selected class
