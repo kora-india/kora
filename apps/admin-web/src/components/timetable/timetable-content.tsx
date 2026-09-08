@@ -638,6 +638,14 @@ export function TimetableContent({
             checkConflictCount();
           }}
         />
+
+        {/* Timetable-specific print orientation */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html:
+              "@media print { @page { size: landscape; margin: 6mm 8mm; } }",
+          }}
+        />
       </div>
     </ConfigProvider>
   );

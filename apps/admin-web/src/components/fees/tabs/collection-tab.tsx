@@ -2,35 +2,74 @@
 
 import React, { useState, useCallback } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { allocatePayment, waiveFeeChargeItem, getStudentFeeDues } from "@/lib/actions/fee-allocator";
+import {
+  allocatePayment,
+  waiveFeeChargeItem,
+  getStudentFeeDues,
+  getFeeReceiptDetails,
+  type FeeReceiptData,
+} from "@/lib/actions/fee-allocator";
+import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Search, Wallet, AlertCircle, CheckCircle2, IndianRupee, ChevronDown, ChevronUp, History, Loader2, Activity, ArrowUpRight, Bus } from "lucide-react";
+import {
+  Search,
+  Wallet,
+  AlertCircle,
+  CheckCircle2,
+  IndianRupee,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Loader2,
+  Activity,
+  ArrowUpRight,
+  Bus,
+  Printer,
+} from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
-export function CollectionTab({ students, recentCharges = [], components, canEdit, transactions, onNavigate }: any) {
+export function CollectionTab({
+  students,
+  recentCharges = [],
+  components,
+  canEdit,
+  transactions,
+  onNavigate,
+}: any) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [dynamicStudent, setDynamicStudent] = useState<any>(null);
   const [dynamicCharges, setDynamicCharges] = useState<any[]>([]);
   const [loadingDues, setLoadingDues] = useState(false);
-  
+
   // Payment States
-  const [selectedComponents, setSelectedComponents] = useState<Record<string, boolean>>({});
-  const [componentPayments, setComponentPayments] = useState<Record<string, string>>({});
+  const [selectedComponents, setSelectedComponents] = useState<
+    Record<string, boolean>
+  >({});
+  const [componentPayments, setComponentPayments] = useState<
+    Record<string, string>
+  >({});
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
-  const [expandedComponents, setExpandedComponents] = useState<Record<string, boolean>>({});
+  const [expandedComponents, setExpandedComponents] = useState<
+    Record<string, boolean>
+  >({});
 
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
 
   // Filter students based on search
-  const filteredStudents = search.length > 1 
-    ? students.filter((s:any) => s.name.toLowerCase().includes(search.toLowerCase()) || s.rollNumber.includes(search))
-    : [];
+  const filteredStudents =
+    search.length > 1
+      ? students.filter(
+          (s: any) =>
+            s.name.toLowerCase().includes(search.toLowerCase()) ||
+            s.rollNumber.includes(search),
+        )
+      : [];
 
   const refreshCurrentStudent = useCallback(async (studentId: string) => {
     setLoadingDues(true);
@@ -57,18 +96,29 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
   };
 
   // Keep student data fresh
-  const currentStudent = dynamicStudent || (selectedStudent 
-    ? students.find((s:any) => s.id === selectedStudent.id) || selectedStudent 
-    : null);
+  const currentStudent =
+    dynamicStudent ||
+    (selectedStudent
+      ? students.find((s: any) => s.id === selectedStudent.id) ||
+        selectedStudent
+      : null);
 
   // Calculate student dues from dynamic query
-  const studentCharges = dynamicCharges.length > 0 || dynamicStudent
-    ? dynamicCharges
-    : (currentStudent 
-      ? recentCharges.filter((c:any) => c.studentId === currentStudent.id && c.status !== "WAIVED")
-      : []);
+  const studentCharges =
+    dynamicCharges.length > 0 || dynamicStudent
+      ? dynamicCharges
+      : currentStudent
+        ? recentCharges.filter(
+            (c: any) =>
+              c.studentId === currentStudent.id && c.status !== "WAIVED",
+          )
+        : [];
 
-  const advanceBalance = currentStudent?.advanceLedgers?.reduce((sum:number, l:any) => sum + Number(l.amount), 0) || 0;
+  const advanceBalance =
+    currentStudent?.advanceLedgers?.reduce(
+      (sum: number, l: any) => sum + Number(l.amount),
+      0,
+    ) || 0;
 
   // Group by component
   const componentSummary: Record<string, any> = {};
@@ -76,16 +126,24 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
 
   for (const charge of studentCharges) {
     for (const item of charge.items) {
-      const compName = item.component?.name || components.find((c:any) => c.id === item.componentId)?.name || "Unknown";
-      const due = item.status === "WAIVED" ? 0 : (Number(item.amount || 0) - Number(item.paidAmount || 0));
-      const category = item.component?.category || components.find((c:any) => c.id === item.componentId)?.category;
-      
+      const compName =
+        item.component?.name ||
+        components.find((c: any) => c.id === item.componentId)?.name ||
+        "Unknown";
+      const due =
+        item.status === "WAIVED"
+          ? 0
+          : Number(item.amount || 0) - Number(item.paidAmount || 0);
+      const category =
+        item.component?.category ||
+        components.find((c: any) => c.id === item.componentId)?.category;
+
       if (!componentSummary[item.componentId]) {
         componentSummary[item.componentId] = {
           id: item.componentId,
           name: compName,
           totalDue: 0,
-          items: []
+          items: [],
         };
       }
 
@@ -97,8 +155,15 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
         amount: Number(item.amount),
         paidAmount: Number(item.paidAmount),
         due: due,
-        status: item.status === "WAIVED" ? "WAIVED" : (due <= 0 ? "PAID" : (Number(item.paidAmount) > 0 ? "PARTIAL" : "PENDING")),
-        isLateFee: category === "LATE_FEE"
+        status:
+          item.status === "WAIVED"
+            ? "WAIVED"
+            : due <= 0
+              ? "PAID"
+              : Number(item.paidAmount) > 0
+                ? "PARTIAL"
+                : "PENDING",
+        isLateFee: category === "LATE_FEE",
       });
 
       if (due > 0) {
@@ -109,16 +174,18 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
   }
 
   // Only show components that have some outstanding due in the collection table
-  const componentList = Object.values(componentSummary).filter(c => c.totalDue > 0);
+  const componentList = Object.values(componentSummary).filter(
+    (c) => c.totalDue > 0,
+  );
 
   const toggleComponent = (id: string, totalDue: number) => {
     const isSelected = !selectedComponents[id];
-    setSelectedComponents(prev => ({ ...prev, [id]: isSelected }));
-    
+    setSelectedComponents((prev) => ({ ...prev, [id]: isSelected }));
+
     if (isSelected) {
-      setComponentPayments(prev => ({ ...prev, [id]: totalDue.toString() }));
+      setComponentPayments((prev) => ({ ...prev, [id]: totalDue.toString() }));
     } else {
-      setComponentPayments(prev => {
+      setComponentPayments((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
@@ -127,22 +194,25 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
   };
 
   const updateComponentPayment = (id: string, amount: string) => {
-    setComponentPayments(prev => ({ ...prev, [id]: amount }));
+    setComponentPayments((prev) => ({ ...prev, [id]: amount }));
     if (Number(amount) > 0 && !selectedComponents[id]) {
-      setSelectedComponents(prev => ({ ...prev, [id]: true }));
+      setSelectedComponents((prev) => ({ ...prev, [id]: true }));
     } else if (Number(amount) <= 0 && selectedComponents[id]) {
-      setSelectedComponents(prev => ({ ...prev, [id]: false }));
+      setSelectedComponents((prev) => ({ ...prev, [id]: false }));
     }
   };
 
-  const totalPayment = Object.values(componentPayments).reduce((sum, val) => sum + (Number(val) || 0), 0);
+  const totalPayment = Object.values(componentPayments).reduce(
+    (sum, val) => sum + (Number(val) || 0),
+    0,
+  );
 
   const generatePreview = () => {
     const preview: any[] = [];
-    
+
     for (const [compId, amountStr] of Object.entries(componentPayments)) {
       if (!selectedComponents[compId]) continue;
-      
+
       let remaining = Number(amountStr);
       if (remaining <= 0) continue;
 
@@ -151,13 +221,15 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
 
       const allocations = [];
       // Sort items by due date asc (assuming they are already mostly sorted, but we'll sort here to be safe)
-      const sortedItems = [...compData.items].sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+      const sortedItems = [...compData.items].sort(
+        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      );
 
       for (const item of sortedItems) {
         if (remaining <= 0) break;
-        
+
         const allocAmount = Math.min(item.due, remaining);
-        
+
         let newStatus = "Partial";
         if (item.paidAmount + allocAmount >= item.amount) {
           newStatus = "Paid";
@@ -166,28 +238,56 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
         allocations.push({
           title: item.chargeTitle,
           allocated: allocAmount,
-          newStatus
+          newStatus,
         });
-        
+
         remaining -= allocAmount;
       }
 
       preview.push({
         componentName: compData.name,
         allocations,
-        advance: remaining > 0 ? remaining : 0
+        advance: remaining > 0 ? remaining : 0,
       });
     }
-    
+
     return preview;
   };
 
-  const handlePayment = async () => {
+  const [receiptModal, setReceiptModal] = useState<{
+    open: boolean;
+    loadingReceiptNo: string | null;
+    data: FeeReceiptData | null;
+    autoPrint?: boolean;
+  }>({ open: false, loadingReceiptNo: null, data: null, autoPrint: false });
+
+  const handleOpenReceipt = async (receiptNo: string) => {
+    setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: receiptNo }));
+    try {
+      const res = await getFeeReceiptDetails(receiptNo);
+      if (res.success && res.data) {
+        setReceiptModal({
+          open: true,
+          loadingReceiptNo: null,
+          data: res.data,
+          autoPrint: false,
+        });
+      } else {
+        toast.error(res.error || "Failed to load receipt");
+        setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
+      }
+    } catch {
+      toast.error("Failed to fetch receipt");
+      setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
+    }
+  };
+
+  const handlePayment = async (shouldPrint: boolean = false) => {
     if (totalPayment <= 0) {
       toast.error("Enter payment amounts first.");
       return;
     }
-    
+
     setIsSubmitting(true);
     const toastId = "payment-process";
     toast.loading("Processing payment transaction...", { id: toastId });
@@ -207,10 +307,23 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success(`Payment successful! Receipt: ${(res as any).receiptNo}`, { id: toastId });
+        const receiptNo = (res as any).receiptNo || "Receipt Created";
+        toast.success(`Payment successful! Receipt: ${receiptNo}`, {
+          id: toastId,
+        });
         setComponentPayments({});
         setSelectedComponents({});
         setShowPreview(false);
+
+        if ((res as any).receiptData) {
+          setReceiptModal({
+            open: true,
+            loadingReceiptNo: null,
+            data: (res as any).receiptData,
+            autoPrint: shouldPrint,
+          });
+        }
+
         if (currentStudent?.id) {
           await refreshCurrentStudent(currentStudent.id);
         }
@@ -223,36 +336,39 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
     }
   };
 
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
       {/* Left Pane: Student Search & Component Ledger */}
       <div className="lg:col-span-2 space-y-6">
-        
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-3 w-5 h-5 text-muted-foreground" />
-          <input 
-            type="text" 
-            placeholder="Search student by name or roll number..." 
+          <input
+            type="text"
+            placeholder="Search student by name or roll number..."
             className="w-full h-12 pl-10 pr-4 bg-card border rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           {search.length > 2 && (
             <div className="absolute top-14 left-0 right-0 bg-card border shadow-lg rounded-xl z-50 max-h-64 overflow-y-auto">
-              {filteredStudents.map((s:any) => (
-                <button 
-                  key={s.id} 
+              {filteredStudents.map((s: any) => (
+                <button
+                  key={s.id}
                   onClick={() => handleSelectStudent(s)}
                   className="w-full text-left p-3 hover:bg-muted border-b flex justify-between items-center"
                 >
                   <span className="font-medium">{s.name}</span>
-                  <span className="text-xs text-muted-foreground">Roll: {s.rollNumber}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Roll: {s.rollNumber}
+                  </span>
                 </button>
               ))}
-              {filteredStudents.length === 0 && <p className="p-4 text-sm text-center text-muted-foreground">No students found</p>}
+              {filteredStudents.length === 0 && (
+                <p className="p-4 text-sm text-center text-muted-foreground">
+                  No students found
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -262,12 +378,22 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
             <div className="bg-card border rounded-xl p-5 flex justify-between items-center shadow-sm">
               <div>
                 <h2 className="text-xl font-bold">{currentStudent.name}</h2>
-                <p className="text-sm text-muted-foreground">Class {currentStudent.class?.name} • Roll No: {currentStudent.rollNumber}</p>
-                <p className="text-sm text-muted-foreground mt-2">Total Outstanding: <span className="font-bold text-red-600">{formatCurrency(totalOutstanding)}</span></p>
+                <p className="text-sm text-muted-foreground">
+                  Class {currentStudent.class?.name} • Roll No:{" "}
+                  {currentStudent.rollNumber}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Total Outstanding:{" "}
+                  <span className="font-bold text-red-600">
+                    {formatCurrency(totalOutstanding)}
+                  </span>
+                </p>
               </div>
               <div className="text-right bg-green-50/50 dark:bg-green-950/20 p-4 rounded-lg border border-green-100 dark:border-green-900">
                 <p className="text-sm text-muted-foreground">Advance Balance</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(advanceBalance)}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(advanceBalance)}
+                </p>
               </div>
             </div>
 
@@ -282,22 +408,46 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-foreground">Transport Service Opted-In</span>
+                        <span className="font-semibold text-sm text-foreground">
+                          Transport Service Opted-In
+                        </span>
                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
-                          {activeTransport.tripType ? activeTransport.tripType.replace("_", " ") : "Active"}
+                          {activeTransport.tripType
+                            ? activeTransport.tripType.replace("_", " ")
+                            : "Active"}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Route: <span className="font-medium text-foreground">{activeTransport.route?.name || "Assigned Route"}</span>
+                        Route:{" "}
+                        <span className="font-medium text-foreground">
+                          {activeTransport.route?.name || "Assigned Route"}
+                        </span>
                         {activeTransport.stop?.stopName && (
-                          <span> • Stop: <span className="font-medium text-foreground">{activeTransport.stop.stopName}</span> ({Number(activeTransport.distanceKm || activeTransport.stop.distanceFromSchoolKm || 0)} km)</span>
+                          <span>
+                            {" "}
+                            • Stop:{" "}
+                            <span className="font-medium text-foreground">
+                              {activeTransport.stop.stopName}
+                            </span>{" "}
+                            (
+                            {Number(
+                              activeTransport.distanceKm ||
+                                activeTransport.stop.distanceFromSchoolKm ||
+                                0,
+                            )}{" "}
+                            km)
+                          </span>
                         )}
                       </p>
                     </div>
                   </div>
                   <div className="text-left sm:text-right">
-                    <p className="text-[11px] text-muted-foreground">Monthly Transport Fee</p>
-                    <p className="text-base font-bold text-amber-600 dark:text-amber-400">{formatCurrency(Number(activeTransport.monthlyFee || 0))}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Monthly Transport Fee
+                    </p>
+                    <p className="text-base font-bold text-amber-600 dark:text-amber-400">
+                      {formatCurrency(Number(activeTransport.monthlyFee || 0))}
+                    </p>
                   </div>
                 </div>
               );
@@ -306,49 +456,87 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
             <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
               <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
                 <h3 className="font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-violet-600" /> Outstanding Fees by Component
+                  <AlertCircle className="w-4 h-4 text-violet-600" />{" "}
+                  Outstanding Fees by Component
                 </h3>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/10 border-b">
                     <tr>
-                      <th className="w-10 px-4 py-3 text-center"><input type="checkbox" className="rounded" /></th>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Fee Component</th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">Total Due</th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">Amount to Pay</th>
+                      <th className="w-10 px-4 py-3 text-center">
+                        <input type="checkbox" className="rounded" />
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Fee Component
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Total Due
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">
+                        Amount to Pay
+                      </th>
                       <th className="px-4 py-3 w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {componentList.map((comp:any) => {
+                    {componentList.map((comp: any) => {
                       const isExpanded = expandedComponents[comp.id];
                       return (
                         <React.Fragment key={comp.id}>
-                          <tr className={selectedComponents[comp.id] ? "bg-violet-50/30 dark:bg-violet-900/10" : ""}>
+                          <tr
+                            className={
+                              selectedComponents[comp.id]
+                                ? "bg-violet-50/30 dark:bg-violet-900/10"
+                                : ""
+                            }
+                          >
                             <td className="px-4 py-3 text-center">
-                              <input 
-                                type="checkbox" 
-                                className="rounded text-violet-600 focus:ring-violet-500" 
+                              <input
+                                type="checkbox"
+                                className="rounded text-violet-600 focus:ring-violet-500"
                                 checked={!!selectedComponents[comp.id]}
-                                onChange={() => toggleComponent(comp.id, comp.totalDue)}
+                                onChange={() =>
+                                  toggleComponent(comp.id, comp.totalDue)
+                                }
                               />
                             </td>
-                            <td className="px-4 py-3 font-medium">{comp.name}</td>
-                            <td className="px-4 py-3 text-right font-bold text-red-600">{formatCurrency(comp.totalDue)}</td>
+                            <td className="px-4 py-3 font-medium">
+                              {comp.name}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-red-600">
+                              {formatCurrency(comp.totalDue)}
+                            </td>
                             <td className="px-4 py-3 text-right">
-                               <input 
-                                 type="number"
-                                 className="w-full text-right bg-background border rounded-md p-2 focus:ring-2 focus:ring-violet-500 outline-none"
-                                 placeholder="0.00"
-                                 value={componentPayments[comp.id] || ""}
-                                 onChange={(e) => updateComponentPayment(comp.id, e.target.value)}
-                               />
+                              <input
+                                type="number"
+                                className="w-full text-right bg-background border rounded-md p-2 focus:ring-2 focus:ring-violet-500 outline-none"
+                                placeholder="0.00"
+                                value={componentPayments[comp.id] || ""}
+                                onChange={(e) =>
+                                  updateComponentPayment(
+                                    comp.id,
+                                    e.target.value,
+                                  )
+                                }
+                              />
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button onClick={() => setExpandedComponents(prev => ({...prev, [comp.id]: !isExpanded}))} className="text-muted-foreground hover:text-foreground">
-                                {isExpanded ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                              <button
+                                onClick={() =>
+                                  setExpandedComponents((prev) => ({
+                                    ...prev,
+                                    [comp.id]: !isExpanded,
+                                  }))
+                                }
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4" />
+                                )}
                               </button>
                             </td>
                           </tr>
@@ -358,56 +546,105 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                                 <div className="px-10 py-3 bg-muted/10 inset-shadow-sm">
                                   <table className="w-full text-xs">
                                     <tbody>
-                                      {comp.items.map((item:any, idx:number) => (
-                                        <tr key={idx} className="border-b last:border-0 border-muted/50">
-                                          <td className="py-2 text-muted-foreground flex items-center gap-2">
-                                            <span>{item.chargeTitle}</span>
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted border">
-                                              {new Date(item.dueDate).toLocaleDateString('en-GB', {month: 'short', year: 'numeric'})}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 text-right">
-                                            {item.status === 'PAID' ? (
-                                              <span className="text-green-600 font-medium flex items-center justify-end gap-1"><CheckCircle2 className="w-3 h-3"/> Paid</span>
-                                            ) : item.status === 'WAIVED' ? (
-                                              <span className="text-muted-foreground font-medium flex items-center justify-end gap-1">Waived</span>
-                                            ) : (
-                                              <div className="flex justify-end items-center gap-2">
-                                                <span>Due: {formatCurrency(item.due)}</span>
-                                                {item.isLateFee && canEdit && (
-                                                  <button 
-                                                    disabled={waivingItemId === item.id}
-                                                    onClick={async () => {
-                                                      setWaivingItemId(item.id);
-                                                      const toastId = `waive-${item.id}`;
-                                                      toast.loading("Waiving late fee...", { id: toastId });
-                                                      try {
-                                                        const res = await waiveFeeChargeItem(item.id);
-                                                        if (res.error) toast.error(res.error, { id: toastId }); 
-                                                        else {
-                                                          toast.success("Late fee waived", { id: toastId });
-                                                          if (currentStudent?.id) {
-                                                            await refreshCurrentStudent(currentStudent.id);
-                                                          }
-                                                          router.refresh();
+                                      {comp.items.map(
+                                        (item: any, idx: number) => (
+                                          <tr
+                                            key={idx}
+                                            className="border-b last:border-0 border-muted/50"
+                                          >
+                                            <td className="py-2 text-muted-foreground flex items-center gap-2">
+                                              <span>{item.chargeTitle}</span>
+                                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted border">
+                                                {new Date(
+                                                  item.dueDate,
+                                                ).toLocaleDateString("en-GB", {
+                                                  month: "short",
+                                                  year: "numeric",
+                                                })}
+                                              </span>
+                                            </td>
+                                            <td className="py-2 text-right">
+                                              {item.status === "PAID" ? (
+                                                <span className="text-green-600 font-medium flex items-center justify-end gap-1">
+                                                  <CheckCircle2 className="w-3 h-3" />{" "}
+                                                  Paid
+                                                </span>
+                                              ) : item.status === "WAIVED" ? (
+                                                <span className="text-muted-foreground font-medium flex items-center justify-end gap-1">
+                                                  Waived
+                                                </span>
+                                              ) : (
+                                                <div className="flex justify-end items-center gap-2">
+                                                  <span>
+                                                    Due:{" "}
+                                                    {formatCurrency(item.due)}
+                                                  </span>
+                                                  {item.isLateFee &&
+                                                    canEdit && (
+                                                      <button
+                                                        disabled={
+                                                          waivingItemId ===
+                                                          item.id
                                                         }
-                                                      } catch {
-                                                        toast.error("Failed to waive late fee", { id: toastId });
-                                                      } finally {
-                                                        setWaivingItemId(null);
-                                                      }
-                                                    }} 
-                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
-                                                  >
-                                                    {waivingItemId === item.id && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-                                                    Waive
-                                                  </button>
-                                                )}
-                                              </div>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ))}
+                                                        onClick={async () => {
+                                                          setWaivingItemId(
+                                                            item.id,
+                                                          );
+                                                          const toastId = `waive-${item.id}`;
+                                                          toast.loading(
+                                                            "Waiving late fee...",
+                                                            { id: toastId },
+                                                          );
+                                                          try {
+                                                            const res =
+                                                              await waiveFeeChargeItem(
+                                                                item.id,
+                                                              );
+                                                            if (res.error)
+                                                              toast.error(
+                                                                res.error,
+                                                                { id: toastId },
+                                                              );
+                                                            else {
+                                                              toast.success(
+                                                                "Late fee waived",
+                                                                { id: toastId },
+                                                              );
+                                                              if (
+                                                                currentStudent?.id
+                                                              ) {
+                                                                await refreshCurrentStudent(
+                                                                  currentStudent.id,
+                                                                );
+                                                              }
+                                                              router.refresh();
+                                                            }
+                                                          } catch {
+                                                            toast.error(
+                                                              "Failed to waive late fee",
+                                                              { id: toastId },
+                                                            );
+                                                          } finally {
+                                                            setWaivingItemId(
+                                                              null,
+                                                            );
+                                                          }
+                                                        }}
+                                                        className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
+                                                      >
+                                                        {waivingItemId ===
+                                                          item.id && (
+                                                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                        )}
+                                                        Waive
+                                                      </button>
+                                                    )}
+                                                </div>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ),
+                                      )}
                                     </tbody>
                                   </table>
                                 </div>
@@ -417,53 +654,14 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                         </React.Fragment>
                       );
                     })}
-                    {componentList.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No outstanding fees.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            
-            {/* Fee Charge History Table */}
-            <div className="bg-card border rounded-xl overflow-hidden shadow-sm mt-6">
-              <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <History className="w-4 h-4 text-violet-600" /> Fee Charge History
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/10 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Charge Title</th>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Due Month</th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">Total</th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">Paid</th>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {studentCharges.map((charge: any) => {
-                       const chargeTotal = charge.items.reduce((sum:number, i:any) => sum + Number(i.amount), 0);
-                       const chargePaid = charge.items.reduce((sum:number, i:any) => sum + Number(i.paidAmount), 0);
-                       return (
-                         <tr key={charge.id} className="hover:bg-muted/30">
-                           <td className="px-4 py-3 font-medium">{charge.title}</td>
-                           <td className="px-4 py-3 text-muted-foreground">
-                             {new Date(charge.dueDate).toLocaleDateString('en-GB', {month: 'short', year: 'numeric'})}
-                           </td>
-                           <td className="px-4 py-3 text-right font-medium">{formatCurrency(chargeTotal)}</td>
-                           <td className="px-4 py-3 text-right text-green-600">{formatCurrency(chargePaid)}</td>
-                           <td className="px-4 py-3">
-                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${charge.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200' : charge.status === 'PARTIAL' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                               {charge.status}
-                             </span>
-                           </td>
-                         </tr>
-                       );
-                    })}
-                    {studentCharges.length === 0 && (
+                    {componentList.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">No fee charges generated yet.</td>
+                        <td
+                          colSpan={5}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          No outstanding fees.
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -471,6 +669,86 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
               </div>
             </div>
 
+            {/* Fee Charge History Table */}
+            <div className="bg-card border rounded-xl overflow-hidden shadow-sm mt-6">
+              <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <History className="w-4 h-4 text-violet-600" /> Fee Charge
+                  History
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/10 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Charge Title
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Due Month
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Total
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Paid
+                      </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {studentCharges.map((charge: any) => {
+                      const chargeTotal = charge.items.reduce(
+                        (sum: number, i: any) => sum + Number(i.amount),
+                        0,
+                      );
+                      const chargePaid = charge.items.reduce(
+                        (sum: number, i: any) => sum + Number(i.paidAmount),
+                        0,
+                      );
+                      return (
+                        <tr key={charge.id} className="hover:bg-muted/30">
+                          <td className="px-4 py-3 font-medium">
+                            {charge.title}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {new Date(charge.dueDate).toLocaleDateString(
+                              "en-GB",
+                              { month: "short", year: "numeric" },
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">
+                            {formatCurrency(chargeTotal)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-green-600">
+                            {formatCurrency(chargePaid)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${charge.status === "PAID" ? "bg-green-50 text-green-700 border-green-200" : charge.status === "PARTIAL" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-200"}`}
+                            >
+                              {charge.status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {studentCharges.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="p-8 text-center text-muted-foreground"
+                        >
+                          No fee charges generated yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="bg-card border border-dashed rounded-xl h-64 flex flex-col items-center justify-center text-muted-foreground">
@@ -483,9 +761,10 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
         <div className="bg-card border rounded-xl overflow-hidden shadow-sm mt-8">
           <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
             <h3 className="font-semibold flex items-center gap-2">
-              <Activity className="w-4 h-4 text-green-600" /> Recent Payments Activity
+              <Activity className="w-4 h-4 text-green-600" /> Recent Payments
+              Activity
             </h3>
-            <button 
+            <button
               onClick={() => onNavigate?.("logs")}
               className="text-sm font-medium text-violet-600 hover:text-violet-700 flex items-center gap-1"
             >
@@ -496,20 +775,51 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
             <table className="w-full text-sm">
               <thead className="bg-muted/10 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Receipt No</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Student</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Amount</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Method</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                    Receipt No
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                    Student
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                    Date
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                    Amount
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                    Method
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {transactions?.slice(0, 5).map((txn: any) => (
                   <tr key={txn.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium text-violet-600">{txn.receiptNo}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReceipt(txn.receiptNo)}
+                        disabled={
+                          receiptModal.loadingReceiptNo === txn.receiptNo
+                        }
+                        className="font-medium text-violet-600 hover:text-violet-700 inline-flex items-center gap-1 cursor-pointer"
+                        title="View & Print Receipt"
+                      >
+                        {receiptModal.loadingReceiptNo === txn.receiptNo ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Printer className="w-3.5 h-3.5" />
+                        )}
+                        {txn.receiptNo}
+                      </button>
+                    </td>
                     <td className="px-4 py-3">{txn.student?.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{new Date(txn.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-right font-bold text-green-600">{formatCurrency(Number(txn.amount))}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {new Date(txn.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-green-600">
+                      {formatCurrency(Number(txn.amount))}
+                    </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted">
                         {txn.paymentMethod}
@@ -519,31 +829,42 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                 ))}
                 {(!transactions || transactions.length === 0) && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-muted-foreground">No recent payments.</td>
+                    <td
+                      colSpan={5}
+                      className="p-8 text-center text-muted-foreground"
+                    >
+                      No recent payments.
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
-        
       </div>
 
       {/* Right Pane: Payment Collection Form */}
       <div className="space-y-6">
-        <div className={`bg-card border rounded-xl p-6 shadow-sm sticky top-6 ${!currentStudent ? "opacity-50 pointer-events-none" : ""}`}>
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><IndianRupee className="w-5 h-5 text-violet-500" /> Payment Summary</h2>
-          
+        <div
+          className={`bg-card border rounded-xl p-6 shadow-sm sticky top-6 ${!currentStudent ? "opacity-50 pointer-events-none" : ""}`}
+        >
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <IndianRupee className="w-5 h-5 text-violet-500" /> Payment Summary
+          </h2>
+
           <div className="space-y-5">
-            
             <div className="bg-muted/30 p-4 rounded-xl border border-dashed flex justify-between items-center">
-               <span className="font-medium text-muted-foreground">Total Payment</span>
-               <span className="text-3xl font-bold text-violet-600">{formatCurrency(totalPayment)}</span>
+              <span className="font-medium text-muted-foreground">
+                Total Payment
+              </span>
+              <span className="text-2xl font-black text-violet-600">
+                {formatCurrency(totalPayment)}
+              </span>
             </div>
 
-            <FormField label="Payment Method" required>
-              <select 
-                className={selectCls} 
+            <FormField label="Payment Method">
+              <select
+                className={selectCls}
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
               >
@@ -556,20 +877,20 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
             </FormField>
 
             <FormField label="Reference Number (Optional)">
-              <input 
-                type="text" 
-                className={inputCls} 
-                placeholder="e.g. UPI Txn ID" 
+              <input
+                type="text"
+                className={inputCls}
+                placeholder="e.g. UPI Txn ID"
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
               />
             </FormField>
 
             {!showPreview ? (
-              <button 
+              <button
                 onClick={() => setShowPreview(true)}
-                disabled={!canEdit || totalPayment <= 0} 
-                className="w-full h-12 bg-muted text-foreground border rounded-xl font-medium hover:bg-muted/80 transition-transform active:scale-95 disabled:opacity-50"
+                disabled={!canEdit || totalPayment <= 0}
+                className="w-full h-12 bg-muted text-foreground border rounded-xl font-medium hover:bg-muted/80 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 Preview Allocation
               </button>
@@ -579,12 +900,28 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                 <div className="text-xs space-y-3 bg-muted/20 p-3 rounded-lg border">
                   {generatePreview().map((p, idx) => (
                     <div key={idx} className="space-y-1">
-                      <div className="font-bold text-violet-600">{p.componentName}</div>
-                      {p.allocations.map((a:any, i:number) => (
-                         <div key={i} className="flex justify-between text-muted-foreground">
-                            <span>{a.title}</span>
-                            <span>{formatCurrency(a.allocated)} → <span className={a.newStatus === 'Paid' ? 'text-green-600 font-medium' : 'text-orange-500 font-medium'}>{a.newStatus}</span></span>
-                         </div>
+                      <div className="font-bold text-violet-600">
+                        {p.componentName}
+                      </div>
+                      {p.allocations.map((a: any, i: number) => (
+                        <div
+                          key={i}
+                          className="flex justify-between text-muted-foreground"
+                        >
+                          <span>{a.title}</span>
+                          <span>
+                            {formatCurrency(a.allocated)} →{" "}
+                            <span
+                              className={
+                                a.newStatus === "Paid"
+                                  ? "text-green-600 font-medium"
+                                  : "text-orange-500 font-medium"
+                              }
+                            >
+                              {a.newStatus}
+                            </span>
+                          </span>
+                        </div>
                       ))}
                       {p.advance > 0 && (
                         <div className="flex justify-between text-green-600 font-medium mt-1">
@@ -596,26 +933,55 @@ export function CollectionTab({ students, recentCharges = [], components, canEdi
                   ))}
                 </div>
 
-                <div className="flex gap-3">
-                  <button onClick={() => setShowPreview(false)} className="flex-1 py-3 border rounded-xl font-medium text-sm hover:bg-muted">
-                    Edit
-                  </button>
-                  <button 
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowPreview(false)}
+                      className="flex-1 py-2.5 border rounded-xl font-medium text-sm hover:bg-muted cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      disabled={isSubmitting}
+                      onClick={() => handlePayment(false)}
+                      className="flex-1 py-2.5 border border-neutral-300 dark:border-neutral-700 bg-background hover:bg-muted rounded-xl font-semibold text-xs sm:text-sm transition-colors disabled:opacity-60 cursor-pointer"
+                    >
+                      Confirm Only
+                    </button>
+                  </div>
+                  <button
                     disabled={isSubmitting}
-                    onClick={handlePayment}
-                    className="flex-[2] py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-transform active:scale-95 shadow-md shadow-violet-500/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100"
+                    onClick={() => handlePayment(true)}
+                    className="w-full py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-transform active:scale-95 shadow-md shadow-violet-500/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer"
                   >
-                    {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Confirm Payment
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Printer className="w-4 h-4" />
+                    )}
+                    Confirm & Print Receipt
                   </button>
                 </div>
               </div>
             )}
-            
           </div>
         </div>
       </div>
-      
+
+      {/* Fee Receipt Modal */}
+      <FeeReceiptModal
+        isOpen={receiptModal.open}
+        onClose={() =>
+          setReceiptModal({
+            open: false,
+            loadingReceiptNo: null,
+            data: null,
+            autoPrint: false,
+          })
+        }
+        receiptData={receiptModal.data}
+        autoPrint={receiptModal.autoPrint}
+      />
     </div>
   );
 }

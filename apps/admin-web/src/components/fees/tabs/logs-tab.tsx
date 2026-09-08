@@ -2,20 +2,64 @@
 
 import React, { useState } from "react";
 import { formatCurrency, formatDate } from "@schoolos/utils";
-import { Search, Filter, ArrowUpRight, ArrowDownRight, IndianRupee, History, FileText, CheckCircle2 } from "lucide-react";
+import {
+  Search,
+  Filter,
+  ArrowUpRight,
+  ArrowDownRight,
+  IndianRupee,
+  History,
+  FileText,
+  CheckCircle2,
+  Printer,
+  Loader2,
+} from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
-
+import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
+import {
+  getFeeReceiptDetails,
+  type FeeReceiptData,
+} from "@/lib/actions/fee-allocator";
+import { toast } from "sonner";
 
 interface Props {
   transactions: any[];
 }
 
 export function LogsTab({ transactions }: Readonly<Props>) {
-  const [subTab, setSubTab] = useState<"transactions" | "activities">("transactions");
+  const [subTab, setSubTab] = useState<"transactions" | "activities">(
+    "transactions",
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTx, setSelectedTx] = useState<any>(null);
 
-  const filteredTransactions = transactions.filter(tx => {
+  const [receiptModal, setReceiptModal] = useState<{
+    open: boolean;
+    loadingReceiptNo: string | null;
+    data: FeeReceiptData | null;
+  }>({ open: false, loadingReceiptNo: null, data: null });
+
+  const handleOpenReceipt = async (receiptNo: string) => {
+    setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: receiptNo }));
+    try {
+      const res = await getFeeReceiptDetails(receiptNo);
+      if (res.success && res.data) {
+        setReceiptModal({
+          open: true,
+          loadingReceiptNo: null,
+          data: res.data,
+        });
+      } else {
+        toast.error(res.error || "Failed to load receipt");
+        setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
+      }
+    } catch {
+      toast.error("Failed to fetch receipt");
+      setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
+    }
+  };
+
+  const filteredTransactions = transactions.filter((tx) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -89,26 +133,35 @@ export function LogsTab({ transactions }: Readonly<Props>) {
                 <tbody className="divide-y">
                   {filteredTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-muted-foreground"
+                      >
                         No transactions found
                       </td>
                     </tr>
                   ) : (
                     filteredTransactions.map((tx: any) => (
-                      <tr 
-                        key={tx.id} 
+                      <tr
+                        key={tx.id}
                         className="hover:bg-muted/30 transition-colors cursor-pointer"
                         onClick={() => setSelectedTx(tx)}
                       >
-                        <td className="px-4 py-3 font-medium text-violet-600">{tx.receiptNo}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{formatDate(tx.date)}</td>
+                        <td className="px-4 py-3 font-medium text-violet-600">
+                          {tx.receiptNo}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {formatDate(tx.date)}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="font-medium">{tx.student?.name}</div>
-                          <div className="text-xs text-muted-foreground">Roll: {tx.student?.rollNumber}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Roll: {tx.student?.rollNumber}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border bg-muted/30 capitalize">
-                            {tx.method.toLowerCase().replace('_', ' ')}
+                            {tx.method.toLowerCase().replace("_", " ")}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
@@ -119,7 +172,10 @@ export function LogsTab({ transactions }: Readonly<Props>) {
                             <ArrowDownRight className="w-3 h-3" />
                             {formatCurrency(Number(tx.amount))}
                           </div>
-                          {tx.allocations?.some((a:any) => a.chargeItem?.component?.category === 'LATE_FEE') && (
+                          {tx.allocations?.some(
+                            (a: any) =>
+                              a.chargeItem?.component?.category === "LATE_FEE",
+                          ) && (
                             <span className="inline-block mt-1 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 uppercase font-bold tracking-wider">
                               Includes Late Fee
                             </span>
@@ -142,32 +198,36 @@ export function LogsTab({ transactions }: Readonly<Props>) {
           </div>
           <h3 className="font-semibold text-lg">Activity Log</h3>
           <p className="text-muted-foreground mt-1 max-w-sm">
-            Detailed history of fee generation, assignment updates, and system activities will appear here.
+            Detailed history of fee generation, assignment updates, and system
+            activities will appear here.
           </p>
         </div>
       )}
 
       {/* Transaction Details Modal */}
-      <Dialog 
-        open={!!selectedTx} 
+      <Dialog
+        open={!!selectedTx}
         onOpenChange={(open) => !open && setSelectedTx(null)}
         title="Transaction Details"
       >
         {selectedTx && (
           <div className="space-y-6">
-            
             {/* Header / Summary */}
             <div className="bg-violet-50/50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/50 p-4 rounded-xl flex justify-between items-center">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Amount Paid</p>
+                <p className="text-sm text-muted-foreground mb-1">
+                  Total Amount Paid
+                </p>
                 <p className="text-3xl font-bold text-violet-600 flex items-center gap-2">
-                  {formatCurrency(Number(selectedTx.amount))} 
+                  {formatCurrency(Number(selectedTx.amount))}
                   <CheckCircle2 className="w-5 h-5 text-green-500" />
                 </p>
               </div>
               <div className="text-right">
                 <p className="font-semibold">{selectedTx.receiptNo}</p>
-                <p className="text-sm text-muted-foreground">{formatDate(selectedTx.createdAt)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatDate(selectedTx.createdAt)}
+                </p>
               </div>
             </div>
 
@@ -183,74 +243,140 @@ export function LogsTab({ transactions }: Readonly<Props>) {
               </div>
               <div>
                 <p className="text-muted-foreground mb-0.5">Payment Method</p>
-                <p className="font-medium capitalize">{selectedTx.method?.toLowerCase().replace('_', ' ')}</p>
+                <p className="font-medium capitalize">
+                  {selectedTx.method?.toLowerCase().replace("_", " ")}
+                </p>
               </div>
               <div>
-                <p className="text-muted-foreground mb-0.5">Reference / Notes</p>
-                <p className="font-medium">{selectedTx.reference || selectedTx.remarks || "-"}</p>
+                <p className="text-muted-foreground mb-0.5">
+                  Reference / Notes
+                </p>
+                <p className="font-medium">
+                  {selectedTx.reference || selectedTx.remarks || "-"}
+                </p>
               </div>
             </div>
 
             {/* Allocations Breakdown */}
             <div>
               <h4 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-                <FileText className="w-4 h-4 text-muted-foreground" /> Payment Allocation Breakdown
+                <FileText className="w-4 h-4 text-muted-foreground" /> Payment
+                Allocation Breakdown
               </h4>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">Fee Component</th>
-                      <th className="px-3 py-2 text-left font-medium">Month / Charge</th>
-                      <th className="px-3 py-2 text-right font-medium">Allocated</th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        Fee Component
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        Month / Charge
+                      </th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        Allocated
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {selectedTx.allocations?.map((alloc: any) => {
-                      const isLateFee = alloc.chargeItem?.component?.category === 'LATE_FEE';
+                      const isLateFee =
+                        alloc.chargeItem?.component?.category === "LATE_FEE";
                       return (
-                        <tr key={alloc.id} className={isLateFee ? "bg-red-50/50 dark:bg-red-900/10" : "bg-card"}>
+                        <tr
+                          key={alloc.id}
+                          className={
+                            isLateFee
+                              ? "bg-red-50/50 dark:bg-red-900/10"
+                              : "bg-card"
+                          }
+                        >
                           <td className="px-3 py-2 flex items-center gap-2">
                             {alloc.chargeItem?.component?.name || "Unknown"}
-                            {isLateFee && <span className="text-[9px] bg-red-100 text-red-600 px-1.5 rounded border border-red-200">Late Fee</span>}
+                            {isLateFee && (
+                              <span className="text-[9px] bg-red-100 text-red-600 px-1.5 rounded border border-red-200">
+                                Late Fee
+                              </span>
+                            )}
                           </td>
-                          <td className="px-3 py-2 text-muted-foreground">{alloc.chargeItem?.charge?.title || "-"}</td>
-                          <td className="px-3 py-2 text-right font-medium text-emerald-600">{formatCurrency(Number(alloc.amount))}</td>
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {alloc.chargeItem?.charge?.title || "-"}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-emerald-600">
+                            {formatCurrency(Number(alloc.amount))}
+                          </td>
                         </tr>
                       );
                     })}
-                    {(!selectedTx.allocations || selectedTx.allocations.length === 0) && (
+                    {(!selectedTx.allocations ||
+                      selectedTx.allocations.length === 0) && (
                       <tr>
-                        <td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">
-                          No specific components allocated (likely Advance payment).
+                        <td
+                          colSpan={3}
+                          className="px-3 py-4 text-center text-muted-foreground"
+                        >
+                          No specific components allocated (likely Advance
+                          payment).
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              
+
               {/* Derived Advance Calculation */}
-              {selectedTx.allocations && (
+              {selectedTx.allocations &&
                 (() => {
-                  const totalAllocated = selectedTx.allocations.reduce((sum:number, a:any) => sum + Number(a.amount), 0);
+                  const totalAllocated = selectedTx.allocations.reduce(
+                    (sum: number, a: any) => sum + Number(a.amount),
+                    0,
+                  );
                   const advance = Number(selectedTx.amount) - totalAllocated;
                   if (advance > 0) {
                     return (
                       <div className="mt-3 flex justify-between items-center p-3 bg-green-50/50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/50 rounded-lg text-sm">
-                        <span className="font-medium text-green-700 dark:text-green-400">Added to Advance Ledger</span>
-                        <span className="font-bold text-green-600">+{formatCurrency(advance)}</span>
+                        <span className="font-medium text-green-700 dark:text-green-400">
+                          Added to Advance Ledger
+                        </span>
+                        <span className="font-bold text-green-600">
+                          +{formatCurrency(advance)}
+                        </span>
                       </div>
                     );
                   }
                   return null;
-                })()
-              )}
+                })()}
             </div>
-            
+
+            {/* Print Receipt Action */}
+            <div className="flex justify-end pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => handleOpenReceipt(selectedTx.receiptNo)}
+                disabled={
+                  receiptModal.loadingReceiptNo === selectedTx.receiptNo
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {receiptModal.loadingReceiptNo === selectedTx.receiptNo ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Printer className="w-3.5 h-3.5" />
+                )}
+                Print Official Receipt
+              </button>
+            </div>
           </div>
         )}
       </Dialog>
+
+      <FeeReceiptModal
+        isOpen={receiptModal.open}
+        onClose={() =>
+          setReceiptModal({ open: false, loadingReceiptNo: null, data: null })
+        }
+        receiptData={receiptModal.data}
+      />
     </div>
   );
 }

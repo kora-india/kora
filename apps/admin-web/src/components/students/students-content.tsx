@@ -17,6 +17,8 @@ import {
   AlertCircle,
   XCircle,
   CreditCard,
+  Printer,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -26,6 +28,11 @@ import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
 import { StudentFeeCollection } from "./student-fee-collection";
+import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
+import {
+  getFeeReceiptDetails,
+  type FeeReceiptData,
+} from "@/lib/actions/fee-allocator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteStudent, getStudentDetails } from "@/lib/actions/students";
 import { StudentPerformanceTab } from "./student-performance-tab";
@@ -189,6 +196,28 @@ export function StudentsContent({
     } catch (err: any) {
       setReportCardModal({ open: false, loading: false, data: null });
       toast.error(err.message || "Failed to load report card");
+    }
+  };
+
+  const [receiptModal, setReceiptModal] = useState<{
+    open: boolean;
+    loadingReceiptNo: string | null;
+    data: FeeReceiptData | null;
+  }>({ open: false, loadingReceiptNo: null, data: null });
+
+  const handlePrintPastReceipt = async (receiptNo: string) => {
+    setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: receiptNo }));
+    try {
+      const res = await getFeeReceiptDetails(receiptNo);
+      if (res.success && res.data) {
+        setReceiptModal({ open: true, loadingReceiptNo: null, data: res.data });
+      } else {
+        toast.error(res.error || "Failed to load receipt");
+        setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
+      }
+    } catch {
+      toast.error("Failed to fetch receipt");
+      setReceiptModal((prev) => ({ ...prev, loadingReceiptNo: null }));
     }
   };
 
@@ -1202,7 +1231,7 @@ export function StudentsContent({
                                 (tx: any) => (
                                   <div
                                     key={tx.id}
-                                    className="flex justify-between items-center p-3 border rounded-lg"
+                                    className="flex justify-between items-center p-3 border rounded-lg hover:border-violet-300 dark:hover:border-violet-700 transition-colors"
                                   >
                                     <div>
                                       <p className="text-sm font-medium">
@@ -1213,10 +1242,36 @@ export function StudentsContent({
                                         · {tx.method}
                                       </p>
                                     </div>
-                                    <div className="text-right">
-                                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                        {formatCurrency(parseFloat(tx.amount))}
-                                      </p>
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-right">
+                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                          {formatCurrency(
+                                            parseFloat(tx.amount),
+                                          )}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handlePrintPastReceipt(tx.receiptNo)
+                                        }
+                                        disabled={
+                                          receiptModal.loadingReceiptNo ===
+                                          tx.receiptNo
+                                        }
+                                        className="p-2 rounded-lg border hover:bg-violet-50 dark:hover:bg-violet-950/40 text-violet-600 dark:text-violet-400 transition-colors flex items-center gap-1 text-xs font-medium cursor-pointer"
+                                        title="Print Receipt"
+                                      >
+                                        {receiptModal.loadingReceiptNo ===
+                                        tx.receiptNo ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <Printer className="w-3.5 h-3.5" />
+                                        )}
+                                        <span className="hidden sm:inline">
+                                          Print
+                                        </span>
+                                      </button>
                                     </div>
                                   </div>
                                 ),
@@ -1258,6 +1313,14 @@ export function StudentsContent({
             zIndex={1200}
           />
         )}
+
+        <FeeReceiptModal
+          isOpen={receiptModal.open}
+          onClose={() =>
+            setReceiptModal({ open: false, loadingReceiptNo: null, data: null })
+          }
+          receiptData={receiptModal.data}
+        />
       </div>
     </ConfigProvider>
   );

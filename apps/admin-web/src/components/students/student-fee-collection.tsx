@@ -2,7 +2,12 @@
 
 import React, { useState, useMemo } from "react";
 import { formatCurrency } from "@schoolos/utils";
-import { allocatePayment, waiveFeeChargeItem } from "@/lib/actions/fee-allocator";
+import {
+  allocatePayment,
+  waiveFeeChargeItem,
+  type FeeReceiptData,
+} from "@/lib/actions/fee-allocator";
+import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -16,6 +21,7 @@ import {
   ArrowUpRight,
   Bus,
   Sparkles,
+  Printer,
 } from "lucide-react";
 import { Select } from "antd";
 
@@ -32,10 +38,16 @@ export function StudentFeeCollection({
   onPaymentSuccess,
   onWaiveSuccess,
 }: Readonly<StudentFeeCollectionProps>) {
-  const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>({});
-  const [monthPayments, setMonthPayments] = useState<Record<string, string>>({});
+  const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [monthPayments, setMonthPayments] = useState<Record<string, string>>(
+    {},
+  );
   const [itemPayments, setItemPayments] = useState<Record<string, string>>({});
-  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>(
+    {},
+  );
   const [generalAdvance, setGeneralAdvance] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
@@ -43,18 +55,24 @@ export function StudentFeeCollection({
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
+  const [receiptData, setReceiptData] = useState<FeeReceiptData | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [autoPrint, setAutoPrint] = useState(false);
 
   // Filter non-waived charges for this student sorted by due date
   const studentCharges = useMemo(() => {
     return (student?.feeCharges || [])
       .filter((c: any) => c.status !== "WAIVED")
-      .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+      .sort(
+        (a: any, b: any) =>
+          new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+      );
   }, [student?.feeCharges]);
 
   const advanceBalance =
     student?.advanceLedgers?.reduce(
       (sum: number, l: any) => sum + Number(l.amount || 0),
-      0
+      0,
     ) || 0;
 
   // Process month-wise charge records with their items
@@ -90,10 +108,10 @@ export function StudentFeeCollection({
             item.status === "WAIVED"
               ? "WAIVED"
               : due <= 0
-              ? "PAID"
-              : paid > 0
-              ? "PARTIAL"
-              : "PENDING",
+                ? "PAID"
+                : paid > 0
+                  ? "PARTIAL"
+                  : "PENDING",
           isLateFee,
         };
       });
@@ -155,10 +173,7 @@ export function StudentFeeCollection({
             const remainingBalance = enteredAmount - allocatedSum;
             const lastAlloc = Math.max(
               0,
-              Math.min(
-                item.due,
-                Math.round(remainingBalance * 100) / 100
-              )
+              Math.min(item.due, Math.round(remainingBalance * 100) / 100),
             );
             updatedItemAllocations[item.id] =
               lastAlloc > 0
@@ -167,7 +182,8 @@ export function StudentFeeCollection({
                   : lastAlloc.toFixed(2)
                 : "";
           } else {
-            const proportionalShare = (item.due / charge.totalDue) * enteredAmount;
+            const proportionalShare =
+              (item.due / charge.totalDue) * enteredAmount;
             const roundedAlloc = isIntegerPayment
               ? Math.min(item.due, Math.round(proportionalShare))
               : Math.min(item.due, Math.round(proportionalShare * 100) / 100);
@@ -198,7 +214,11 @@ export function StudentFeeCollection({
   };
 
   // Handle manual fine-tuning of an individual item inside the uncollapsed month
-  const updateItemPayment = (chargeId: string, itemId: string, itemAmountStr: string) => {
+  const updateItemPayment = (
+    chargeId: string,
+    itemId: string,
+    itemAmountStr: string,
+  ) => {
     const charge = monthList.find((m: any) => m.id === chargeId);
     if (!charge) return;
 
@@ -268,12 +288,15 @@ export function StudentFeeCollection({
 
   // Total calculated payment across all selected months + extra advance
   const totalPayment = useMemo(() => {
-    const monthsTotal = Object.entries(monthPayments).reduce((sum, [id, val]) => {
-      if (selectedMonths[id]) {
-        return sum + (Number(val) || 0);
-      }
-      return sum;
-    }, 0);
+    const monthsTotal = Object.entries(monthPayments).reduce(
+      (sum, [id, val]) => {
+        if (selectedMonths[id]) {
+          return sum + (Number(val) || 0);
+        }
+        return sum;
+      },
+      0,
+    );
 
     return monthsTotal + (Number(generalAdvance) || 0);
   }, [monthPayments, selectedMonths, generalAdvance]);
@@ -341,7 +364,7 @@ export function StudentFeeCollection({
   };
 
   // Submit Payment Action
-  const handlePayment = async () => {
+  const handlePayment = async (shouldPrintReceipt: boolean = false) => {
     if (totalPayment <= 0) {
       toast.error("Please enter payment amounts to collect.");
       return;
@@ -353,7 +376,8 @@ export function StudentFeeCollection({
 
     try {
       // Collect all item-wise payments
-      const payloadItemPayments: { chargeItemId: string; amount: number }[] = [];
+      const payloadItemPayments: { chargeItemId: string; amount: number }[] =
+        [];
       let extraSurplusAdvance = Number(generalAdvance) || 0;
 
       monthList.forEach((charge: any) => {
@@ -380,7 +404,8 @@ export function StudentFeeCollection({
       const res = await allocatePayment({
         studentId: student.id,
         itemPayments: payloadItemPayments,
-        generalAdvanceAmount: extraSurplusAdvance > 0 ? extraSurplusAdvance : undefined,
+        generalAdvanceAmount:
+          extraSurplusAdvance > 0 ? extraSurplusAdvance : undefined,
         method: paymentMethod as any,
         reference: reference || undefined,
         remarks: remarks || undefined,
@@ -390,7 +415,9 @@ export function StudentFeeCollection({
         toast.error(res.error, { id: toastId });
       } else {
         const receipt = (res as any).receiptNo || "Receipt Created";
-        toast.success(`Payment successful! Receipt: ${receipt}`, { id: toastId });
+        toast.success(`Payment successful! Receipt: ${receipt}`, {
+          id: toastId,
+        });
         setMonthPayments({});
         setItemPayments({});
         setSelectedMonths({});
@@ -398,6 +425,13 @@ export function StudentFeeCollection({
         setReference("");
         setRemarks("");
         setShowPreview(false);
+
+        if ((res as any).receiptData) {
+          setReceiptData((res as any).receiptData);
+          setAutoPrint(shouldPrintReceipt);
+          setShowReceiptModal(true);
+        }
+
         onPaymentSuccess(receipt);
       }
     } catch {
@@ -453,7 +487,9 @@ export function StudentFeeCollection({
               <span className="text-xs text-muted-foreground uppercase font-medium">
                 Advance Balance
               </span>
-              <p className="text-xl font-bold text-muted-foreground mt-1">₹0.00</p>
+              <p className="text-xl font-bold text-muted-foreground mt-1">
+                ₹0.00
+              </p>
             </div>
           </div>
         )}
@@ -471,22 +507,46 @@ export function StudentFeeCollection({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-foreground">Transport Service Opted-In</span>
+                  <span className="font-semibold text-sm text-foreground">
+                    Transport Service Opted-In
+                  </span>
                   <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">
-                    {activeTransport.tripType ? activeTransport.tripType.replace("_", " ") : "Active"}
+                    {activeTransport.tripType
+                      ? activeTransport.tripType.replace("_", " ")
+                      : "Active"}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Route: <span className="font-medium text-foreground">{activeTransport.route?.name || "Assigned Route"}</span>
+                  Route:{" "}
+                  <span className="font-medium text-foreground">
+                    {activeTransport.route?.name || "Assigned Route"}
+                  </span>
                   {activeTransport.stop?.stopName && (
-                    <span> • Stop: <span className="font-medium text-foreground">{activeTransport.stop.stopName}</span> ({Number(activeTransport.distanceKm || activeTransport.stop.distanceFromSchoolKm || 0)} km)</span>
+                    <span>
+                      {" "}
+                      • Stop:{" "}
+                      <span className="font-medium text-foreground">
+                        {activeTransport.stop.stopName}
+                      </span>{" "}
+                      (
+                      {Number(
+                        activeTransport.distanceKm ||
+                          activeTransport.stop.distanceFromSchoolKm ||
+                          0,
+                      )}{" "}
+                      km)
+                    </span>
                   )}
                 </p>
               </div>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-[11px] text-muted-foreground">Monthly Transport Fee</p>
-              <p className="text-base font-bold text-amber-600 dark:text-amber-400">{formatCurrency(Number(activeTransport.monthlyFee || 0))}</p>
+              <p className="text-[11px] text-muted-foreground">
+                Monthly Transport Fee
+              </p>
+              <p className="text-base font-bold text-amber-600 dark:text-amber-400">
+                {formatCurrency(Number(activeTransport.monthlyFee || 0))}
+              </p>
             </div>
           </div>
         );
@@ -496,10 +556,12 @@ export function StudentFeeCollection({
       <div className="border rounded-xl bg-card overflow-hidden shadow-sm">
         <div className="p-3.5 border-b bg-muted/20 flex justify-between items-center">
           <h3 className="font-semibold text-sm flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-violet-600" /> Outstanding Monthly Fee Dues
+            <Calendar className="w-4 h-4 text-violet-600" /> Outstanding Monthly
+            Fee Dues
           </h3>
           <span className="text-xs text-muted-foreground font-medium">
-            {monthList.length} month{monthList.length === 1 ? "" : "s"} with dues
+            {monthList.length} month{monthList.length === 1 ? "" : "s"} with
+            dues
           </span>
         </div>
 
@@ -519,12 +581,20 @@ export function StudentFeeCollection({
                     className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                   />
                 </th>
-                <th className="py-2.5 px-3 text-left font-medium">Month / Charge</th>
+                <th className="py-2.5 px-3 text-left font-medium">
+                  Month / Charge
+                </th>
                 <th className="py-2.5 px-3 text-left font-medium">Due Date</th>
-                <th className="py-2.5 px-3 text-right font-medium">Net Charge</th>
-                <th className="py-2.5 px-3 text-right font-medium">Advance Paid</th>
+                <th className="py-2.5 px-3 text-right font-medium">
+                  Net Charge
+                </th>
+                <th className="py-2.5 px-3 text-right font-medium">
+                  Advance Paid
+                </th>
                 <th className="py-2.5 px-3 text-right font-medium">Payable</th>
-                <th className="py-2.5 px-3 text-right font-medium w-40">Pay Amount (₹)</th>
+                <th className="py-2.5 px-3 text-right font-medium w-40">
+                  Pay Amount (₹)
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -537,7 +607,9 @@ export function StudentFeeCollection({
                     {/* Month Parent Row */}
                     <tr
                       className={`hover:bg-muted/30 transition-colors ${
-                        isSelected ? "bg-violet-50/40 dark:bg-violet-950/10" : ""
+                        isSelected
+                          ? "bg-violet-50/40 dark:bg-violet-950/10"
+                          : ""
                       }`}
                     >
                       <td className="py-3 px-3">
@@ -568,9 +640,12 @@ export function StudentFeeCollection({
                               <ChevronDown className="w-3.5 h-3.5" />
                             )}
                           </button>
-                          <span className="font-semibold text-foreground">{month.title}</span>
+                          <span className="font-semibold text-foreground">
+                            {month.title}
+                          </span>
                           <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-                            {month.items.length} component{month.items.length === 1 ? "" : "s"}
+                            {month.items.length} component
+                            {month.items.length === 1 ? "" : "s"}
                           </span>
                         </div>
                       </td>
@@ -594,7 +669,9 @@ export function StudentFeeCollection({
                           type="number"
                           placeholder="0"
                           value={monthPayments[month.id] || ""}
-                          onChange={(e) => updateMonthPayment(month.id, e.target.value)}
+                          onChange={(e) =>
+                            updateMonthPayment(month.id, e.target.value)
+                          }
                           disabled={!canEdit}
                           className="w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
                         />
@@ -608,22 +685,36 @@ export function StudentFeeCollection({
                           <div className="border rounded-xl bg-background/90 p-3 space-y-2 shadow-sm">
                             <div className="flex items-center justify-between pb-1 border-b">
                               <p className="text-[11px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wide flex items-center gap-1.5">
-                                <Sparkles className="w-3 h-3" /> Underlying Components for {month.title}
+                                <Sparkles className="w-3 h-3" /> Underlying
+                                Components for {month.title}
                               </p>
                               <span className="text-[10px] text-muted-foreground">
-                                Entering month amount pro-rata splits across components based on dues
+                                Entering month amount pro-rata splits across
+                                components based on dues
                               </span>
                             </div>
 
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="text-muted-foreground border-b pb-1 text-left">
-                                  <th className="pb-1 font-medium">Component</th>
-                                  <th className="text-right pb-1 font-medium">Net Charge</th>
-                                  <th className="text-right pb-1 font-medium">Advance Paid</th>
-                                  <th className="text-right pb-1 font-medium">Payable</th>
-                                  <th className="text-right pb-1 font-medium w-36">Allocated Pay (₹)</th>
-                                  <th className="text-right pb-1 font-medium w-16">Action</th>
+                                  <th className="pb-1 font-medium">
+                                    Component
+                                  </th>
+                                  <th className="text-right pb-1 font-medium">
+                                    Net Charge
+                                  </th>
+                                  <th className="text-right pb-1 font-medium">
+                                    Advance Paid
+                                  </th>
+                                  <th className="text-right pb-1 font-medium">
+                                    Payable
+                                  </th>
+                                  <th className="text-right pb-1 font-medium w-36">
+                                    Allocated Pay (₹)
+                                  </th>
+                                  <th className="text-right pb-1 font-medium w-16">
+                                    Action
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-muted/40">
@@ -638,7 +729,9 @@ export function StudentFeeCollection({
                                     <td className="py-1.5 text-right font-medium text-emerald-600 dark:text-emerald-400">
                                       {formatCurrency(item.paidAmount)}
                                     </td>
-                                    <td className={`py-1.5 text-right font-semibold ${item.due > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                    <td
+                                      className={`py-1.5 text-right font-semibold ${item.due > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
+                                    >
                                       {formatCurrency(item.due)}
                                     </td>
                                     <td className="py-1.5 text-right">
@@ -647,26 +740,34 @@ export function StudentFeeCollection({
                                         placeholder="0"
                                         value={itemPayments[item.id] || ""}
                                         onChange={(e) =>
-                                          updateItemPayment(month.id, item.id, e.target.value)
+                                          updateItemPayment(
+                                            month.id,
+                                            item.id,
+                                            e.target.value,
+                                          )
                                         }
                                         disabled={!canEdit}
                                         className="w-28 h-7 px-2 text-right text-[11px] font-semibold rounded-md border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
                                       />
                                     </td>
                                     <td className="py-1.5 text-right">
-                                      {item.isLateFee && item.due > 0 && canEdit && (
-                                        <button
-                                          type="button"
-                                          disabled={waivingItemId === item.id}
-                                          onClick={() => handleWaiveItem(item.id)}
-                                          className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium inline-flex items-center gap-1 disabled:opacity-50"
-                                        >
-                                          {waivingItemId === item.id && (
-                                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                          )}
-                                          Waive
-                                        </button>
-                                      )}
+                                      {item.isLateFee &&
+                                        item.due > 0 &&
+                                        canEdit && (
+                                          <button
+                                            type="button"
+                                            disabled={waivingItemId === item.id}
+                                            onClick={() =>
+                                              handleWaiveItem(item.id)
+                                            }
+                                            className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                                          >
+                                            {waivingItemId === item.id && (
+                                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                            )}
+                                            Waive
+                                          </button>
+                                        )}
                                     </td>
                                   </tr>
                                 ))}
@@ -682,7 +783,10 @@ export function StudentFeeCollection({
 
               {monthList.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                  <td
+                    colSpan={7}
+                    className="py-10 text-center text-muted-foreground"
+                  >
                     <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
                     <p className="font-semibold text-sm">No Outstanding Dues</p>
                     <p className="text-xs text-muted-foreground">
@@ -699,7 +803,8 @@ export function StudentFeeCollection({
       {/* Payment Processing Form */}
       <div className="bg-card border rounded-xl p-5 shadow-sm space-y-4">
         <h3 className="font-semibold text-sm flex items-center gap-2">
-          <Receipt className="w-4 h-4 text-violet-600" /> Payment & Receipt Details
+          <Receipt className="w-4 h-4 text-violet-600" /> Payment & Receipt
+          Details
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -728,7 +833,9 @@ export function StudentFeeCollection({
 
           {/* Reference / Transaction ID */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium block">Reference / Cheque No.</label>
+            <label className="text-xs font-medium block">
+              Reference / Cheque No.
+            </label>
             <input
               type="text"
               placeholder="e.g. UPI-1238495 / Cheque #004"
@@ -740,7 +847,9 @@ export function StudentFeeCollection({
 
           {/* General Advance / Extra Payment */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium block">Add General Advance (₹)</label>
+            <label className="text-xs font-medium block">
+              Add General Advance (₹)
+            </label>
             <input
               type="number"
               placeholder="0 (Optional credit)"
@@ -772,7 +881,9 @@ export function StudentFeeCollection({
               className="text-xs text-violet-600 hover:text-violet-700 font-medium inline-flex items-center gap-1.5"
             >
               <Eye className="w-3.5 h-3.5" />
-              {showPreview ? "Hide Allocation Preview" : "Preview Payment Breakdown"}
+              {showPreview
+                ? "Hide Allocation Preview"
+                : "Preview Payment Breakdown"}
             </button>
 
             {showPreview && (
@@ -784,8 +895,13 @@ export function StudentFeeCollection({
                     </p>
                     <div className="pl-3 space-y-0.5">
                       {p.allocations.map((a: any, aIdx: number) => (
-                        <div key={aIdx} className="flex justify-between text-muted-foreground">
-                          <span>{a.componentName} ({a.newStatus})</span>
+                        <div
+                          key={aIdx}
+                          className="flex justify-between text-muted-foreground"
+                        >
+                          <span>
+                            {a.componentName} ({a.newStatus})
+                          </span>
                           <span className="font-medium text-foreground">
                             {formatCurrency(a.allocated)}
                           </span>
@@ -814,32 +930,54 @@ export function StudentFeeCollection({
         {/* Submit Bar */}
         <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-medium">Total Collection:</span>
+            <span className="text-xs text-muted-foreground font-medium">
+              Total Collection:
+            </span>
             <span className="text-lg font-black text-violet-700 dark:text-violet-300">
               {formatCurrency(totalPayment)}
             </span>
           </div>
 
-          <button
-            type="button"
-            disabled={totalPayment <= 0 || isSubmitting || !canEdit}
-            onClick={handlePayment}
-            className="h-10 px-6 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Processing Payment...
-              </>
-            ) : (
-              <>
-                <ArrowUpRight className="w-4 h-4" />
-                Collect Payment ({formatCurrency(totalPayment)})
-              </>
-            )}
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <button
+              type="button"
+              disabled={totalPayment <= 0 || isSubmitting || !canEdit}
+              onClick={() => handlePayment(false)}
+              className="h-10 px-4 rounded-lg border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Collect Payment
+            </button>
+
+            <button
+              type="button"
+              disabled={totalPayment <= 0 || isSubmitting || !canEdit}
+              onClick={() => handlePayment(true)}
+              className="h-10 px-5 bg-violet-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-violet-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Printer className="w-4 h-4" />
+                  Collect & Print Receipt ({formatCurrency(totalPayment)})
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Printable Fee Receipt Modal */}
+      <FeeReceiptModal
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        receiptData={receiptData}
+        autoPrint={autoPrint}
+      />
     </div>
   );
 }

@@ -91,8 +91,7 @@ input[type="number"]::-webkit-inner-spin-button {
 
 @media print {
   @page {
-    size: landscape;
-    margin: 6mm 8mm;
+    margin: 8mm;
   }
 
   html,
