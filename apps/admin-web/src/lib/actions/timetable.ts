@@ -4,14 +4,17 @@ import { z } from "zod";
 import { prisma } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 import { revalidatePath } from "next/cache";
+import { logger } from "@schoolos/logger";
 import {
   generateTimetable,
+  validateAndRefineAiTimetable,
   detectManualConflict,
   DEFAULT_PERIODS,
   PeriodDefinition,
   SubjectQuota,
   ExistingSlot,
 } from "../timetable-generator";
+import { generateAiScheduleDraft, AiTimetableResponse } from "../gemini";
 
 const slotSchema = z.object({
   id: z.string().optional(),
@@ -316,17 +319,24 @@ export async function generateAutomatedTimetableAction(params: {
   const schoolId = session.user.schoolId;
   const daysOfWeek = params.daysOfWeek || [1, 2, 3, 4, 5, 6];
 
-  const [periods, allSchoolSlots, sectionSlots] = await Promise.all([
-    getTimetablePeriods(),
-    prisma.timetableSlot.findMany({
-      where: { schoolId, sectionId: { not: params.sectionId } },
-      include: { teacher: { select: { name: true } } },
-    }),
-    prisma.timetableSlot.findMany({
-      where: { schoolId, sectionId: params.sectionId },
-      include: { teacher: { select: { name: true } } },
-    }),
-  ]);
+  const [periods, allSchoolSlots, sectionSlots, schoolTeachers] =
+    await Promise.all([
+      getTimetablePeriods(),
+      prisma.timetableSlot.findMany({
+        where: { schoolId, sectionId: { not: params.sectionId } },
+        include: { teacher: { select: { name: true } } },
+      }),
+      prisma.timetableSlot.findMany({
+        where: { schoolId, sectionId: params.sectionId },
+        include: { teacher: { select: { name: true } } },
+      }),
+      prisma.teacher.findMany({
+        where: { schoolId },
+        select: { id: true },
+      }),
+    ]);
+
+  const validTeacherIds = new Set(schoolTeachers.map((t) => t.id));
 
   const existingLockedSlots: ExistingSlot[] = params.replaceExisting
     ? []
@@ -397,11 +407,16 @@ export async function generateAutomatedTimetableAction(params: {
       const matchingPeriod = periods.find(
         (p) => p.startTime === slot.startTime,
       );
+      const safeTeacherId =
+        slot.teacherId && validTeacherIds.has(slot.teacherId)
+          ? slot.teacherId
+          : null;
+
       return {
         schoolId,
         classId: params.classId,
         sectionId: params.sectionId,
-        teacherId: slot.teacherId || null,
+        teacherId: safeTeacherId,
         periodId: matchingPeriod?.id || null,
         dayOfWeek: slot.dayOfWeek,
         startTime: slot.startTime,
@@ -427,6 +442,231 @@ export async function generateAutomatedTimetableAction(params: {
     totalSlots: result.totalSlots,
     unassignedSubjects: result.unassignedSubjects,
     diagnostics: result.diagnostics,
+  };
+}
+
+export async function generateAiTimetableAction(params: {
+  classId: string;
+  sectionId: string;
+  daysOfWeek?: number[];
+  subjects: SubjectQuota[];
+  replaceExisting?: boolean;
+  academicYear?: string;
+  customPrompt?: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.schoolId) {
+    throw new Error("Unauthorized");
+  }
+  const schoolId = session.user.schoolId;
+  const daysOfWeek = params.daysOfWeek || [1, 2, 3, 4, 5, 6];
+
+  const [
+    targetClass,
+    targetSection,
+    periods,
+    allSchoolSlots,
+    sectionSlots,
+    schoolTeachers,
+  ] = await Promise.all([
+    prisma.class.findUnique({
+      where: { id: params.classId, schoolId },
+      select: { name: true },
+    }),
+    prisma.section.findUnique({
+      where: { id: params.sectionId, schoolId },
+      select: { name: true },
+    }),
+    getTimetablePeriods(),
+    prisma.timetableSlot.findMany({
+      where: { schoolId, sectionId: { not: params.sectionId } },
+      include: { teacher: { select: { name: true } } },
+    }),
+    prisma.timetableSlot.findMany({
+      where: { schoolId, sectionId: params.sectionId },
+      include: { teacher: { select: { name: true } } },
+    }),
+    prisma.teacher.findMany({
+      where: { schoolId },
+      select: { id: true },
+    }),
+  ]);
+
+  const validTeacherIds = new Set(schoolTeachers.map((t) => t.id));
+
+  if (!targetClass || !targetSection) {
+    throw new Error("Target class or section not found");
+  }
+
+  const existingLockedSlots: ExistingSlot[] = params.replaceExisting
+    ? []
+    : sectionSlots.map((s) => ({
+        id: s.id,
+        classId: s.classId,
+        sectionId: s.sectionId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        subjectName: s.subjectName,
+        teacherId: s.teacherId,
+        teacherName: s.teacher?.name,
+        room: s.room,
+      }));
+
+  const otherSectionSlots: ExistingSlot[] = allSchoolSlots.map((s) => ({
+    id: s.id,
+    classId: s.classId,
+    sectionId: s.sectionId,
+    dayOfWeek: s.dayOfWeek,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    subjectName: s.subjectName,
+    teacherId: s.teacherId,
+    teacherName: s.teacher?.name,
+    room: s.room,
+  }));
+
+  const periodDefs: PeriodDefinition[] = periods.map((p) => ({
+    id: p.id,
+    periodNumber: p.periodNumber,
+    name: p.name,
+    startTime: p.startTime,
+    endTime: p.endTime,
+    isBreak: p.isBreak,
+  }));
+
+  const teacherCommitments = allSchoolSlots
+    .filter((s) => s.teacherId)
+    .map((s) => ({
+      teacherId: s.teacherId!,
+      teacherName: s.teacher?.name,
+      dayOfWeek: s.dayOfWeek,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      busyWith: `${s.subjectName}`,
+    }));
+
+  // 1. Generate smart schedule draft with Gemini with automatic fallback
+  let aiDraft: AiTimetableResponse | null = null;
+  let usedFallbackSolver = false;
+  let aiErrorMessage = "";
+
+  try {
+    aiDraft = await generateAiScheduleDraft({
+      className: targetClass.name,
+      sectionName: targetSection.name,
+      daysOfWeek,
+      periods: periodDefs,
+      subjects: params.subjects,
+      teacherCommitments,
+      customPrompt: params.customPrompt,
+    });
+  } catch (err: any) {
+    logger.warn({
+      msg: "Gemini API unavailable or busy, falling back to SchoolOS deterministic solver",
+      error: err.message,
+    });
+    usedFallbackSolver = true;
+    aiErrorMessage = err.message || "Gemini AI temporarily busy";
+  }
+
+  // 2. Validate against SchoolOS strict deterministic conflict engine for zero-clash guarantee
+  let result;
+  let rationale = "";
+
+  if (aiDraft) {
+    result = validateAndRefineAiTimetable({
+      input: {
+        schoolId,
+        classId: params.classId,
+        sectionId: params.sectionId,
+        daysOfWeek,
+        periods: periodDefs,
+        subjects: params.subjects,
+        existingLockedSlots,
+        otherSectionSlots,
+      },
+      aiSlots: aiDraft.slots,
+    });
+    rationale = aiDraft.rationale;
+  } else {
+    result = generateTimetable({
+      schoolId,
+      classId: params.classId,
+      sectionId: params.sectionId,
+      daysOfWeek,
+      periods: periodDefs,
+      subjects: params.subjects,
+      existingLockedSlots,
+      otherSectionSlots,
+    });
+    rationale = `Generated via SchoolOS Conflict-Free Engine (Gemini AI was temporarily experiencing high demand). All teacher & room clashes prevented.`;
+    result.diagnostics = [
+      `Gemini AI was busy; seamlessly switched to SchoolOS Conflict-Free Solver.`,
+      ...result.diagnostics,
+    ];
+  }
+
+  if (!result.success && result.allocatedSlots === 0) {
+    return {
+      success: false,
+      diagnostics: result.diagnostics,
+      unassignedSubjects: result.unassignedSubjects,
+      aiRationale: rationale,
+      usedFallbackSolver,
+    };
+  }
+
+  // 3. Persist clash-free slots in database
+  if (params.replaceExisting) {
+    await prisma.timetableSlot.deleteMany({
+      where: { schoolId, sectionId: params.sectionId },
+    });
+  }
+
+  const recordsToCreate = result.slots
+    .filter((slot) => !slot.isLocked)
+    .map((slot) => {
+      const matchingPeriod = periods.find(
+        (p) => p.startTime === slot.startTime,
+      );
+      const safeTeacherId =
+        slot.teacherId && validTeacherIds.has(slot.teacherId)
+          ? slot.teacherId
+          : null;
+
+      return {
+        schoolId,
+        classId: params.classId,
+        sectionId: params.sectionId,
+        teacherId: safeTeacherId,
+        periodId: matchingPeriod?.id || null,
+        dayOfWeek: slot.dayOfWeek,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        subjectName: slot.subjectName,
+        room: slot.room || null,
+        academicYear: params.academicYear || null,
+      };
+    });
+
+  if (recordsToCreate.length > 0) {
+    await prisma.timetableSlot.createMany({
+      data: recordsToCreate,
+      skipDuplicates: true,
+    });
+  }
+
+  revalidatePath("/timetable");
+
+  return {
+    success: result.success,
+    allocatedSlots: result.allocatedSlots,
+    totalSlots: result.totalSlots,
+    unassignedSubjects: result.unassignedSubjects,
+    diagnostics: result.diagnostics,
+    aiRationale: rationale,
+    usedFallbackSolver,
   };
 }
 

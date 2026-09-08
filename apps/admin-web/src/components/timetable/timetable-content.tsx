@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   ConfigProvider,
   theme as antTheme,
@@ -25,8 +31,10 @@ import {
   Users,
   CheckCircle2,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { TimetableGrid } from "./timetable-grid";
+import { TimetableSkeleton } from "./timetable-skeleton";
 import { SlotDialog } from "./slot-dialog";
 import { AutoGeneratorModal } from "./auto-generator-modal";
 import { PeriodSettingsModal } from "./period-settings-modal";
@@ -87,6 +95,9 @@ export function TimetableContent({
   const [periodSettingsOpen, setPeriodSettingsOpen] = useState(false);
   const [conflictAuditOpen, setConflictAuditOpen] = useState(false);
 
+  const isInitialMount = useRef(true);
+  const activeRequestIdRef = useRef(0);
+
   // Sections for the selected class
   const activeClass = useMemo(
     () => initialClasses.find((c) => c.id === selectedClassId),
@@ -106,27 +117,45 @@ export function TimetableContent({
 
   // Fetch slots based on view mode and selection
   const refreshSlots = useCallback(async () => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const currentRequestId = ++activeRequestIdRef.current;
     setLoading(true);
     try {
       if (viewMode === "class") {
         if (!selectedSectionId) {
-          setSlots([]);
+          if (activeRequestIdRef.current === currentRequestId) {
+            setSlots([]);
+          }
           return;
         }
         const data = await getTimetable({ sectionId: selectedSectionId });
-        setSlots(data);
+        if (activeRequestIdRef.current === currentRequestId) {
+          setSlots(data);
+        }
       } else {
         if (!selectedTeacherId) {
-          setSlots([]);
+          if (activeRequestIdRef.current === currentRequestId) {
+            setSlots([]);
+          }
           return;
         }
         const data = await getTimetable({ teacherId: selectedTeacherId });
-        setSlots(data);
+        if (activeRequestIdRef.current === currentRequestId) {
+          setSlots(data);
+        }
       }
     } catch {
-      message.error("Failed to load timetable slots.");
+      if (activeRequestIdRef.current === currentRequestId) {
+        message.error("Failed to load timetable slots.");
+      }
     } finally {
-      setLoading(false);
+      if (activeRequestIdRef.current === currentRequestId) {
+        setLoading(false);
+      }
     }
   }, [viewMode, selectedSectionId, selectedTeacherId]);
 
@@ -194,6 +223,22 @@ export function TimetableContent({
     return set.size;
   }, [slots]);
 
+  const currentTargetName = useMemo(() => {
+    if (viewMode === "class") {
+      const sec = sections.find((s: any) => s.id === selectedSectionId);
+      return `${activeClass?.name || "Class"} ${sec ? `— Section ${sec.name}` : ""}`;
+    }
+    const tch = initialTeachers.find((t) => t.id === selectedTeacherId);
+    return tch ? `${tch.name}'s Schedule` : "Teacher Schedule";
+  }, [
+    viewMode,
+    activeClass,
+    sections,
+    selectedSectionId,
+    initialTeachers,
+    selectedTeacherId,
+  ]);
+
   return (
     <ConfigProvider
       theme={{
@@ -222,38 +267,45 @@ export function TimetableContent({
           {/* Quick Actions */}
           {!isTeacherRole && (
             <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                icon={<Printer className="w-4 h-4" />}
-                onClick={handlePrint}
-                className="rounded-xl"
-              >
-                Print
-              </Button>
+              <Tooltip title="Audit School Conflicts">
+                <Button
+                  icon={<ShieldAlert className="w-4 h-4" />}
+                  onClick={() => setConflictAuditOpen(true)}
+                  className={`rounded-xl ${
+                    conflictCount > 0
+                      ? "border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                      : ""
+                  }`}
+                >
+                  Conflicts
+                  {conflictCount > 0 && (
+                    <Badge count={conflictCount} className="ml-1" />
+                  )}
+                </Button>
+              </Tooltip>
+
+              <Tooltip title="Configure Periods & Breaks">
+                <Button
+                  icon={<Settings2 className="w-4 h-4" />}
+                  onClick={() => setPeriodSettingsOpen(true)}
+                  className="rounded-xl"
+                >
+                  Bell Schedule
+                </Button>
+              </Tooltip>
+
+              <Tooltip title="Print Timetable">
+                <Button
+                  icon={<Printer className="w-4 h-4" />}
+                  onClick={handlePrint}
+                  className="rounded-xl"
+                >
+                  Print
+                </Button>
+              </Tooltip>
 
               <Button
-                icon={<ShieldAlert className="w-4 h-4" />}
-                onClick={() => setConflictAuditOpen(true)}
-                className={
-                  conflictCount > 0
-                    ? "border-red-500 text-red-600 dark:text-red-400 rounded-xl"
-                    : "rounded-xl"
-                }
-              >
-                Audit Conflicts
-                {conflictCount > 0 && (
-                  <Badge count={conflictCount} className="ml-1.5" />
-                )}
-              </Button>
-
-              <Button
-                icon={<Settings2 className="w-4 h-4" />}
-                onClick={() => setPeriodSettingsOpen(true)}
-                className="rounded-xl"
-              >
-                Periods & Bells
-              </Button>
-
-              <Button
+                type="primary"
                 icon={<Sparkles className="w-4 h-4" />}
                 onClick={() => setAutoGenOpen(true)}
                 className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl"
@@ -285,7 +337,11 @@ export function TimetableContent({
                   Scheduled Classes
                 </p>
                 <h3 className="text-xl font-bold text-foreground mt-0.5">
-                  {totalClassesScheduled}
+                  {loading ? (
+                    <span className="inline-block w-8 h-6 bg-muted animate-pulse rounded" />
+                  ) : (
+                    totalClassesScheduled
+                  )}
                 </h3>
               </div>
             </div>
@@ -301,7 +357,11 @@ export function TimetableContent({
                   Teachers Scheduled
                 </p>
                 <h3 className="text-xl font-bold text-foreground mt-0.5">
-                  {uniqueTeachersCount}
+                  {loading ? (
+                    <span className="inline-block w-8 h-6 bg-muted animate-pulse rounded" />
+                  ) : (
+                    uniqueTeachersCount
+                  )}
                 </h3>
               </div>
             </div>
@@ -368,7 +428,10 @@ export function TimetableContent({
           <div className="flex items-center gap-3 flex-wrap">
             <Segmented
               value={viewMode}
-              onChange={(val) => setViewMode(val as "class" | "teacher")}
+              onChange={(val) => {
+                setViewMode(val as "class" | "teacher");
+                setLoading(true);
+              }}
               options={[
                 {
                   label: "Class Timetable",
@@ -388,11 +451,13 @@ export function TimetableContent({
               <div className="flex items-center gap-2 flex-wrap">
                 <Select
                   value={selectedClassId}
+                  loading={loading}
                   onChange={(val) => {
-                    setSelectedClassId(val);
                     const c = initialClasses.find((cls) => cls.id === val);
-                    if (c?.sections?.[0])
-                      setSelectedSectionId(c.sections[0].id);
+                    const firstSec = c?.sections?.[0]?.id || "";
+                    setLoading(true);
+                    setSelectedClassId(val);
+                    setSelectedSectionId(firstSec);
                   }}
                   options={initialClasses.map((c) => ({
                     label: c.name,
@@ -404,7 +469,11 @@ export function TimetableContent({
 
                 <Select
                   value={selectedSectionId}
-                  onChange={(val) => setSelectedSectionId(val)}
+                  loading={loading}
+                  onChange={(val) => {
+                    setLoading(true);
+                    setSelectedSectionId(val);
+                  }}
                   options={sections.map((s: any) => ({
                     label: `Section ${s.name}`,
                     value: s.id,
@@ -417,7 +486,11 @@ export function TimetableContent({
               <Select
                 showSearch
                 value={selectedTeacherId}
-                onChange={(val) => setSelectedTeacherId(val)}
+                loading={loading}
+                onChange={(val) => {
+                  setLoading(true);
+                  setSelectedTeacherId(val);
+                }}
                 options={initialTeachers.map((t) => ({
                   label: `${t.name} (${t.subject || "General"})`,
                   value: t.id,
@@ -431,29 +504,43 @@ export function TimetableContent({
 
           <div className="text-xs text-muted-foreground font-medium flex items-center gap-2">
             <span>Showing:</span>
-            <span className="font-semibold text-foreground">
-              {viewMode === "class"
-                ? `${activeClass?.name || "Class"} — Section ${
-                    sections.find((s: any) => s.id === selectedSectionId)
-                      ?.name || "A"
-                  }`
-                : initialTeachers.find((t) => t.id === selectedTeacherId)
-                    ?.name || "Teacher"}
-            </span>
+            {loading ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-violet-600 dark:text-violet-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Switching...</span>
+              </span>
+            ) : (
+              <span className="font-semibold text-foreground">
+                {viewMode === "class"
+                  ? `${activeClass?.name || "Class"} — Section ${
+                      sections.find((s: any) => s.id === selectedSectionId)
+                        ?.name || "A"
+                    }`
+                  : initialTeachers.find((t) => t.id === selectedTeacherId)
+                      ?.name || "Teacher"}
+              </span>
+            )}
           </div>
         </div>
 
         {/* Timetable Grid Matrix */}
         <div className="print:m-0">
-          <TimetableGrid
-            mode={viewMode}
-            periods={periods}
-            slots={slots}
-            onAddSlot={handleOpenAddSlot}
-            onEditSlot={handleOpenEditSlot}
-            onDeleteSlot={handleDeleteSlot}
-            isReadOnly={isTeacherRole}
-          />
+          {loading ? (
+            <TimetableSkeleton
+              periods={periods}
+              targetName={currentTargetName}
+            />
+          ) : (
+            <TimetableGrid
+              mode={viewMode}
+              periods={periods}
+              slots={slots}
+              onAddSlot={handleOpenAddSlot}
+              onEditSlot={handleOpenEditSlot}
+              onDeleteSlot={handleDeleteSlot}
+              isReadOnly={isTeacherRole}
+            />
+          )}
         </div>
 
         {/* Modals */}

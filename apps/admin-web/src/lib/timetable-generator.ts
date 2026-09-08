@@ -506,3 +506,272 @@ export function detectManualConflict(params: {
 
   return { hasConflict: false };
 }
+
+export interface AiDraftInputSlot {
+  dayOfWeek: number;
+  periodNumber?: number;
+  startTime?: string;
+  endTime?: string;
+  subjectName: string;
+  teacherId?: string | null;
+  teacherName?: string | null;
+  room?: string | null;
+}
+
+/**
+ * Validates Gemini AI's draft timetable against all hard constraints (teacher/room conflicts,
+ * breaks, section overlaps). If any clashes or missing slots occur, automatically refines
+ * and resolves them using the deterministic placement engine for a 100% conflict-free guarantee.
+ */
+export function validateAndRefineAiTimetable(params: {
+  input: GeneratorInput;
+  aiSlots: AiDraftInputSlot[];
+}): GeneratorResult {
+  const { input, aiSlots } = params;
+  const {
+    schoolId,
+    classId,
+    sectionId,
+    daysOfWeek,
+    periods,
+    subjects,
+    existingLockedSlots = [],
+    otherSectionSlots = [],
+  } = input;
+
+  const teachablePeriods = periods.filter((p) => !p.isBreak);
+  const diagnostics: string[] = [];
+
+  // Build teacher & room busy maps for other classes
+  const teacherBusyMap = new Map<string, string>();
+  const roomBusyMap = new Map<string, string>();
+
+  for (const slot of otherSectionSlots) {
+    if (slot.teacherId) {
+      teacherBusyMap.set(
+        `${slot.teacherId}_${slot.dayOfWeek}_${slot.startTime}`,
+        `Class ${slot.classId} (${slot.subjectName})`,
+      );
+    }
+    if (slot.room && slot.room.trim()) {
+      roomBusyMap.set(
+        `${slot.room.trim().toLowerCase()}_${slot.dayOfWeek}_${slot.startTime}`,
+        `Class ${slot.classId} (${slot.subjectName})`,
+      );
+    }
+  }
+
+  // Grid for this section
+  const grid = new Map<string, GeneratedSlot>();
+  const subjectPlacedCount = new Map<string, number>();
+  for (const s of subjects) {
+    subjectPlacedCount.set(s.subjectName.toLowerCase(), 0);
+  }
+
+  // 1. Lock existing manual slots
+  for (const locked of existingLockedSlots) {
+    const period = teachablePeriods.find(
+      (p) => p.startTime === locked.startTime,
+    ) || {
+      periodNumber: locked.periodNumber || 1,
+      name: `Period ${locked.periodNumber || 1}`,
+      startTime: locked.startTime,
+      endTime: locked.endTime,
+      isBreak: false,
+    };
+    const key = `${locked.dayOfWeek}_${period.periodNumber}`;
+    grid.set(key, {
+      dayOfWeek: locked.dayOfWeek,
+      periodNumber: period.periodNumber,
+      startTime: locked.startTime,
+      endTime: locked.endTime,
+      subjectName: locked.subjectName,
+      teacherId: locked.teacherId,
+      teacherName: locked.teacherName,
+      room: locked.room,
+      isLocked: true,
+    });
+    const sName = locked.subjectName.toLowerCase();
+    subjectPlacedCount.set(sName, (subjectPlacedCount.get(sName) || 0) + 1);
+
+    if (locked.teacherId) {
+      teacherBusyMap.set(
+        `${locked.teacherId}_${locked.dayOfWeek}_${locked.startTime}`,
+        "Locked slot",
+      );
+    }
+    if (locked.room?.trim()) {
+      roomBusyMap.set(
+        `${locked.room.trim().toLowerCase()}_${locked.dayOfWeek}_${locked.startTime}`,
+        "Locked slot",
+      );
+    }
+  }
+
+  // 2. Validate and place Gemini AI proposed slots
+  for (const aiSlot of aiSlots) {
+    if (!daysOfWeek.includes(aiSlot.dayOfWeek)) continue;
+
+    // Match period definition
+    const matchingPeriod = teachablePeriods.find(
+      (p) =>
+        p.periodNumber === aiSlot.periodNumber ||
+        p.startTime === aiSlot.startTime,
+    );
+    if (!matchingPeriod) continue;
+
+    const key = `${aiSlot.dayOfWeek}_${matchingPeriod.periodNumber}`;
+    if (grid.has(key)) continue; // Already occupied
+
+    // Match subject quota
+    const matchedSubject = subjects.find(
+      (s) => s.subjectName.toLowerCase() === aiSlot.subjectName.toLowerCase(),
+    );
+    if (!matchedSubject) continue;
+
+    const currentCount =
+      subjectPlacedCount.get(matchedSubject.subjectName.toLowerCase()) || 0;
+    if (currentCount >= matchedSubject.periodsPerWeek) continue; // Quota reached
+
+    // Strictly use the teacher defined in the subject quota to prevent hallucinated IDs or foreign key errors
+    const effectiveTeacherId = matchedSubject.teacherId || null;
+    const effectiveTeacherName = matchedSubject.teacherName || null;
+    const effectiveRoom =
+      aiSlot.room && !aiSlot.room.toLowerCase().includes("optional")
+        ? aiSlot.room
+        : matchedSubject.room || null;
+
+    // Check teacher clash
+    if (effectiveTeacherId) {
+      const busy = teacherBusyMap.get(
+        `${effectiveTeacherId}_${aiSlot.dayOfWeek}_${matchingPeriod.startTime}`,
+      );
+      if (busy) {
+        diagnostics.push(
+          `AI slot for ${aiSlot.subjectName} on ${DAY_NAMES[aiSlot.dayOfWeek]} Period ${matchingPeriod.periodNumber} skipped: Teacher is busy in ${busy}.`,
+        );
+        continue;
+      }
+    }
+
+    // Check room clash
+    if (effectiveRoom?.trim()) {
+      const roomKey = `${effectiveRoom.trim().toLowerCase()}_${aiSlot.dayOfWeek}_${matchingPeriod.startTime}`;
+      const busy = roomBusyMap.get(roomKey);
+      if (busy) {
+        diagnostics.push(
+          `AI slot for ${aiSlot.subjectName} on ${DAY_NAMES[aiSlot.dayOfWeek]} Period ${matchingPeriod.periodNumber} skipped: Room is booked.`,
+        );
+        continue;
+      }
+    }
+
+    // Place verified slot
+    grid.set(key, {
+      dayOfWeek: aiSlot.dayOfWeek,
+      periodNumber: matchingPeriod.periodNumber,
+      startTime: matchingPeriod.startTime,
+      endTime: matchingPeriod.endTime,
+      subjectName: matchedSubject.subjectName,
+      teacherId: effectiveTeacherId,
+      teacherName: effectiveTeacherName,
+      room: effectiveRoom,
+      isLocked: false,
+    });
+
+    subjectPlacedCount.set(
+      matchedSubject.subjectName.toLowerCase(),
+      currentCount + 1,
+    );
+
+    if (effectiveTeacherId) {
+      teacherBusyMap.set(
+        `${effectiveTeacherId}_${aiSlot.dayOfWeek}_${matchingPeriod.startTime}`,
+        `Section ${sectionId}`,
+      );
+    }
+    if (effectiveRoom?.trim()) {
+      roomBusyMap.set(
+        `${effectiveRoom.trim().toLowerCase()}_${aiSlot.dayOfWeek}_${matchingPeriod.startTime}`,
+        `Section ${sectionId}`,
+      );
+    }
+  }
+
+  // 3. Fallback resolution: If any subject has remaining quota, use deterministic solver
+  const hasRemainingQuota = subjects.some((s) => {
+    const placed = subjectPlacedCount.get(s.subjectName.toLowerCase()) || 0;
+    return placed < s.periodsPerWeek;
+  });
+
+  if (hasRemainingQuota) {
+    const currentSlotsAsLocked: ExistingSlot[] = Array.from(grid.values()).map(
+      (s) => ({
+        classId,
+        sectionId,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        periodNumber: s.periodNumber,
+        subjectName: s.subjectName,
+        teacherId: s.teacherId,
+        teacherName: s.teacherName,
+        room: s.room,
+      }),
+    );
+
+    const fallbackResult = generateTimetable({
+      schoolId,
+      classId,
+      sectionId,
+      daysOfWeek,
+      periods,
+      subjects, // Full subjects list; generateTimetable subtracts currentSlotsAsLocked
+      existingLockedSlots: currentSlotsAsLocked,
+      otherSectionSlots,
+    });
+
+    for (const slot of fallbackResult.slots) {
+      const key = `${slot.dayOfWeek}_${slot.periodNumber}`;
+      if (!grid.has(key)) {
+        grid.set(key, slot);
+      }
+    }
+
+    if (fallbackResult.diagnostics.length > 0) {
+      diagnostics.push(...fallbackResult.diagnostics);
+    }
+  }
+
+  // Calculate totals and unassigned
+  const finalSlots = Array.from(grid.values()).sort(
+    (a, b) => a.dayOfWeek - b.dayOfWeek || a.periodNumber - b.periodNumber,
+  );
+
+  const totalRequested = subjects.reduce((sum, s) => sum + s.periodsPerWeek, 0);
+  const unassignedSubjects: GeneratorResult["unassignedSubjects"] = [];
+
+  for (const s of subjects) {
+    const placed = finalSlots.filter(
+      (fs) => fs.subjectName.toLowerCase() === s.subjectName.toLowerCase(),
+    ).length;
+    const remaining = s.periodsPerWeek - placed;
+    if (remaining > 0) {
+      unassignedSubjects.push({
+        subjectName: s.subjectName,
+        remaining,
+        reason:
+          "No conflict-free slots available across teacher and room schedules.",
+      });
+    }
+  }
+
+  return {
+    success: unassignedSubjects.length === 0,
+    slots: finalSlots,
+    totalSlots: totalRequested,
+    allocatedSlots: finalSlots.length,
+    unassignedSubjects,
+    diagnostics,
+  };
+}
