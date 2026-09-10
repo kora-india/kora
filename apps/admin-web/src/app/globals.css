@@ -87,6 +87,25 @@ input[type="number"]::-webkit-inner-spin-button {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 30s linear infinite;
+  }
+
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
 }
 
 @media print {

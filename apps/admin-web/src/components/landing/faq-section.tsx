@@ -1,93 +1,127 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown, HelpCircle, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, HelpCircle } from "lucide-react";
 
 export function FaqSection() {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   const faqs = [
     {
-      q: "How fast can our school migrate from Excel or our existing software?",
-      a: "Migration takes less than 5 minutes. You can import your entire student and teacher roster via our Excel/CSV bulk import wizard. Classes, sections, and fee structures are automatically generated.",
+      q: "Is Kora difficult to set up?",
+      a: "Not at all. You can set up your school in under 10 minutes from any web browser. Our onboarding team is also available to help you configure classes, fees, and staff logins if you need assistance.",
     },
     {
-      q: "How does the Advance Ledger and auto-reconciliation feature work?",
-      a: "When a parent pays more than the billed amount, the surplus is automatically deposited into the student's Advance Ledger. On the 1st of every month when new fees are generated, Kora automatically deducts the advance balance and presents the exact remaining payable amount.",
+      q: "Can teachers use Kora from their phones?",
+      a: "Yes! Teachers can open Kora directly on any smartphone (Android or iPhone) without downloading bulky software. They can mark attendance, check timetables, and view student lists in seconds.",
     },
     {
-      q: "Do teachers need to download an app from the Play Store or App Store?",
-      a: "No. Kora includes a dedicated Progressive Web App (PWA). Teachers simply visit your school link on any mobile device (iOS/Android) and take attendance with zero install friction and instant cloud synchronization.",
+      q: "Can I manage fees and print receipts?",
+      a: "Yes. You can track term fees, transport charges, concessions, and advance balances. Official PDF receipts can be printed immediately or dispatched straight to parents via WhatsApp.",
     },
     {
-      q: "Can a teacher be assigned to multiple classes and sections?",
-      a: "Yes. Kora supports multi-class and multi-section assignment with Ant Design multi-select. Teachers can be assigned as designated Class Teachers while also teaching specific subjects across multiple grade sections.",
+      q: "Can parents receive updates and circulars?",
+      a: "Yes. Whenever you publish an announcement, exam timetable, or rain holiday notice, parents receive it instantly on their mobile phones.",
     },
     {
-      q: "How does distance-based transport route billing calculate fees?",
-      a: "You define route stops with their distance from the school in kilometers. When enrolling a student at a stop, Kora calculates the monthly fee based on distance rates and trip type (Pickup only, Drop only, or Two-way) and links it directly to their monthly fee charges.",
+      q: "Can Kora manage school transport?",
+      a: "Yes. Kora lets you organize buses, driver contact details, stops, and passenger lists, and automatically bills transport fees based on distance or stop.",
     },
     {
-      q: "How secure is our school's student and financial data?",
-      a: "Kora enforces multi-tenant row-level security in PostgreSQL. Every query is partitioned by your school's unique ID. We use industry-standard encryption at rest and in transit with automated cloud backups.",
+      q: "Can multiple staff members use it at the same time?",
+      a: "Yes. Principals, teachers, accountants, and front-desk staff can all work simultaneously with their own secure logins, seeing only the modules relevant to their role.",
+    },
+    {
+      q: "Can I move our existing school data into Kora?",
+      a: "Yes. You can import student rosters, staff lists, and class sections directly from Excel spreadsheets with our 1-click import feature. Our support team can also assist with migration.",
+    },
+    {
+      q: "How does the free trial work?",
+      a: "You get 14 days of full access to all Kora features with zero obligation. No credit card is required to get started, and you can invite your staff to test it with you.",
     },
   ];
 
   return (
-    <section id="faq" className="py-24 relative">
+    <section id="faq" className="py-24 bg-white border-b border-slate-100">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-14">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold uppercase tracking-wider mb-4">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-violet-100/80 text-violet-800 text-xs font-bold uppercase tracking-wider mb-4 border border-violet-200">
             <HelpCircle className="w-3.5 h-3.5" />
-            <span>Frequently Asked Questions</span>
+            <span>Got Questions?</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Got Questions? We’ve Got Answers.
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight">
+            Frequently Asked Questions
           </h2>
-          <p className="mt-4 text-base text-white/60">
-            Everything you need to know about switching to Kora.
+          <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed">
+            Everything you need to know about getting started with Kora.
           </p>
         </div>
 
-        {/* Accordion List */}
-        <div className="space-y-4">
+        {/* FAQ Accordion */}
+        <div className="mt-14 space-y-3">
           {faqs.map((faq, idx) => {
-            const isOpen = openIdx === idx;
+            const isOpen = openIndex === idx;
             return (
               <div
                 key={idx}
-                className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden transition-colors hover:border-white/20"
+                className="rounded-2xl border border-slate-200 overflow-hidden transition-colors bg-white hover:border-slate-300"
               >
                 <button
-                  type="button"
-                  onClick={() => setOpenIdx(isOpen ? null : idx)}
-                  className="w-full p-6 text-left flex items-center justify-between gap-4 font-semibold text-white text-base sm:text-lg focus:outline-none"
+                  onClick={() => setOpenIndex(isOpen ? null : idx)}
+                  className="w-full py-5 px-6 text-left flex items-center justify-between gap-4 focus:outline-none"
                 >
-                  <span>{faq.q}</span>
+                  <span className="font-bold text-base text-slate-900">
+                    {faq.q}
+                  </span>
                   <ChevronDown
-                    className={`w-5 h-5 text-violet-400 shrink-0 transition-transform duration-300 ${
-                      isOpen ? "rotate-180" : ""
+                    className={`w-5 h-5 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
+                      isOpen ? "rotate-180 text-violet-600" : ""
                     }`}
                   />
                 </button>
-                <AnimatePresence>
+
+                <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="px-6 pb-6 text-sm sm:text-base text-white/65 leading-relaxed"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
                     >
-                      {faq.a}
+                      <div className="px-6 pb-5 text-sm sm:text-base text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+                        {faq.a}
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             );
           })}
+        </div>
+
+        {/* Still have questions banner */}
+        <div className="mt-12 p-6 rounded-3xl bg-violet-50 border border-violet-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 text-sm">
+                Have a specific question about your school?
+              </p>
+              <p className="text-xs text-slate-500">
+                Our education team is happy to answer any questions.
+              </p>
+            </div>
+          </div>
+          <a
+            href="#final-cta"
+            className="px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-violet-700 font-bold text-xs border border-violet-200 shadow-sm transition-colors"
+          >
+            Chat With Us
+          </a>
         </div>
       </div>
     </section>
