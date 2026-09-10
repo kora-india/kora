@@ -1,13 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import {
-  GraduationCap,
-  ArrowRight,
-  ShieldCheck,
-  Heart,
-  Zap,
-} from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, ShieldCheck, Heart, Zap } from "lucide-react";
 
 export function LandingFooter() {
   return (
@@ -52,8 +47,14 @@ export function LandingFooter() {
         {/* Brand Col */}
         <div className="col-span-2 space-y-4">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-md">
-              <GraduationCap className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-violet-950/40 border border-violet-500/30 flex items-center justify-center p-1 text-white shadow-md">
+              <Image
+                src="/kora-icon.png"
+                alt="Kora"
+                width={26}
+                height={26}
+                className="w-6 h-6 object-contain"
+              />
             </div>
             <span className="font-extrabold text-lg text-white tracking-tight">
               Kora

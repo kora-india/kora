@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Eye, EyeOff, GraduationCap, ArrowLeft, MailCheck } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, MailCheck } from "lucide-react";
 
 const RegisterSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -103,8 +104,15 @@ export default function RegisterPage() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNCI+PHBhdGggZD0ibTM2IDM0djZoNnYtNnptLTEyIDB2Nmg2di02em0wLTEydjZoNnYtNnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-40" />
         <div className="relative">
           <div className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-sm p-1 border border-white/20">
+              <Image
+                src="/kora-icon.png"
+                alt="Kora"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain"
+                priority
+              />
             </div>
             <span className="text-white font-bold text-xl tracking-tight">
               Kora

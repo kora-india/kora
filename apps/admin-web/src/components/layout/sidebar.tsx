@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +16,6 @@ import {
   BookOpen,
   Settings,
   ChevronLeft,
-  GraduationCap as Logo,
   Building2,
   BarChart3,
   Wallet,
@@ -189,8 +189,14 @@ export function Sidebar({
           collapsed && "justify-center",
         )}
       >
-        <div className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Logo className="w-4 h-4 text-white" />
+        <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+          <Image
+            src="/kora-icon.png"
+            alt="Kora"
+            width={28}
+            height={28}
+            className="w-7 h-7 object-contain"
+          />
         </div>
         <AnimatePresence>
           {!collapsed && (
