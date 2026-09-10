@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Sparkles, Shield, Zap, CheckCircle2, Play, Users, TrendingUp, Clock } from "lucide-react";
+import {
+  ArrowRight,
+  Sparkles,
+  Shield,
+  Zap,
+  CheckCircle2,
+  Play,
+  Users,
+  TrendingUp,
+  Clock,
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 export function HeroSection() {
@@ -10,9 +20,9 @@ export function HeroSection() {
       {/* Background Glows & Grids */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[900px] h-[450px] bg-gradient-to-tr from-violet-600/25 via-indigo-600/20 to-purple-600/10 blur-[130px] rounded-full pointer-events-none -z-10" />
       <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-violet-600/10 to-transparent pointer-events-none -z-10" />
-      
+
       {/* Grid Pattern Overlay */}
-      <div 
+      <div
         className="absolute inset-0 opacity-[0.12] -z-10 pointer-events-none"
         style={{
           backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 0)`,
@@ -33,7 +43,7 @@ export function HeroSection() {
             <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
           </span>
           <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-          <span>SchoolOS 2.0 is Live • Multi-Branch & Realtime Cloud Engine</span>
+          <span>Kora 2.0 is Live • Multi-Branch & Realtime Cloud Engine</span>
           <ArrowRight className="w-3.5 h-3.5 text-violet-400/80" />
         </motion.div>
 
@@ -58,7 +68,9 @@ export function HeroSection() {
           transition={{ duration: 0.7, delay: 0.2 }}
           className="mt-6 text-base sm:text-xl text-white/65 max-w-3xl mx-auto leading-relaxed font-normal"
         >
-          Automate complex fee reconciliations, record 20-second attendance with the Teacher PWA, manage bus fleets with distance-based billing, and eliminate operational chaos with sub-5ms cloud speed.
+          Automate complex fee reconciliations, record 20-second attendance with
+          the Teacher PWA, manage bus fleets with distance-based billing, and
+          eliminate operational chaos with sub-5ms cloud speed.
         </motion.p>
 
         {/* CTA Buttons */}
@@ -116,33 +128,49 @@ export function HeroSection() {
           <div className="p-3 text-left sm:text-center border-r border-white/5 last:border-0">
             <div className="flex items-center sm:justify-center gap-2 text-violet-400 mb-1">
               <Users className="w-4 h-4" />
-              <span className="text-2xl sm:text-3xl font-extrabold text-white">150k+</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-white">
+                150k+
+              </span>
             </div>
-            <p className="text-xs text-white/50 font-medium">Students Enrolled</p>
+            <p className="text-xs text-white/50 font-medium">
+              Students Enrolled
+            </p>
           </div>
 
           <div className="p-3 text-left sm:text-center border-r border-white/5 last:border-0">
             <div className="flex items-center sm:justify-center gap-2 text-emerald-400 mb-1">
               <TrendingUp className="w-4 h-4" />
-              <span className="text-2xl sm:text-3xl font-extrabold text-white">99.8%</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-white">
+                99.8%
+              </span>
             </div>
-            <p className="text-xs text-white/50 font-medium">Fee Collection Rate</p>
+            <p className="text-xs text-white/50 font-medium">
+              Fee Collection Rate
+            </p>
           </div>
 
           <div className="p-3 text-left sm:text-center border-r border-white/5 last:border-0">
             <div className="flex items-center sm:justify-center gap-2 text-amber-400 mb-1">
               <Clock className="w-4 h-4" />
-              <span className="text-2xl sm:text-3xl font-extrabold text-white">20 Sec</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-white">
+                20 Sec
+              </span>
             </div>
-            <p className="text-xs text-white/50 font-medium">Avg Roll Call Time</p>
+            <p className="text-xs text-white/50 font-medium">
+              Avg Roll Call Time
+            </p>
           </div>
 
           <div className="p-3 text-left sm:text-center">
             <div className="flex items-center sm:justify-center gap-2 text-indigo-400 mb-1">
               <Zap className="w-4 h-4" />
-              <span className="text-2xl sm:text-3xl font-extrabold text-white">0.4 ms</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-white">
+                0.4 ms
+              </span>
             </div>
-            <p className="text-xs text-white/50 font-medium">Redis Cache Latency</p>
+            <p className="text-xs text-white/50 font-medium">
+              Redis Cache Latency
+            </p>
           </div>
         </motion.div>
       </div>

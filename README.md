@@ -1,4 +1,4 @@
-# SchoolOS — Multi-Tenant School Management SaaS
+# Kora — Multi-Tenant School Management SaaS
 
 A production-ready, premium School Management Platform built with **Next.js 15**, **TypeScript**, **Turborepo**, **Prisma**, and **Auth.js v5**.
 
@@ -58,6 +58,7 @@ pnpm dev
 ```
 
 This starts both apps:
+
 - Admin Dashboard: http://localhost:3000
 - Teacher PWA: http://localhost:3001
 
@@ -66,7 +67,7 @@ This starts both apps:
 ## 🔐 Demo Credentials
 
 | Role         | Email                       | Password      |
-|--------------|-----------------------------|---------------|
+| ------------ | --------------------------- | ------------- |
 | Super Admin  | superadmin@schoolos.com     | superadmin123 |
 | School Admin | admin@dps.schoolos.com      | admin123      |
 | Teacher      | priya.nair@dps.schoolos.com | teacher123    |
@@ -104,19 +105,19 @@ The Teacher PWA is a mobile-first Progressive Web App designed for:
 
 ## 📦 Tech Stack
 
-| Layer          | Technology                         |
-|----------------|------------------------------------|
-| Framework      | Next.js 15 (App Router)            |
-| Language       | TypeScript 5                       |
-| Styling        | Tailwind CSS + CVA                 |
-| Animations     | Framer Motion                      |
-| Database ORM   | Prisma 5 + PostgreSQL              |
-| Authentication | Auth.js v5 (NextAuth)              |
-| Monorepo       | Turborepo + pnpm workspaces        |
-| Charts         | Recharts                           |
-| Forms          | React Hook Form + Zod              |
-| UI Primitives  | Radix UI                           |
-| Icons          | Lucide React                       |
+| Layer          | Technology                  |
+| -------------- | --------------------------- |
+| Framework      | Next.js 15 (App Router)     |
+| Language       | TypeScript 5                |
+| Styling        | Tailwind CSS + CVA          |
+| Animations     | Framer Motion               |
+| Database ORM   | Prisma 5 + PostgreSQL       |
+| Authentication | Auth.js v5 (NextAuth)       |
+| Monorepo       | Turborepo + pnpm workspaces |
+| Charts         | Recharts                    |
+| Forms          | React Hook Form + Zod       |
+| UI Primitives  | Radix UI                    |
+| Icons          | Lucide React                |
 
 ---
 
@@ -134,15 +135,15 @@ await prisma.attendance.findMany({ where: { schoolId: user.schoolId } });
 
 ## 🛡️ RBAC
 
-| Permission         | Super Admin | School Admin | Teacher | Accountant |
-|--------------------|:-----------:|:------------:|:-------:|:----------:|
-| Manage schools     | ✅          | ❌           | ❌      | ❌         |
-| Manage students    | ✅          | ✅           | ❌      | ❌         |
-| Take attendance    | ✅          | ✅           | ✅      | ❌         |
-| View fees          | ✅          | ✅           | ✅      | ✅         |
-| Edit fees          | ✅          | ✅           | ❌      | ✅         |
-| Publish notices    | ✅          | ✅           | ✅      | ❌         |
-| View analytics     | ✅          | ✅           | ❌      | ✅         |
+| Permission      | Super Admin | School Admin | Teacher | Accountant |
+| --------------- | :---------: | :----------: | :-----: | :--------: |
+| Manage schools  |     ✅      |      ❌      |   ❌    |     ❌     |
+| Manage students |     ✅      |      ✅      |   ❌    |     ❌     |
+| Take attendance |     ✅      |      ✅      |   ✅    |     ❌     |
+| View fees       |     ✅      |      ✅      |   ✅    |     ✅     |
+| Edit fees       |     ✅      |      ✅      |   ❌    |     ✅     |
+| Publish notices |     ✅      |      ✅      |   ✅    |     ❌     |
+| View analytics  |     ✅      |      ✅      |   ❌    |     ✅     |
 
 ---
 

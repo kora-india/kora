@@ -33,7 +33,7 @@ export function LandingNav() {
           </div>
           <div className="flex flex-col">
             <span className="font-extrabold text-xl tracking-tight text-white flex items-center gap-1.5">
-              SchoolOS
+              Kora
               <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
                 2.0
               </span>
@@ -46,7 +46,10 @@ export function LandingNav() {
 
         {/* Center Nav Links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
-          <a href="#bento-overview" className="hover:text-white transition-colors">
+          <a
+            href="#bento-overview"
+            className="hover:text-white transition-colors"
+          >
             Platform
           </a>
           <a href="#features" className="hover:text-white transition-colors">
@@ -88,7 +91,11 @@ export function LandingNav() {
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="md:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/5 border border-white/10"
         >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {mobileMenuOpen ? (
+            <X className="w-5 h-5" />
+          ) : (
+            <Menu className="w-5 h-5" />
+          )}
         </button>
       </div>
 

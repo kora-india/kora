@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Clock, ShieldCheck, Mail, ArrowRight, Sparkles } from "lucide-react";
 import { signOut } from "@schoolos/auth";
 
-export const metadata = { title: "Subscription Expired — SchoolOS" };
+export const metadata = { title: "Subscription Expired — Kora" };
 
 export default function ExpiredPage() {
   return (
@@ -59,10 +59,10 @@ export default function ExpiredPage() {
         <div className="flex items-center justify-center gap-2 text-sm">
           <Mail className="w-4 h-4 text-violet-600" />
           <a
-            href="mailto:billing@schoolos.com"
+            href="mailto:billing@kora.app"
             className="text-violet-600 hover:underline font-medium"
           >
-            billing@schoolos.com
+            billing@kora.app
           </a>
         </div>
       </div>

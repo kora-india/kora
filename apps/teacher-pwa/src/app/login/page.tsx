@@ -16,9 +16,16 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const result = await signIn("credentials", { email, password, redirect: false });
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
     setLoading(false);
-    if (result?.error) { toast.error("Invalid credentials"); return; }
+    if (result?.error) {
+      toast.error("Invalid credentials");
+      return;
+    }
     toast.success("Welcome!");
     router.push("/");
   };
@@ -30,33 +37,82 @@ export default function LoginPage() {
           <div className="w-16 h-16 bg-violet-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-violet-200">
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">SchoolOS Teacher</h1>
-          <p className="text-muted-foreground text-sm mt-1">Sign in to your teacher account</p>
+          <h1 className="text-2xl font-bold">Kora Teacher</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Sign in to your teacher account
+          </p>
         </div>
-        <form onSubmit={handleSubmit} className="bg-card rounded-3xl border p-6 shadow-sm space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-card rounded-3xl border p-6 shadow-sm space-y-4"
+        >
           <div>
             <label className="text-xs font-medium mb-1.5 block">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teacher@school.edu"
-              className="w-full h-12 px-4 rounded-2xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teacher@school.edu"
+              className="w-full h-12 px-4 rounded-2xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
           <div>
             <label className="text-xs font-medium mb-1.5 block">Password</label>
             <div className="relative">
-              <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
-                className="w-full h-12 px-4 pr-12 rounded-2xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <input
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full h-12 px-4 pr-12 rounded-2xl border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                {showPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
               </button>
             </div>
           </div>
-          <button type="submit" disabled={loading}
-            className="w-full h-12 bg-violet-600 text-white rounded-2xl font-semibold text-sm hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading && <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-12 bg-violet-600 text-white rounded-2xl font-semibold text-sm hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading && (
+              <svg
+                className="animate-spin h-4 w-4"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+            )}
             Sign in
           </button>
         </form>
         <div className="mt-4 p-4 bg-card/70 rounded-2xl border">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1">Demo credentials</p>
+          <p className="text-[10px] font-medium text-muted-foreground mb-1">
+            Demo credentials
+          </p>
           <p className="text-xs">priya@dps.edu.in / teacher123</p>
         </div>
       </div>

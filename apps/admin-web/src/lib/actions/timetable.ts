@@ -563,14 +563,14 @@ export async function generateAiTimetableAction(params: {
     });
   } catch (err: any) {
     logger.warn({
-      msg: "Gemini API unavailable or busy, falling back to SchoolOS deterministic solver",
+      msg: "Gemini API unavailable or busy, falling back to Kora deterministic solver",
       error: err.message,
     });
     usedFallbackSolver = true;
     aiErrorMessage = err.message || "Gemini AI temporarily busy";
   }
 
-  // 2. Validate against SchoolOS strict deterministic conflict engine for zero-clash guarantee
+  // 2. Validate against Kora strict deterministic conflict engine for zero-clash guarantee
   let result;
   let rationale = "";
 
@@ -600,9 +600,9 @@ export async function generateAiTimetableAction(params: {
       existingLockedSlots,
       otherSectionSlots,
     });
-    rationale = `Generated via SchoolOS Conflict-Free Engine (Gemini AI was temporarily experiencing high demand). All teacher & room clashes prevented.`;
+    rationale = `Generated via Kora Conflict-Free Engine (Gemini AI was temporarily experiencing high demand). All teacher & room clashes prevented.`;
     result.diagnostics = [
-      `Gemini AI was busy; seamlessly switched to SchoolOS Conflict-Free Solver.`,
+      `Gemini AI was busy; seamlessly switched to Kora Conflict-Free Solver.`,
       ...result.diagnostics,
     ];
   }

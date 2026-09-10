@@ -45,19 +45,19 @@ export function BentoGrid() {
                 s.status === "PRESENT"
                   ? "ABSENT"
                   : s.status === "ABSENT"
-                  ? "LATE"
-                  : "PRESENT",
+                    ? "LATE"
+                    : "PRESENT",
             }
-          : s
-      )
+          : s,
+      ),
     );
   };
 
   const presentCount = studentsAttendance.filter(
-    (s) => s.status === "PRESENT"
+    (s) => s.status === "PRESENT",
   ).length;
   const attendanceRate = Math.round(
-    (presentCount / studentsAttendance.length) * 100
+    (presentCount / studentsAttendance.length) * 100,
   );
 
   return (
@@ -80,7 +80,8 @@ export function BentoGrid() {
             </span>
           </h2>
           <p className="mt-4 text-base sm:text-lg text-white/60">
-            Every module in SchoolOS is built to communicate seamlessly in real-time, eliminating data duplication and manual work.
+            Every module in Kora is built to communicate seamlessly in
+            real-time, eliminating data duplication and manual work.
           </p>
         </div>
 
@@ -113,7 +114,9 @@ export function BentoGrid() {
                 Automated Allocation & Advance Tracking
               </h3>
               <p className="text-sm sm:text-base text-white/60 max-w-xl mb-6">
-                Say goodbye to manual fee reconciliation. SchoolOS automatically deducts advance ledgers, adjusts transport fares, and calculates exact net payable balances.
+                Say goodbye to manual fee reconciliation. Kora automatically
+                deducts advance ledgers, adjusts transport fares, and calculates
+                exact net payable balances.
               </p>
             </div>
 
@@ -121,8 +124,12 @@ export function BentoGrid() {
             <div className="mt-4 p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-white">Student:</span>
-                  <span className="text-xs text-violet-300 font-bold">Aarav Sharma (Class 8 · A)</span>
+                  <span className="text-xs font-semibold text-white">
+                    Student:
+                  </span>
+                  <span className="text-xs text-violet-300 font-bold">
+                    Aarav Sharma (Class 8 · A)
+                  </span>
                 </div>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
@@ -141,24 +148,36 @@ export function BentoGrid() {
                   <thead>
                     <tr className="text-white/40 border-b border-white/5 pb-1 text-left">
                       <th className="pb-1 font-medium">Charge</th>
-                      <th className="pb-1 text-right font-medium">Net Charge</th>
-                      <th className="pb-1 text-right font-medium">Advance Paid</th>
+                      <th className="pb-1 text-right font-medium">
+                        Net Charge
+                      </th>
+                      <th className="pb-1 text-right font-medium">
+                        Advance Paid
+                      </th>
                       <th className="pb-1 text-right font-medium">Payable</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     <tr>
-                      <td className="py-2 font-medium text-white/80">Tuition & Lab Fee (Aug)</td>
+                      <td className="py-2 font-medium text-white/80">
+                        Tuition & Lab Fee (Aug)
+                      </td>
                       <td className="py-2 text-right text-white">₹2,200</td>
-                      <td className="py-2 text-right text-emerald-400 font-medium">-₹800</td>
+                      <td className="py-2 text-right text-emerald-400 font-medium">
+                        -₹800
+                      </td>
                       <td className="py-2 text-right font-bold text-amber-400">
                         {feeCollected ? "₹0" : "₹1,400"}
                       </td>
                     </tr>
                     <tr>
-                      <td className="py-2 font-medium text-white/80">Bus Transport (Route 4)</td>
+                      <td className="py-2 font-medium text-white/80">
+                        Bus Transport (Route 4)
+                      </td>
                       <td className="py-2 text-right text-white">₹750</td>
-                      <td className="py-2 text-right text-emerald-400 font-medium">₹0</td>
+                      <td className="py-2 text-right text-emerald-400 font-medium">
+                        ₹0
+                      </td>
                       <td className="py-2 text-right font-bold text-amber-400">
                         {feeCollected ? "₹0" : "₹750"}
                       </td>
@@ -183,7 +202,9 @@ export function BentoGrid() {
                   }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {feeCollected ? "Reset Simulation" : "Collect Remaining ₹2,150"}
+                  {feeCollected
+                    ? "Reset Simulation"
+                    : "Collect Remaining ₹2,150"}
                 </button>
               </div>
             </div>
@@ -212,7 +233,8 @@ export function BentoGrid() {
                 20-Second Roll Call
               </h3>
               <p className="text-xs sm:text-sm text-white/60 mb-6">
-                Teachers mark attendance in seconds directly from mobile with instant parent WhatsApp alert triggers.
+                Teachers mark attendance in seconds directly from mobile with
+                instant parent WhatsApp alert triggers.
               </p>
             </div>
 
@@ -220,14 +242,20 @@ export function BentoGrid() {
             <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-white">Class 8 · Sec A</span>
-                  <p className="text-[10px] text-white/40">Tap chip to toggle state</p>
+                  <span className="text-xs font-bold text-white">
+                    Class 8 · Sec A
+                  </span>
+                  <p className="text-[10px] text-white/40">
+                    Tap chip to toggle state
+                  </p>
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-extrabold text-emerald-400">
                     {attendanceRate}%
                   </span>
-                  <span className="text-[10px] text-white/40 block">Present</span>
+                  <span className="text-[10px] text-white/40 block">
+                    Present
+                  </span>
                 </div>
               </div>
 
@@ -243,15 +271,17 @@ export function BentoGrid() {
                       <span className="w-5 h-5 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold flex items-center justify-center">
                         {s.roll.slice(-2)}
                       </span>
-                      <span className="text-xs font-medium text-white/90">{s.name}</span>
+                      <span className="text-xs font-medium text-white/90">
+                        {s.name}
+                      </span>
                     </div>
                     <span
                       className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
                         s.status === "PRESENT"
                           ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
                           : s.status === "ABSENT"
-                          ? "bg-red-500/20 text-red-400 border-red-500/30"
-                          : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                            ? "bg-red-500/20 text-red-400 border-red-500/30"
+                            : "bg-amber-500/20 text-amber-400 border-amber-500/30"
                       }`}
                     >
                       {s.status}
@@ -285,7 +315,8 @@ export function BentoGrid() {
                 Distance Route Billing
               </h3>
               <p className="text-xs sm:text-sm text-white/60 mb-6">
-                Automated per-km or flat fee multipliers with live bus capacity gauges and driver passenger manifests.
+                Automated per-km or flat fee multipliers with live bus capacity
+                gauges and driver passenger manifests.
               </p>
             </div>
 
@@ -293,8 +324,12 @@ export function BentoGrid() {
             <div className="p-4 rounded-2xl bg-black/50 border border-white/10 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xs font-bold text-white">Route 4 - Sector 62</h4>
-                  <p className="text-[10px] text-amber-400 font-medium">Bus #04 • 42 Seater</p>
+                  <h4 className="text-xs font-bold text-white">
+                    Route 4 - Sector 62
+                  </h4>
+                  <p className="text-[10px] text-amber-400 font-medium">
+                    Bus #04 • 42 Seater
+                  </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                   ACTIVE
@@ -305,7 +340,9 @@ export function BentoGrid() {
               <div>
                 <div className="flex justify-between text-[11px] text-white/60 mb-1">
                   <span>Occupancy</span>
-                  <span className="font-semibold text-white">35 / 42 Seats (83%)</span>
+                  <span className="font-semibold text-white">
+                    35 / 42 Seats (83%)
+                  </span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full w-[83%]" />
@@ -346,7 +383,8 @@ export function BentoGrid() {
                 Multi-Class Teachers
               </h3>
               <p className="text-xs sm:text-sm text-white/60 mb-6">
-                Assign teachers across multiple classes and sections with dedicated Class Teacher credentials.
+                Assign teachers across multiple classes and sections with
+                dedicated Class Teacher credentials.
               </p>
             </div>
 
@@ -357,7 +395,9 @@ export function BentoGrid() {
                   AV
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-white">Dr. Ananya Verma</h4>
+                  <h4 className="text-xs font-bold text-white">
+                    Dr. Ananya Verma
+                  </h4>
                   <p className="text-[10px] text-white/50">Mathematics HOD</p>
                 </div>
               </div>
@@ -406,28 +446,47 @@ export function BentoGrid() {
                 Sub-5ms Cloud Speed with Redis & Composite Indexing
               </h3>
               <p className="text-sm sm:text-base text-white/60 max-w-xl mb-6">
-                Built on PostgreSQL compound indexes and Upstash Redis. Handles 10,000+ students and concurrent fee generations without lag.
+                Built on PostgreSQL compound indexes and Upstash Redis. Handles
+                10,000+ students and concurrent fee generations without lag.
               </p>
             </div>
 
             {/* Performance Meter Simulator */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-black/50 border border-white/10">
               <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-white/50 block mb-1">Redis In-Memory Cache</span>
-                <span className="text-xl font-extrabold text-emerald-400">0.4 ms</span>
-                <span className="text-[9px] text-emerald-300/80 block mt-1">99.2% Hit Ratio</span>
+                <span className="text-[10px] text-white/50 block mb-1">
+                  Redis In-Memory Cache
+                </span>
+                <span className="text-xl font-extrabold text-emerald-400">
+                  0.4 ms
+                </span>
+                <span className="text-[9px] text-emerald-300/80 block mt-1">
+                  99.2% Hit Ratio
+                </span>
               </div>
 
               <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-white/50 block mb-1">Compound SQL Index</span>
-                <span className="text-xl font-extrabold text-indigo-400">0 Table Scans</span>
-                <span className="text-[9px] text-indigo-300/80 block mt-1">Direct Index Seek</span>
+                <span className="text-[10px] text-white/50 block mb-1">
+                  Compound SQL Index
+                </span>
+                <span className="text-xl font-extrabold text-indigo-400">
+                  0 Table Scans
+                </span>
+                <span className="text-[9px] text-indigo-300/80 block mt-1">
+                  Direct Index Seek
+                </span>
               </div>
 
               <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <span className="text-[10px] text-white/50 block mb-1">Automated Late-Fee Cron</span>
-                <span className="text-xl font-extrabold text-violet-400">12:00 AM Daily</span>
-                <span className="text-[9px] text-violet-300/80 block mt-1">Serverless Execution</span>
+                <span className="text-[10px] text-white/50 block mb-1">
+                  Automated Late-Fee Cron
+                </span>
+                <span className="text-xl font-extrabold text-violet-400">
+                  12:00 AM Daily
+                </span>
+                <span className="text-[9px] text-violet-300/80 block mt-1">
+                  Serverless Execution
+                </span>
               </div>
             </div>
           </motion.div>

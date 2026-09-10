@@ -134,7 +134,7 @@ export function DashboardContent({
             animate={{ opacity: 1, transition: { delay: 0.08 } }}
             className="text-muted-foreground text-xs sm:text-sm mt-1"
           >
-            {data?.schoolName || "SchoolOS"} ·{" "}
+            {data?.schoolName || "Kora"} ·{" "}
             {new Date().toLocaleDateString("en-IN", {
               weekday: "long",
               day: "numeric",

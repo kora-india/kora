@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ExamsContent } from "@/components/exams/exams-content";
 import { getExams } from "@/lib/actions/exams";
 
-export const metadata = { title: "Examinations & Report Cards | SchoolOS" };
+export const metadata = { title: "Examinations & Report Cards | Kora" };
 
 export default async function ExamsPage() {
   const session = await auth();

@@ -14,23 +14,23 @@ export function FaqSection() {
     },
     {
       q: "How does the Advance Ledger and auto-reconciliation feature work?",
-      a: "When a parent pays more than the billed amount, the surplus is automatically deposited into the student's Advance Ledger. On the 1st of every month when new fees are generated, SchoolOS automatically deducts the advance balance and presents the exact remaining payable amount.",
+      a: "When a parent pays more than the billed amount, the surplus is automatically deposited into the student's Advance Ledger. On the 1st of every month when new fees are generated, Kora automatically deducts the advance balance and presents the exact remaining payable amount.",
     },
     {
       q: "Do teachers need to download an app from the Play Store or App Store?",
-      a: "No. SchoolOS includes a dedicated Progressive Web App (PWA). Teachers simply visit your school link on any mobile device (iOS/Android) and take attendance with zero install friction and instant cloud synchronization.",
+      a: "No. Kora includes a dedicated Progressive Web App (PWA). Teachers simply visit your school link on any mobile device (iOS/Android) and take attendance with zero install friction and instant cloud synchronization.",
     },
     {
       q: "Can a teacher be assigned to multiple classes and sections?",
-      a: "Yes. SchoolOS supports multi-class and multi-section assignment with Ant Design multi-select. Teachers can be assigned as designated Class Teachers while also teaching specific subjects across multiple grade sections.",
+      a: "Yes. Kora supports multi-class and multi-section assignment with Ant Design multi-select. Teachers can be assigned as designated Class Teachers while also teaching specific subjects across multiple grade sections.",
     },
     {
       q: "How does distance-based transport route billing calculate fees?",
-      a: "You define route stops with their distance from the school in kilometers. When enrolling a student at a stop, SchoolOS calculates the monthly fee based on distance rates and trip type (Pickup only, Drop only, or Two-way) and links it directly to their monthly fee charges.",
+      a: "You define route stops with their distance from the school in kilometers. When enrolling a student at a stop, Kora calculates the monthly fee based on distance rates and trip type (Pickup only, Drop only, or Two-way) and links it directly to their monthly fee charges.",
     },
     {
       q: "How secure is our school's student and financial data?",
-      a: "SchoolOS enforces multi-tenant row-level security in PostgreSQL. Every query is partitioned by your school's unique ID. We use industry-standard encryption at rest and in transit with automated cloud backups.",
+      a: "Kora enforces multi-tenant row-level security in PostgreSQL. Every query is partitioned by your school's unique ID. We use industry-standard encryption at rest and in transit with automated cloud backups.",
     },
   ];
 
@@ -47,7 +47,7 @@ export function FaqSection() {
             Got Questions? We’ve Got Answers.
           </h2>
           <p className="mt-4 text-base text-white/60">
-            Everything you need to know about switching to SchoolOS.
+            Everything you need to know about switching to Kora.
           </p>
         </div>
 

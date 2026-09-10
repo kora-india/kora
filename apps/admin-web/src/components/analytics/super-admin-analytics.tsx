@@ -43,7 +43,11 @@ const stagger = {
   container: { hidden: {}, visible: { transition: { staggerChildren: 0.05 } } },
   item: {
     hidden: { opacity: 0, y: 10 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.25, ease: "easeOut" },
+    },
   },
 };
 
@@ -61,17 +65,24 @@ export function SuperAdminAnalytics({
     value: p.count,
   }));
 
-  const totalGrossVolume = monthlyVolume.reduce((acc, curr) => acc + curr.volume, 0);
-  const avgStudentsPerSchool = totalSchools > 0 ? Math.round(totalStudents / totalSchools) : 0;
+  const totalGrossVolume = monthlyVolume.reduce(
+    (acc, curr) => acc + curr.volume,
+    0,
+  );
+  const avgStudentsPerSchool =
+    totalSchools > 0 ? Math.round(totalStudents / totalSchools) : 0;
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Platform Analytics</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Platform Analytics
+          </h1>
           <p className="text-muted-foreground text-xs mt-1">
-            Aggregated multi-tenant metrics across all registered schools in SchoolOS
+            Aggregated multi-tenant metrics across all registered schools in
+            Kora
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,40 +103,64 @@ export function SuperAdminAnalytics({
         animate="visible"
         className="grid grid-cols-2 sm:grid-cols-4 gap-4"
       >
-        <motion.div variants={stagger.item} className="rounded-xl border bg-card p-4 space-y-1">
+        <motion.div
+          variants={stagger.item}
+          className="rounded-xl border bg-card p-4 space-y-1"
+        >
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-medium">Registered Schools</span>
             <Building2 className="w-4 h-4 text-violet-600" />
           </div>
           <p className="text-2xl font-bold">{totalSchools}</p>
-          <p className="text-[11px] text-muted-foreground">Active multi-tenant instances</p>
+          <p className="text-[11px] text-muted-foreground">
+            Active multi-tenant instances
+          </p>
         </motion.div>
 
-        <motion.div variants={stagger.item} className="rounded-xl border bg-card p-4 space-y-1">
+        <motion.div
+          variants={stagger.item}
+          className="rounded-xl border bg-card p-4 space-y-1"
+        >
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-medium">Platform Students</span>
             <Users className="w-4 h-4 text-blue-600" />
           </div>
           <p className="text-2xl font-bold">{totalStudents.toLocaleString()}</p>
-          <p className="text-[11px] text-muted-foreground">~{avgStudentsPerSchool} avg per school</p>
+          <p className="text-[11px] text-muted-foreground">
+            ~{avgStudentsPerSchool} avg per school
+          </p>
         </motion.div>
 
-        <motion.div variants={stagger.item} className="rounded-xl border bg-card p-4 space-y-1">
+        <motion.div
+          variants={stagger.item}
+          className="rounded-xl border bg-card p-4 space-y-1"
+        >
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-medium">Educators & Staff</span>
             <GraduationCap className="w-4 h-4 text-emerald-600" />
           </div>
-          <p className="text-2xl font-bold">{(totalTeachers + totalStaff).toLocaleString()}</p>
-          <p className="text-[11px] text-muted-foreground">{totalTeachers} teachers · {totalStaff} staff</p>
+          <p className="text-2xl font-bold">
+            {(totalTeachers + totalStaff).toLocaleString()}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {totalTeachers} teachers · {totalStaff} staff
+          </p>
         </motion.div>
 
-        <motion.div variants={stagger.item} className="rounded-xl border bg-card p-4 space-y-1">
+        <motion.div
+          variants={stagger.item}
+          className="rounded-xl border bg-card p-4 space-y-1"
+        >
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-medium">Gross Fee Volume</span>
             <TrendingUp className="w-4 h-4 text-amber-600" />
           </div>
-          <p className="text-2xl font-bold">{formatCurrency(totalGrossVolume)}</p>
-          <p className="text-[11px] text-muted-foreground">Past 6 months processed</p>
+          <p className="text-2xl font-bold">
+            {formatCurrency(totalGrossVolume)}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Past 6 months processed
+          </p>
         </motion.div>
       </motion.div>
 
@@ -147,7 +182,9 @@ export function SuperAdminAnalytics({
             {moduleAdoption.map((item) => (
               <div key={item.module} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-foreground">{item.module}</span>
+                  <span className="font-medium text-foreground">
+                    {item.module}
+                  </span>
                   <span className="text-muted-foreground font-semibold">
                     {item.count} / {totalSchools} schools ({item.percentage}%)
                   </span>
@@ -197,7 +234,10 @@ export function SuperAdminAnalytics({
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
             {plans.map((p) => (
-              <div key={p.name} className="flex items-center justify-between p-2 rounded-lg bg-muted/40">
+              <div
+                key={p.name}
+                className="flex items-center justify-between p-2 rounded-lg bg-muted/40"
+              >
                 <span className="text-muted-foreground">{p.name}</span>
                 <span className="font-bold">{p.percentage}%</span>
               </div>
@@ -215,7 +255,8 @@ export function SuperAdminAnalytics({
               Platform Fee Volume by Month
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Aggregate tuition and fee payments processed across all school tenants
+              Aggregate tuition and fee payments processed across all school
+              tenants
             </p>
           </div>
           <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full">
@@ -225,9 +266,16 @@ export function SuperAdminAnalytics({
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-3">
           {monthlyVolume.map((m) => (
-            <div key={m.month} className="p-3 rounded-lg border bg-muted/20 text-center space-y-1">
-              <p className="text-[11px] font-medium text-muted-foreground">{m.month}</p>
-              <p className="text-sm font-bold text-foreground">{formatCurrency(m.volume)}</p>
+            <div
+              key={m.month}
+              className="p-3 rounded-lg border bg-muted/20 text-center space-y-1"
+            >
+              <p className="text-[11px] font-medium text-muted-foreground">
+                {m.month}
+              </p>
+              <p className="text-sm font-bold text-foreground">
+                {formatCurrency(m.volume)}
+              </p>
             </div>
           ))}
         </div>

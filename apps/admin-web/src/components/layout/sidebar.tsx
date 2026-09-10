@@ -200,7 +200,7 @@ export function Sidebar({
               exit={{ opacity: 0, x: -10 }}
               className="font-bold text-sm tracking-tight whitespace-nowrap"
             >
-              SchoolOS
+              Kora
             </motion.span>
           )}
         </AnimatePresence>

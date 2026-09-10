@@ -26,13 +26,20 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ResetPasswordInput>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ResetPasswordInput>({
     resolver: zodResolver(ResetPasswordSchema),
   });
 
   const onSubmit = async (data: ResetPasswordInput) => {
     const result = await resetPassword({ token, ...data });
-    if (result.error) { toast.error(result.error); return; }
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
     toast.success("Password reset. Please sign in with your new password.");
     router.push("/login");
   };
@@ -44,16 +51,20 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
           <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center">
             <GraduationCap className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-lg">SchoolOS</span>
+          <span className="font-bold text-lg">Kora</span>
         </div>
 
         {!token ? (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold">Invalid reset link</h2>
             <p className="text-muted-foreground text-sm">
-              This password reset link is missing its token. Please request a new one.
+              This password reset link is missing its token. Please request a
+              new one.
             </p>
-            <Link href="/forgot-password" className="inline-flex items-center gap-1.5 text-sm text-violet-600 hover:underline">
+            <Link
+              href="/forgot-password"
+              className="inline-flex items-center gap-1.5 text-sm text-violet-600 hover:underline"
+            >
               <ArrowLeft className="w-3.5 h-3.5" /> Request a new link
             </Link>
           </div>
@@ -61,12 +72,16 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
           <>
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-1">Set a new password</h2>
-              <p className="text-muted-foreground text-sm">Choose a new password for your account</p>
+              <p className="text-muted-foreground text-sm">
+                Choose a new password for your account
+              </p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">New Password</label>
+                <label className="text-sm font-medium mb-1.5 block">
+                  New Password
+                </label>
                 <div className="relative">
                   <input
                     {...register("newPassword")}
@@ -79,21 +94,35 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-                {errors.newPassword && <p className="text-xs text-destructive mt-1">{errors.newPassword.message}</p>}
+                {errors.newPassword && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.newPassword.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Confirm Password</label>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Confirm Password
+                </label>
                 <input
                   {...register("confirmPassword")}
                   type={showPassword ? "text" : "password"}
                   placeholder="Repeat new password"
                   className="w-full h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                 />
-                {errors.confirmPassword && <p className="text-xs text-destructive mt-1">{errors.confirmPassword.message}</p>}
+                {errors.confirmPassword && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.confirmPassword.message}
+                  </p>
+                )}
               </div>
 
               <button

@@ -27,7 +27,7 @@ export function FeatureTabs() {
       badge: "Zero Manual Errors",
       title: "Smart Fee Generation & Realtime Advance Reconciliation",
       description:
-        "SchoolOS automatically generates monthly dues, deducts accumulated advance balances with negative ledgers, handles component-level waivers, and generates instant receipt numbers with no accountant bottlenecks.",
+        "Kora automatically generates monthly dues, deducts accumulated advance balances with negative ledgers, handles component-level waivers, and generates instant receipt numbers with no accountant bottlenecks.",
       features: [
         "Automated batch fee generation in <300ms",
         "Advance payment ledger with auto-settlement against new dues",
@@ -45,7 +45,7 @@ export function FeatureTabs() {
       badge: "Instant 20-Sec Roll Call",
       title: "Fast Mobile Attendance with Instant Parent Alerts",
       description:
-        "Teachers do not need to install heavy native apps. The SchoolOS Progressive Web App opens instantly in any mobile browser, lets teachers mark whole classes in 20 seconds, and syncs directly with the central admin portal.",
+        "Teachers do not need to install heavy native apps. The Kora Progressive Web App opens instantly in any mobile browser, lets teachers mark whole classes in 20 seconds, and syncs directly with the central admin portal.",
       features: [
         "Offline-capable PWA with zero install friction",
         "Switch between all assigned classes and sections in 1 tap",
@@ -97,7 +97,10 @@ export function FeatureTabs() {
   const current = tabs.find((t) => t.id === activeTab) || tabs[0];
 
   return (
-    <section id="features" className="py-24 relative bg-black/40 border-t border-b border-white/5">
+    <section
+      id="features"
+      className="py-24 relative bg-black/40 border-t border-b border-white/5"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-14">
@@ -105,7 +108,8 @@ export function FeatureTabs() {
             Engineered to Solve Real School Pain Points
           </h2>
           <p className="mt-4 text-base sm:text-lg text-white/60">
-            Explore how SchoolOS modernizes daily administrative, financial, and educational operations.
+            Explore how Kora modernizes daily administrative, financial, and
+            educational operations.
           </p>
         </div>
 
@@ -124,7 +128,9 @@ export function FeatureTabs() {
                     : "bg-white/[0.04] text-white/70 border-white/10 hover:bg-white/[0.08] hover:text-white"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-violet-400"}`} />
+                <Icon
+                  className={`w-4 h-4 ${isActive ? "text-white" : "text-violet-400"}`}
+                />
                 <span>{tab.label}</span>
               </button>
             );
@@ -159,7 +165,10 @@ export function FeatureTabs() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                   {current.features.map((feat, idx) => (
-                    <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-white/80">
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2.5 text-xs sm:text-sm text-white/80"
+                    >
                       <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                       <span>{feat}</span>
                     </div>
@@ -172,26 +181,38 @@ export function FeatureTabs() {
                 {current.preview.type === "finance" && (
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                      <span className="font-bold text-white">Fee Settlement Summary</span>
+                      <span className="font-bold text-white">
+                        Fee Settlement Summary
+                      </span>
                       <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full">
                         AUTO-RECONCILED
                       </span>
                     </div>
                     <div className="space-y-2 text-white/80">
                       <div className="flex justify-between">
-                        <span className="text-white/50">Tuition & Lab Net Charge</span>
+                        <span className="text-white/50">
+                          Tuition & Lab Net Charge
+                        </span>
                         <span className="font-semibold text-white">₹2,200</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-white/50">Advance Ledger Credit</span>
-                        <span className="font-bold text-emerald-400">-₹800</span>
+                        <span className="text-white/50">
+                          Advance Ledger Credit
+                        </span>
+                        <span className="font-bold text-emerald-400">
+                          -₹800
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-white/50">Bus Transport (Zone 2)</span>
+                        <span className="text-white/50">
+                          Bus Transport (Zone 2)
+                        </span>
                         <span className="font-semibold text-white">₹750</span>
                       </div>
                       <div className="pt-2 border-t border-white/10 flex justify-between items-baseline font-extrabold text-sm text-amber-400">
-                        <span className="text-white">Total Remaining Payable:</span>
+                        <span className="text-white">
+                          Total Remaining Payable:
+                        </span>
                         <span>₹2,150</span>
                       </div>
                     </div>
@@ -205,28 +226,44 @@ export function FeatureTabs() {
                 {current.preview.type === "teacher-pwa" && (
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                      <span className="font-bold text-white">Teacher Live Roster</span>
+                      <span className="font-bold text-white">
+                        Teacher Live Roster
+                      </span>
                       <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full">
                         98% PRESENT
                       </span>
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between p-2 rounded-xl bg-white/5">
-                        <span className="font-medium text-white">Aarav Sharma (#101)</span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">PRESENT</span>
+                        <span className="font-medium text-white">
+                          Aarav Sharma (#101)
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">
+                          PRESENT
+                        </span>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-xl bg-white/5">
-                        <span className="font-medium text-white">Diya Patel (#102)</span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">PRESENT</span>
+                        <span className="font-medium text-white">
+                          Diya Patel (#102)
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">
+                          PRESENT
+                        </span>
                       </div>
                       <div className="flex items-center justify-between p-2 rounded-xl bg-white/5">
-                        <span className="font-medium text-white">Kabir Verma (#103)</span>
-                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold text-[10px]">ABSENT</span>
+                        <span className="font-medium text-white">
+                          Kabir Verma (#103)
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold text-[10px]">
+                          ABSENT
+                        </span>
                       </div>
                     </div>
                     <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center gap-2">
                       <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Auto WhatsApp sent to Absent parent: Kabir Verma</span>
+                      <span>
+                        Auto WhatsApp sent to Absent parent: Kabir Verma
+                      </span>
                     </div>
                   </div>
                 )}
@@ -234,7 +271,9 @@ export function FeatureTabs() {
                 {current.preview.type === "transport" && (
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                      <span className="font-bold text-white">Route 4 - Sector 62</span>
+                      <span className="font-bold text-white">
+                        Route 4 - Sector 62
+                      </span>
                       <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full">
                         35/42 SEATS
                       </span>
@@ -242,15 +281,21 @@ export function FeatureTabs() {
                     <div className="space-y-2 text-white/80">
                       <div className="flex justify-between p-2 rounded-lg bg-white/5">
                         <span>Stop 1: Cyber City (3.2 km)</span>
-                        <span className="font-bold text-amber-300">₹400 / mo</span>
+                        <span className="font-bold text-amber-300">
+                          ₹400 / mo
+                        </span>
                       </div>
                       <div className="flex justify-between p-2 rounded-lg bg-white/5">
                         <span>Stop 2: Golf Course (6.1 km)</span>
-                        <span className="font-bold text-amber-300">₹650 / mo</span>
+                        <span className="font-bold text-amber-300">
+                          ₹650 / mo
+                        </span>
                       </div>
                       <div className="flex justify-between p-2 rounded-lg bg-white/5">
                         <span>Stop 3: Sector 62 (8.5 km)</span>
-                        <span className="font-bold text-amber-300">₹850 / mo</span>
+                        <span className="font-bold text-amber-300">
+                          ₹850 / mo
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -259,7 +304,9 @@ export function FeatureTabs() {
                 {current.preview.type === "security" && (
                   <div className="space-y-3 text-xs">
                     <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                      <span className="font-bold text-white">Access Scoping & Multi-Tenant</span>
+                      <span className="font-bold text-white">
+                        Access Scoping & Multi-Tenant
+                      </span>
                       <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full">
                         ISOLATED
                       </span>
@@ -267,19 +314,27 @@ export function FeatureTabs() {
                     <div className="space-y-1.5 text-white/80">
                       <div className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
                         <span>Super Admin</span>
-                        <span className="text-[10px] text-violet-400 font-bold">Platform Wide</span>
+                        <span className="text-[10px] text-violet-400 font-bold">
+                          Platform Wide
+                        </span>
                       </div>
                       <div className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
                         <span>School Admin</span>
-                        <span className="text-[10px] text-indigo-400 font-bold">School Scoped</span>
+                        <span className="text-[10px] text-indigo-400 font-bold">
+                          School Scoped
+                        </span>
                       </div>
                       <div className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
                         <span>Teacher Portal</span>
-                        <span className="text-[10px] text-emerald-400 font-bold">Assigned Classes</span>
+                        <span className="text-[10px] text-emerald-400 font-bold">
+                          Assigned Classes
+                        </span>
                       </div>
                       <div className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
                         <span>Accountant</span>
-                        <span className="text-[10px] text-amber-400 font-bold">Fee Cashier</span>
+                        <span className="text-[10px] text-amber-400 font-bold">
+                          Fee Cashier
+                        </span>
                       </div>
                     </div>
                   </div>

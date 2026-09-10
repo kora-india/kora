@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { TimetableContent } from "@/components/timetable/timetable-content";
 import { getTimetable, getTimetablePeriods } from "@/lib/actions/timetable";
 
-export const metadata = { title: "Timetable & Scheduling | SchoolOS" };
+export const metadata = { title: "Timetable & Scheduling | Kora" };
 
 export default async function TimetablePage() {
   const session = await auth();

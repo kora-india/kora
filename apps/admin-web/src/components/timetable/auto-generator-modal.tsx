@@ -187,7 +187,7 @@ export function AutoGeneratorModal({
       if (res.success) {
         if ((res as any).usedFallbackSolver) {
           message.warning(
-            `Generated ${res.allocatedSlots} conflict-free periods using SchoolOS engine (Gemini AI was temporarily experiencing high demand).`,
+            `Generated ${res.allocatedSlots} conflict-free periods using Kora engine (Gemini AI was temporarily experiencing high demand).`,
             6,
           );
         } else if (engineMode === "ai") {

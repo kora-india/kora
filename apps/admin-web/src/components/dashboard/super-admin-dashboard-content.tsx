@@ -20,21 +20,30 @@ import {
   XCircle,
 } from "lucide-react";
 import { formatCurrency } from "@schoolos/utils";
-import { AntvPlanDonutChart, AntvSchoolGrowthColumnChart } from "@/components/analytics/antv-charts";
+import {
+  AntvPlanDonutChart,
+  AntvSchoolGrowthColumnChart,
+} from "@/components/analytics/antv-charts";
 
 const stagger = {
   container: { hidden: {}, visible: { transition: { staggerChildren: 0.05 } } },
   item: {
     hidden: { opacity: 0, y: 10 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.25, ease: "easeOut" },
+    },
   },
 };
 
 const PLAN_BADGE: Record<string, string> = {
   FREE: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-900 dark:text-gray-400 dark:border-gray-700",
-  BASIC: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800",
+  BASIC:
+    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800",
   PRO: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-400 dark:border-violet-800",
-  ENTERPRISE: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800",
+  ENTERPRISE:
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800",
 };
 
 interface SuperAdminDashboardProps {
@@ -51,7 +60,13 @@ interface SuperAdminDashboardProps {
       totalFeeVolume: number;
       totalTransactionsCount: number;
     };
-    planDistribution: { name: string; plan: string; count: number; value: number; price: number }[];
+    planDistribution: {
+      name: string;
+      plan: string;
+      count: number;
+      value: number;
+      price: number;
+    }[];
     recentSchools: {
       id: string;
       name: string;
@@ -115,7 +130,9 @@ function StatCard({
       </div>
       <div className="mt-3">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
+          <p className="text-2xl font-bold tracking-tight text-foreground">
+            {value}
+          </p>
           {badge && (
             <span
               className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
@@ -128,8 +145,12 @@ function StatCard({
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 font-medium">{title}</p>
-        {subtext && <p className="text-[11px] text-muted-foreground/80 mt-1">{subtext}</p>}
+        <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+          {title}
+        </p>
+        {subtext && (
+          <p className="text-[11px] text-muted-foreground/80 mt-1">{subtext}</p>
+        )}
       </div>
     </motion.div>
   );
@@ -140,10 +161,18 @@ function StatCard({
   return content;
 }
 
-export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdminDashboardProps>) {
+export function SuperAdminDashboardContent({
+  data,
+  userName,
+}: Readonly<SuperAdminDashboardProps>) {
   const stats = data.stats;
   const currentHour = new Date().getHours();
-  const greeting = currentHour < 12 ? "Good morning" : currentHour < 17 ? "Good afternoon" : "Good evening";
+  const greeting =
+    currentHour < 12
+      ? "Good morning"
+      : currentHour < 17
+        ? "Good afternoon"
+        : "Good evening";
 
   const todayFormatted = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -163,10 +192,11 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            {greeting}, {userName ?? "Super Admin"} <span className="animate-pulse">✨</span>
+            {greeting}, {userName ?? "Super Admin"}{" "}
+            <span className="animate-pulse">✨</span>
           </h1>
           <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-            <span>SchoolOS SaaS Platform Management</span>
+            <span>Kora SaaS Platform Management</span>
             <span>·</span>
             <span>{todayFormatted}</span>
           </p>
@@ -281,7 +311,10 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
           </div>
 
           <div className="pt-2">
-            <AntvSchoolGrowthColumnChart data={data.onboardingGrowth} height={230} />
+            <AntvSchoolGrowthColumnChart
+              data={data.onboardingGrowth}
+              height={230}
+            />
           </div>
         </div>
 
@@ -300,7 +333,9 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                 Pricing
               </Link>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">Distribution of active tenant plans</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Distribution of active tenant plans
+            </p>
           </div>
 
           <div className="py-1">
@@ -315,7 +350,10 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t text-[11px]">
             {data.planDistribution.map((p) => (
-              <div key={p.plan} className="flex items-center justify-between px-2 py-1 rounded bg-muted/40">
+              <div
+                key={p.plan}
+                className="flex items-center justify-between px-2 py-1 rounded bg-muted/40"
+              >
                 <span className="text-muted-foreground">{p.plan}:</span>
                 <span className="font-semibold">{p.count}</span>
               </div>
@@ -330,8 +368,12 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
         <div className="lg:col-span-2 rounded-xl border bg-card overflow-hidden">
           <div className="p-4 border-b flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Recently Registered Schools</h2>
-              <p className="text-xs text-muted-foreground">Latest school tenants onboarded to the platform</p>
+              <h2 className="text-sm font-semibold">
+                Recently Registered Schools
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Latest school tenants onboarded to the platform
+              </p>
             </div>
             <Link
               href="/schools"
@@ -356,19 +398,28 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
               <tbody>
                 {data.recentSchools.length > 0 ? (
                   data.recentSchools.map((s) => (
-                    <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={s.id}
+                      className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                    >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
                             <Building2 className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                           </div>
                           <div>
-                            <p className="font-semibold text-foreground">{s.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{s.email ?? s.phone ?? "No contact"}</p>
+                            <p className="font-semibold text-foreground">
+                              {s.name}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {s.email ?? s.phone ?? "No contact"}
+                            </p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-3 font-mono text-muted-foreground">{s.subdomain}</td>
+                      <td className="py-3 px-3 font-mono text-muted-foreground">
+                        {s.subdomain}
+                      </td>
                       <td className="py-3 px-3">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
@@ -382,7 +433,9 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                         <div className="space-y-1 w-24">
                           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                             <span>{s.studentCount}</span>
-                            <span>{s.maxStudents === Infinity ? "∞" : s.maxStudents}</span>
+                            <span>
+                              {s.maxStudents === Infinity ? "∞" : s.maxStudents}
+                            </span>
                           </div>
                           <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                             <div
@@ -390,10 +443,12 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                                 s.usagePercent > 85
                                   ? "bg-red-500"
                                   : s.usagePercent > 60
-                                  ? "bg-amber-500"
-                                  : "bg-emerald-500"
+                                    ? "bg-amber-500"
+                                    : "bg-emerald-500"
                               }`}
-                              style={{ width: `${Math.max(4, s.usagePercent)}%` }}
+                              style={{
+                                width: `${Math.max(4, s.usagePercent)}%`,
+                              }}
                             />
                           </div>
                         </div>
@@ -421,7 +476,10 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <td
+                      colSpan={6}
+                      className="py-8 text-center text-muted-foreground"
+                    >
                       No schools registered yet.
                     </td>
                   </tr>
@@ -444,7 +502,9 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                 {data.schoolsNearLimit.length}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">Schools nearing student limits ({">"}80% capacity)</p>
+            <p className="text-xs text-muted-foreground">
+              Schools nearing student limits ({">"}80% capacity)
+            </p>
 
             <div className="space-y-2 pt-1">
               {data.schoolsNearLimit.length > 0 ? (
@@ -454,7 +514,9 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
                     className="p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 space-y-1.5"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-foreground">{item.name}</p>
+                      <p className="text-xs font-semibold text-foreground">
+                        {item.name}
+                      </p>
                       <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
                         {item.percent}%
                       </span>
@@ -485,10 +547,14 @@ export function SuperAdminDashboardContent({ data, userName }: Readonly<SuperAdm
           <div className="rounded-xl border bg-gradient-to-br from-violet-600 to-indigo-700 p-4 text-white space-y-3 shadow-md">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-violet-100">Super Admin Tips</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-violet-100">
+                Super Admin Tips
+              </h3>
             </div>
             <p className="text-xs text-violet-100 leading-relaxed">
-              Use the <strong>Schools</strong> directory to manage individual tenants or change subscription tiers to unlock higher student limits.
+              Use the <strong>Schools</strong> directory to manage individual
+              tenants or change subscription tiers to unlock higher student
+              limits.
             </p>
             <div className="pt-1">
               <Link

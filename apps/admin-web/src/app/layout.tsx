@@ -6,20 +6,30 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "SchoolOS — School Management Platform", template: "%s | SchoolOS" },
+  title: {
+    default: "Kora — School Management Platform",
+    template: "%s | Kora",
+  },
   description: "Premium multi-tenant School Management SaaS",
 };
 
 import { Providers } from "@/components/providers";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <Providers>
-            {children}
-          </Providers>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <Providers>{children}</Providers>
           <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>

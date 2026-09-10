@@ -1,7 +1,7 @@
 import { ShieldOff, Mail } from "lucide-react";
 import { signOut } from "next-auth/react";
 
-export const metadata = { title: "Account Suspended — SchoolOS" };
+export const metadata = { title: "Account Suspended — Kora" };
 
 export default function SuspendedPage() {
   return (
@@ -15,15 +15,20 @@ export default function SuspendedPage() {
         Your school account has been temporarily suspended.
       </p>
       <p className="text-sm text-muted-foreground mb-8 max-w-sm">
-        Please contact SchoolOS support to resolve this issue.
+        Please contact Kora support to resolve this issue.
       </p>
 
       <div className="bg-muted/40 border rounded-xl p-4 mb-6 max-w-xs w-full">
-        <p className="text-xs font-medium text-muted-foreground mb-1">Support</p>
+        <p className="text-xs font-medium text-muted-foreground mb-1">
+          Support
+        </p>
         <div className="flex items-center justify-center gap-2 text-sm">
           <Mail className="w-4 h-4 text-violet-600" />
-          <a href="mailto:support@schoolos.com" className="text-violet-600 hover:underline font-medium">
-            support@schoolos.com
+          <a
+            href="mailto:support@kora.app"
+            className="text-violet-600 hover:underline font-medium"
+          >
+            support@kora.app
           </a>
         </div>
       </div>

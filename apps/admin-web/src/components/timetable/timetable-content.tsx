@@ -542,7 +542,7 @@ export function TimetableContent({
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-black tracking-tight uppercase">
-                {schoolName || "SchoolOS"}
+                {schoolName || "Kora"}
               </h1>
               <p className="text-sm font-semibold text-black mt-0.5">
                 {currentTargetName} · Academic Timetable

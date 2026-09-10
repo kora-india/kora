@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { GraduationCap, ArrowRight, ShieldCheck, Heart, Zap } from "lucide-react";
+import {
+  GraduationCap,
+  ArrowRight,
+  ShieldCheck,
+  Heart,
+  Zap,
+} from "lucide-react";
 
 export function LandingFooter() {
   return (
@@ -16,10 +22,11 @@ export function LandingFooter() {
               Get Started Today
             </span>
             <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight mb-6">
-              Transform Your School Operations with SchoolOS
+              Transform Your School Operations with Kora
             </h2>
             <p className="text-base sm:text-lg text-white/70 mb-8 max-w-2xl mx-auto leading-relaxed">
-              Join hundreds of progressive schools eliminating hours of administrative paperwork every day.
+              Join hundreds of progressive schools eliminating hours of
+              administrative paperwork every day.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
@@ -48,10 +55,13 @@ export function LandingFooter() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-md">
               <GraduationCap className="w-4 h-4" />
             </div>
-            <span className="font-extrabold text-lg text-white tracking-tight">SchoolOS</span>
+            <span className="font-extrabold text-lg text-white tracking-tight">
+              Kora
+            </span>
           </Link>
           <p className="text-white/50 text-xs leading-relaxed max-w-xs">
-            The next-generation unified Operating System for schools, academies, and educational trusts.
+            The next-generation unified Operating System for schools, academies,
+            and educational trusts.
           </p>
           <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -61,33 +71,102 @@ export function LandingFooter() {
 
         {/* Modules */}
         <div className="space-y-3">
-          <h4 className="font-bold text-white uppercase tracking-wider text-xs">Core Modules</h4>
+          <h4 className="font-bold text-white uppercase tracking-wider text-xs">
+            Core Modules
+          </h4>
           <ul className="space-y-2 text-white/50">
-            <li><a href="#bento-overview" className="hover:text-white transition-colors">Fee & Advance Allocation</a></li>
-            <li><a href="#bento-overview" className="hover:text-white transition-colors">Teacher Mobile PWA</a></li>
-            <li><a href="#bento-overview" className="hover:text-white transition-colors">Fleet & Route Logistics</a></li>
-            <li><a href="#bento-overview" className="hover:text-white transition-colors">Multi-Section Teachers</a></li>
-            <li><a href="#bento-overview" className="hover:text-white transition-colors">Analytics & Financial Hub</a></li>
+            <li>
+              <a
+                href="#bento-overview"
+                className="hover:text-white transition-colors"
+              >
+                Fee & Advance Allocation
+              </a>
+            </li>
+            <li>
+              <a
+                href="#bento-overview"
+                className="hover:text-white transition-colors"
+              >
+                Teacher Mobile PWA
+              </a>
+            </li>
+            <li>
+              <a
+                href="#bento-overview"
+                className="hover:text-white transition-colors"
+              >
+                Fleet & Route Logistics
+              </a>
+            </li>
+            <li>
+              <a
+                href="#bento-overview"
+                className="hover:text-white transition-colors"
+              >
+                Multi-Section Teachers
+              </a>
+            </li>
+            <li>
+              <a
+                href="#bento-overview"
+                className="hover:text-white transition-colors"
+              >
+                Analytics & Financial Hub
+              </a>
+            </li>
           </ul>
         </div>
 
         {/* Platform */}
         <div className="space-y-3">
-          <h4 className="font-bold text-white uppercase tracking-wider text-xs">Platform</h4>
+          <h4 className="font-bold text-white uppercase tracking-wider text-xs">
+            Platform
+          </h4>
           <ul className="space-y-2 text-white/50">
-            <li><a href="#pricing" className="hover:text-white transition-colors">Pricing & Plans</a></li>
-            <li><Link href="/login" className="hover:text-white transition-colors">Admin Login</Link></li>
-            <li><Link href="/register" className="hover:text-white transition-colors">Create School Account</Link></li>
-            <li><a href="#faq" className="hover:text-white transition-colors">Frequently Asked Questions</a></li>
+            <li>
+              <a href="#pricing" className="hover:text-white transition-colors">
+                Pricing & Plans
+              </a>
+            </li>
+            <li>
+              <Link
+                href="/login"
+                className="hover:text-white transition-colors"
+              >
+                Admin Login
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/register"
+                className="hover:text-white transition-colors"
+              >
+                Create School Account
+              </Link>
+            </li>
+            <li>
+              <a href="#faq" className="hover:text-white transition-colors">
+                Frequently Asked Questions
+              </a>
+            </li>
           </ul>
         </div>
 
         {/* Trust & Security */}
         <div className="space-y-3">
-          <h4 className="font-bold text-white uppercase tracking-wider text-xs">Security</h4>
+          <h4 className="font-bold text-white uppercase tracking-wider text-xs">
+            Security
+          </h4>
           <ul className="space-y-2 text-white/50">
-            <li className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Multi-Tenant Isolation</li>
-            <li className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-indigo-400" /> Redis Cached Latency</li>
+            <li className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />{" "}
+              Multi-Tenant Isolation
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-indigo-400" /> Redis Cached
+              Latency
+            </li>
             <li>Role-Based Access Control</li>
             <li>Daily Encrypted Backups</li>
           </ul>
@@ -96,7 +175,7 @@ export function LandingFooter() {
 
       {/* Bottom Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
-        <p>© {new Date().getFullYear()} SchoolOS Inc. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Kora Inc. All rights reserved.</p>
         <p className="flex items-center gap-1">
           Built for modern education institutions.
         </p>

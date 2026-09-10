@@ -26,7 +26,12 @@ export default function RegisterPage() {
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const { register, handleSubmit, getValues, formState: { errors } } = useForm<RegisterInput>({
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { errors },
+  } = useForm<RegisterInput>({
     resolver: zodResolver(RegisterSchema),
   });
 
@@ -40,7 +45,7 @@ export default function RegisterPage() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Failed to send OTP");
-      
+
       toast.success("OTP sent to your email");
       setStep(2);
     } catch (err: any) {
@@ -74,7 +79,9 @@ export default function RegisterPage() {
       });
 
       if (signInResult?.error) {
-        toast.error("Account created, but auto-login failed. Please sign in manually.");
+        toast.error(
+          "Account created, but auto-login failed. Please sign in manually.",
+        );
         router.push("/login");
         return;
       }
@@ -99,13 +106,18 @@ export default function RegisterPage() {
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-white font-bold text-xl tracking-tight">SchoolOS</span>
+            <span className="text-white font-bold text-xl tracking-tight">
+              Kora
+            </span>
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            Start Your Journey<br />With SchoolOS
+            Start Your Journey
+            <br />
+            With Kora
           </h1>
           <p className="text-violet-200 text-lg leading-relaxed">
-            Create an account to start managing your school elegantly and efficiently.
+            Create an account to start managing your school elegantly and
+            efficiently.
           </p>
         </div>
       </div>
@@ -114,40 +126,61 @@ export default function RegisterPage() {
       <div className="flex-1 flex items-center justify-center p-8 bg-zinc-50 dark:bg-zinc-950">
         <div className="w-full max-w-sm">
           <div className="mb-8">
-            <Link href="/login" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
+            <Link
+              href="/login"
+              className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+            >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to login
             </Link>
-            <h2 className="text-3xl font-bold mb-2 tracking-tight">Create an account</h2>
-            <p className="text-muted-foreground text-sm">Join thousands of schools on SchoolOS</p>
+            <h2 className="text-3xl font-bold mb-2 tracking-tight">
+              Create an account
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Join thousands of schools on Kora
+            </p>
           </div>
 
           {step === 1 ? (
             <form onSubmit={handleSubmit(onSendOtp)} className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Full Name</label>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Full Name
+                </label>
                 <input
                   {...register("name")}
                   type="text"
                   placeholder="John Doe"
                   className="w-full h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
                 />
-                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+                {errors.name && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.name.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Email address</label>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Email address
+                </label>
                 <input
                   {...register("email")}
                   type="email"
                   placeholder="admin@school.edu.in"
                   className="w-full h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
                 />
-                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
+                {errors.email && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1.5">Password</label>
+                <label className="text-sm font-medium block mb-1.5">
+                  Password
+                </label>
                 <div className="relative">
                   <input
                     {...register("password")}
@@ -160,10 +193,18 @@ export default function RegisterPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-                {errors.password && <p className="text-xs text-destructive mt-1">{errors.password.message}</p>}
+                {errors.password && (
+                  <p className="text-xs text-destructive mt-1">
+                    {errors.password.message}
+                  </p>
+                )}
               </div>
 
               <button
@@ -172,9 +213,25 @@ export default function RegisterPage() {
                 className="w-full h-10 mt-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isSendingOtp && (
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                 )}
                 Continue
@@ -187,20 +244,28 @@ export default function RegisterPage() {
                   <MailCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-violet-900 dark:text-violet-100 mb-1">Check your email</h3>
+                  <h3 className="text-sm font-semibold text-violet-900 dark:text-violet-100 mb-1">
+                    Check your email
+                  </h3>
                   <p className="text-xs text-violet-700/80 dark:text-violet-300/80">
-                    We've sent a 6-digit verification code to <span className="font-medium text-violet-800 dark:text-violet-200">{getValues("email")}</span>.
+                    We've sent a 6-digit verification code to{" "}
+                    <span className="font-medium text-violet-800 dark:text-violet-200">
+                      {getValues("email")}
+                    </span>
+                    .
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Verification Code</label>
+                <label className="text-sm font-medium mb-1.5 block">
+                  Verification Code
+                </label>
                 <input
                   type="text"
                   maxLength={6}
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\\D/g, ''))}
+                  onChange={(e) => setOtp(e.target.value.replace(/\\D/g, ""))}
                   placeholder="000000"
                   className="w-full h-12 text-center tracking-[0.5em] text-lg px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
                 />
@@ -221,9 +286,25 @@ export default function RegisterPage() {
                   className="flex-1 h-10 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isVerifying && (
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
                     </svg>
                   )}
                   Verify & Create Account
@@ -235,7 +316,10 @@ export default function RegisterPage() {
           <div className="mt-8 text-center">
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/login" className="font-medium text-violet-600 hover:underline">
+              <Link
+                href="/login"
+                className="font-medium text-violet-600 hover:underline"
+              >
                 Sign in
               </Link>
             </p>

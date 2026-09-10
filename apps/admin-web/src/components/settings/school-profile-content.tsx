@@ -49,7 +49,10 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
 
   const onSubmit = async (data: SchoolProfileForm) => {
     const result = await updateSchoolProfile(data);
-    if (result.error) { toast.error(result.error); return; }
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
     toast.success("School profile updated");
     setEditing(false);
     router.refresh();
@@ -65,12 +68,20 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
   return (
     <SettingsCard
       title="School Profile"
-      description={`${school.subdomain}.schoolos · ${school.plan} plan`}
+      description={`${school.subdomain}.kora · ${school.plan} plan`}
       action={
         canEdit && !editing ? (
           <button
             type="button"
-            onClick={() => { form.reset({ name: school.name, address: school.address ?? "", phone: school.phone ?? "", email: school.email ?? "" }); setEditing(true); }}
+            onClick={() => {
+              form.reset({
+                name: school.name,
+                address: school.address ?? "",
+                phone: school.phone ?? "",
+                email: school.email ?? "",
+              });
+              setEditing(true);
+            }}
             className="flex items-center gap-2 h-8 px-3 border rounded-lg text-xs font-medium hover:bg-muted transition-colors flex-shrink-0"
           >
             <Pencil className="w-3.5 h-3.5" /> Edit
@@ -80,20 +91,48 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
     >
       {editing ? (
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField label="School Name" error={form.formState.errors.name?.message} required>
-            <input {...form.register("name")} className={inputCls} placeholder="School name" />
+          <FormField
+            label="School Name"
+            error={form.formState.errors.name?.message}
+            required
+          >
+            <input
+              {...form.register("name")}
+              className={inputCls}
+              placeholder="School name"
+            />
           </FormField>
-          <FormField label="Address" error={form.formState.errors.address?.message}>
-            <input {...form.register("address")} className={inputCls} placeholder="School address" />
+          <FormField
+            label="Address"
+            error={form.formState.errors.address?.message}
+          >
+            <input
+              {...form.register("address")}
+              className={inputCls}
+              placeholder="School address"
+            />
           </FormField>
           <FormField label="Phone" error={form.formState.errors.phone?.message}>
-            <input {...form.register("phone")} className={inputCls} placeholder="Contact phone" />
+            <input
+              {...form.register("phone")}
+              className={inputCls}
+              placeholder="Contact phone"
+            />
           </FormField>
           <FormField label="Email" error={form.formState.errors.email?.message}>
-            <input {...form.register("email")} type="email" className={inputCls} placeholder="Contact email" />
+            <input
+              {...form.register("email")}
+              type="email"
+              className={inputCls}
+              placeholder="Contact email"
+            />
           </FormField>
           <div className="flex gap-2 justify-end pt-1 border-t">
-            <button type="button" onClick={() => setEditing(false)} className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
+            >
               Cancel
             </button>
             <button
@@ -101,7 +140,9 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
               disabled={form.formState.isSubmitting}
               className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
             >
-              {form.formState.isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {form.formState.isSubmitting && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
               Save Changes
             </button>
           </div>
@@ -109,9 +150,18 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
       ) : (
         <dl className="divide-y">
           {fields.map((f) => (
-            <div key={f.label} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
-              <dt className="text-xs font-medium text-muted-foreground">{f.label}</dt>
-              <dd className="text-sm">{f.value || <span className="text-muted-foreground">Not set</span>}</dd>
+            <div
+              key={f.label}
+              className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+            >
+              <dt className="text-xs font-medium text-muted-foreground">
+                {f.label}
+              </dt>
+              <dd className="text-sm">
+                {f.value || (
+                  <span className="text-muted-foreground">Not set</span>
+                )}
+              </dd>
             </div>
           ))}
         </dl>

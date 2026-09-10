@@ -11,7 +11,8 @@ export function PricingSection() {
   const plans = [
     {
       name: "Starter",
-      description: "Perfect for single schools starting their digital transformation.",
+      description:
+        "Perfect for single schools starting their digital transformation.",
       monthlyPrice: "₹2,499",
       annualPrice: "₹1,999",
       period: "/month",
@@ -28,7 +29,8 @@ export function PricingSection() {
     },
     {
       name: "Launch & Growth",
-      description: "The complete operating system for established institutions.",
+      description:
+        "The complete operating system for established institutions.",
       monthlyPrice: "₹4,999",
       annualPrice: "₹3,999",
       period: "/month",
@@ -44,7 +46,7 @@ export function PricingSection() {
         "Real-time Financial Analytics Hub",
         "Priority WhatsApp & Phone Support",
       ],
-      ctaText: "Launch SchoolOS Pro",
+      ctaText: "Launch Kora Pro",
     },
     {
       name: "Enterprise",
@@ -78,7 +80,8 @@ export function PricingSection() {
             Transparent Pricing. No Per-Student Hidden Fees.
           </h2>
           <p className="mt-4 text-base sm:text-lg text-white/60">
-            One flat subscription per school. Scale your student count without worrying about ballooning software costs.
+            One flat subscription per school. Scale your student count without
+            worrying about ballooning software costs.
           </p>
 
           {/* Billing Switcher */}
@@ -131,7 +134,9 @@ export function PricingSection() {
               )}
 
               <div>
-                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
+                <h3 className="text-xl font-bold text-white mb-2">
+                  {plan.name}
+                </h3>
                 <p className="text-xs text-white/50 mb-6 leading-relaxed">
                   {plan.description}
                 </p>
@@ -140,13 +145,20 @@ export function PricingSection() {
                   <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
                     {isAnnual ? plan.annualPrice : plan.monthlyPrice}
                   </span>
-                  <span className="text-xs text-white/50 font-medium">{plan.period}</span>
+                  <span className="text-xs text-white/50 font-medium">
+                    {plan.period}
+                  </span>
                 </div>
 
                 <div className="space-y-3.5 mb-8">
                   {plan.features.map((feat, i) => (
-                    <div key={i} className="flex items-start gap-3 text-xs sm:text-sm text-white/80">
-                      <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${plan.featured ? "text-violet-400" : "text-emerald-400"}`} />
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 text-xs sm:text-sm text-white/80"
+                    >
+                      <CheckCircle2
+                        className={`w-4 h-4 shrink-0 mt-0.5 ${plan.featured ? "text-violet-400" : "text-emerald-400"}`}
+                      />
                       <span>{feat}</span>
                     </div>
                   ))}

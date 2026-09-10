@@ -4,8 +4,9 @@ import { getTransportData } from "@/lib/actions/transport";
 import { TransportContent } from "@/components/transport/transport-content";
 
 export const metadata = {
-  title: "Transport & Fleet Management | SchoolOS",
-  description: "Manage school bus routes, fleet vehicles, drivers, and transport fee allocations.",
+  title: "Transport & Fleet Management | Kora",
+  description:
+    "Manage school bus routes, fleet vehicles, drivers, and transport fee allocations.",
 };
 
 export default async function TransportPage() {
@@ -30,7 +31,9 @@ export default async function TransportPage() {
       <div className="p-6">
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200">
           <h3 className="font-bold">Failed to load transport data</h3>
-          <p className="text-sm mt-1">Please check school session configuration.</p>
+          <p className="text-sm mt-1">
+            Please check school session configuration.
+          </p>
         </div>
       </div>
     );

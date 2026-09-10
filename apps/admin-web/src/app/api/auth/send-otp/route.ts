@@ -25,10 +25,9 @@ export async function POST(req: Request) {
       authLogger.warn({ ip, email }, "OTP rate limit exceeded for IP/Email");
       return createRateLimitResponse(
         rateLimitResult,
-        "Too many OTP requests. Please wait a few minutes before trying again."
+        "Too many OTP requests. Please wait a few minutes before trying again.",
       );
     }
-
 
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -36,8 +35,14 @@ export async function POST(req: Request) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      authLogger.warn({ email }, "Registration attempted for already registered email");
-      return NextResponse.json({ error: "Email is already registered" }, { status: 400 });
+      authLogger.warn(
+        { email },
+        "Registration attempted for already registered email",
+      );
+      return NextResponse.json(
+        { error: "Email is already registered" },
+        { status: 400 },
+      );
     }
 
     // Set expiration to 10 minutes from now
@@ -61,7 +66,10 @@ export async function POST(req: Request) {
 
     // Log OTP to server console in development or if SMTP is not configured
     if (process.env.NODE_ENV === "development" || !smtpUser || !smtpPass) {
-      authLogger.info({ email, otpMasked: "***" }, `[DEV OTP Generated] Verification code issued for ${email}`);
+      authLogger.info(
+        { email, otpMasked: "***" },
+        `[DEV OTP Generated] Verification code issued for ${email}`,
+      );
     }
 
     // Send email using Nodemailer if SMTP credentials are provided
@@ -78,7 +86,7 @@ export async function POST(req: Request) {
 
       const htmlTemplate = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-          <h2 style="color: #6d28d9; text-align: center;">Welcome to SchoolOS!</h2>
+          <h2 style="color: #6d28d9; text-align: center;">Welcome to Kora!</h2>
           <p style="font-size: 16px; color: #333;">Hello,</p>
           <p style="font-size: 16px; color: #333;">Thank you for registering. Please use the following One-Time Password (OTP) to complete your registration process:</p>
           <div style="text-align: center; margin: 30px 0;">
@@ -91,17 +99,23 @@ export async function POST(req: Request) {
       `;
 
       await transporter.sendMail({
-        from: `"SchoolOS" <${smtpUser}>`,
+        from: `"Kora" <${smtpUser}>`,
         to: email,
-        subject: "Your SchoolOS Verification Code",
+        subject: "Your Kora Verification Code",
         html: htmlTemplate,
       });
     }
 
-    return NextResponse.json({ success: true, message: "OTP sent successfully" });
+    return NextResponse.json({
+      success: true,
+      message: "OTP sent successfully",
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid input data" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input data" },
+        { status: 400 },
+      );
     }
     authLogger.error({ err: error }, "Failed to generate or send OTP");
     Sentry.captureException(error, {

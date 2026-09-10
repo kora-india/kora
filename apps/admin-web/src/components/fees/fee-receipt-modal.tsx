@@ -67,13 +67,13 @@ export function printReceipt(receiptData: FeeReceiptData) {
   document.title = fileName;
 
   // Clean up any existing print iframe
-  const oldIframe = document.getElementById("schoolos-receipt-print-frame");
+  const oldIframe = document.getElementById("kora-receipt-print-frame");
   if (oldIframe) {
     oldIframe.remove();
   }
 
   const iframe = document.createElement("iframe");
-  iframe.id = "schoolos-receipt-print-frame";
+  iframe.id = "kora-receipt-print-frame";
   iframe.title = fileName;
   iframe.style.position = "fixed";
   iframe.style.right = "0";
