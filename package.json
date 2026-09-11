@@ -21,6 +21,11 @@
     "db:dr:verify": "cd packages/db && pnpm db:dr:verify",
     "db:dr:dump": "cd packages/db && pnpm db:dr:dump",
     "db:push": "cd packages/db && pnpm prisma db push",
+    "desktop:dev": "pnpm --filter @schoolos/desktop dev:app",
+    "desktop:build": "pnpm --filter @schoolos/desktop build",
+    "desktop:package:mac": "pnpm --filter @schoolos/desktop package:mac",
+    "desktop:package:mac:arm": "pnpm --filter @schoolos/desktop package:mac:arm",
+    "desktop:package:win": "pnpm --filter @schoolos/desktop package:win",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "prepare": "husky"
   },

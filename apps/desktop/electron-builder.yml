@@ -1,0 +1,50 @@
+appId: com.schoolos.kora
+productName: Kora
+directories:
+  output: release
+  buildResources: resources
+
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+npmRebuild: false
+nodeGypRebuild: false
+
+files:
+  - "dist/**/*"
+  - "src/splash.html"
+  - "src/offline.html"
+  - "resources/**/*"
+
+mac:
+  category: public.app-category.education
+  icon: resources/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: "${productName} Installer"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Kora
