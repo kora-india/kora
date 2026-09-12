@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Monitor,
   Apple,
@@ -8,9 +9,6 @@ import {
   X,
   CheckCircle2,
   Laptop,
-  Cpu,
-  Sparkles,
-  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -22,17 +20,17 @@ interface DownloadModalProps {
 type OS = "mac-arm" | "mac-intel" | "win" | "unknown";
 
 export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [detectedOS, setDetectedOS] = useState<OS>("mac-arm");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    setMounted(true);
 
     const ua = window.navigator.userAgent.toLowerCase();
     const isMac = /macintosh|mac os x/.test(ua);
     const isWin = /windows nt/.test(ua);
 
     if (isMac) {
-      // Apple Silicon heuristic: WebGL / touch points or arm userAgentData
       const isArm =
         window.navigator.maxTouchPoints > 2 ||
         (window.navigator as any).userAgentData?.architecture === "arm";
@@ -43,6 +41,23 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
       setDetectedOS("mac-arm");
     }
   }, []);
+
+  // Handle ESC key and scroll-lock
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const downloadTargets = [
     {
@@ -80,10 +95,12 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
     },
   ];
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -99,7 +116,7 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
             transition={{ type: "spring", duration: 0.3 }}
-            className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 z-10"
+            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 z-10 my-auto"
           >
             {/* Close Button */}
             <button
@@ -194,6 +211,7 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
