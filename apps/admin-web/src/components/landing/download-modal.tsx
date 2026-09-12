@@ -52,7 +52,8 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
       icon: Apple,
       chip: "ARM64",
       ext: ".dmg",
-      downloadUrl: "https://github.com/kora-india/kora/releases/latest",
+      downloadUrl:
+        "https://github.com/kora-india/kora/releases/latest/download/Kora-1.0.0-mac-arm64.dmg",
       isRecommended: detectedOS === "mac-arm",
     },
     {
@@ -62,7 +63,8 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
       icon: Apple,
       chip: "x64",
       ext: ".dmg",
-      downloadUrl: "https://github.com/kora-india/kora/releases/latest",
+      downloadUrl:
+        "https://github.com/kora-india/kora/releases/latest/download/Kora-1.0.0-mac-x64.dmg",
       isRecommended: detectedOS === "mac-intel",
     },
     {
@@ -72,7 +74,8 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
       icon: Monitor,
       chip: "x64",
       ext: ".exe",
-      downloadUrl: "https://github.com/kora-india/kora/releases/latest",
+      downloadUrl:
+        "https://github.com/kora-india/kora/releases/latest/download/Kora-1.0.0-win-x64.exe",
       isRecommended: detectedOS === "win",
     },
   ];
