@@ -30,13 +30,59 @@ export function DownloadModal({ isOpen, onClose }: DownloadModalProps) {
     const isMac = /macintosh|mac os x/.test(ua);
     const isWin = /windows nt/.test(ua);
 
-    if (isMac) {
-      const isArm =
-        window.navigator.maxTouchPoints > 2 ||
-        (window.navigator as any).userAgentData?.architecture === "arm";
-      setDetectedOS(isArm ? "mac-arm" : "mac-intel");
-    } else if (isWin) {
+    if (isWin) {
       setDetectedOS("win");
+      return;
+    }
+
+    if (isMac) {
+      // 1. Check WebGL GPU renderer (Apple Silicon reports "Apple M1/M2/M3" or "Apple GPU")
+      let isArm = true;
+      try {
+        const canvas = document.createElement("canvas");
+        const gl =
+          canvas.getContext("webgl") ||
+          (canvas.getContext(
+            "experimental-webgl",
+          ) as WebGLRenderingContext | null);
+        if (gl) {
+          const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+          if (debugInfo) {
+            const renderer = (
+              gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || ""
+            ).toLowerCase();
+            if (
+              renderer.includes("intel") ||
+              renderer.includes("amd") ||
+              renderer.includes("radeon") ||
+              renderer.includes("nvidia")
+            ) {
+              isArm = false;
+            } else if (renderer.includes("apple")) {
+              isArm = true;
+            }
+          }
+        }
+      } catch {
+        isArm = true;
+      }
+
+      setDetectedOS(isArm ? "mac-arm" : "mac-intel");
+
+      // 2. Double-check with Chromium high-entropy Client Hints if available
+      const nav = window.navigator as any;
+      if (nav.userAgentData?.getHighEntropyValues) {
+        nav.userAgentData
+          .getHighEntropyValues(["architecture"])
+          .then((data: any) => {
+            if (data?.architecture === "arm") {
+              setDetectedOS("mac-arm");
+            } else if (data?.architecture === "x86") {
+              setDetectedOS("mac-intel");
+            }
+          })
+          .catch(() => {});
+      }
     } else {
       setDetectedOS("mac-arm");
     }
