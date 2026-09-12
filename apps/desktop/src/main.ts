@@ -9,7 +9,7 @@ let splashWindow: BrowserWindow | null = null;
 const IS_DEV = process.env.NODE_ENV === "development" || !app.isPackaged;
 const BASE_URL =
   process.env.APP_URL ||
-  (IS_DEV ? "http://localhost:3000" : "https://app.schoolos.com");
+  (IS_DEV ? "http://localhost:3000" : "https://kora-admin-web.vercel.app");
 // Direct to /login so the landing page is completely bypassed
 const LOGIN_URL = `${BASE_URL}/login`;
 
