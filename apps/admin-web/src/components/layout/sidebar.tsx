@@ -28,6 +28,7 @@ import {
   Crown,
   Shield,
   Sparkles,
+  ReceiptText,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
@@ -48,6 +49,7 @@ const adminNavItems = [
   { label: "Exams & Results", href: "/exams", icon: Award },
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
+  { label: "Ledger", href: "/ledger", icon: ReceiptText },
   { label: "Transport", href: "/transport", icon: Bus },
   { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
@@ -59,6 +61,7 @@ const superAdminNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Schools", href: "/schools", icon: Building2 },
   { label: "Subscriptions", href: "/subscriptions", icon: CreditCard },
+  { label: "Ledger", href: "/ledger", icon: ReceiptText },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
@@ -78,8 +81,8 @@ const accountantNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
+  { label: "Ledger", href: "/ledger", icon: ReceiptText },
   { label: "Transport", href: "/transport", icon: Bus },
-  { label: "Payments", href: "/payments", icon: BarChart3 },
   { label: "Students", href: "/students", icon: Users },
 ];
 
