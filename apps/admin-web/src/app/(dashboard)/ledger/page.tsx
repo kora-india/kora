@@ -102,7 +102,7 @@ export default async function LedgerPage() {
         orderBy: { date: "desc" },
       }),
     ),
-    getCache(`cache:${schoolId}:ledger:feeChargeItems`, () =>
+    getCache(`cache:${schoolId}:ledger:feeChargeItems:v3`, () =>
       prisma.feeChargeItem.findMany({
         where: { charge: { schoolId } },
         select: {
@@ -116,8 +116,15 @@ export default async function LedgerPage() {
               id: true,
               title: true,
               dueDate: true,
+              createdAt: true,
               sessionId: true,
               studentId: true,
+              student: {
+                select: {
+                  id: true,
+                  classId: true,
+                },
+              },
             },
           },
         },

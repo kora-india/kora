@@ -13,6 +13,12 @@ import {
   type StreamFilter,
 } from "./ledger-filter-bar";
 import { LedgerStatCards, type LedgerMetrics } from "./ledger-stat-cards";
+import { LedgerTable } from "./ledger-table";
+import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
+import {
+  getFeeReceiptDetails,
+  type FeeReceiptData,
+} from "@/lib/actions/fee-allocator";
 import {
   isToday,
   isYesterday,
@@ -53,6 +59,25 @@ export function LedgerContent({
 }: Readonly<Props>) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
+
+  // Receipt Modal State
+  const [receiptModal, setReceiptModal] = useState<{
+    open: boolean;
+    data: FeeReceiptData | null;
+  }>({ open: false, data: null });
+
+  const handleOpenReceipt = async (receiptNo: string) => {
+    try {
+      const res = await getFeeReceiptDetails(receiptNo);
+      if (res.success && res.data) {
+        setReceiptModal({ open: true, data: res.data });
+      } else {
+        toast.error(res.error || "Failed to load receipt");
+      }
+    } catch {
+      toast.error("Failed to fetch receipt details");
+    }
+  };
 
   // Filter State
   const [filters, setFilters] = useState<LedgerFilterState>({
@@ -113,8 +138,8 @@ export function LedgerContent({
   const matchesDateFilter = (
     dateInput: string | Date | null | undefined,
   ): boolean => {
-    if (!dateInput) return false;
     if (filters.datePreset === "all" && !filters.customDateRange) return true;
+    if (!dateInput) return false;
 
     const date = new Date(dateInput);
     if (isNaN(date.getTime())) return false;
@@ -237,7 +262,7 @@ export function LedgerContent({
 
     return expenses.filter((exp) => {
       // Date filter
-      if (!matchesDateFilter(exp.date)) return false;
+      if (!matchesDateFilter(exp.date || exp.createdAt)) return false;
 
       // Payment method
       if (
@@ -322,8 +347,13 @@ export function LedgerContent({
   // 4. Filtered Fee Charge Items (Receivables)
   const filteredChargeItems = useMemo(() => {
     return feeChargeItems.filter((item) => {
-      // Date filter based on charge due date
-      if (!matchesDateFilter(item.charge?.dueDate)) return false;
+      // Date filter based on charge due date or creation date
+      if (
+        !matchesDateFilter(
+          item.charge?.dueDate || (item.charge as any)?.createdAt,
+        )
+      )
+        return false;
 
       // Session filter
       if (
@@ -341,6 +371,12 @@ export function LedgerContent({
         }
       } else if (filters.componentOrCategory.startsWith("cat_")) {
         return false;
+      }
+
+      // Class filter
+      if (filters.classId !== "all") {
+        const itemClassId = item.charge?.student?.classId;
+        if (itemClassId !== filters.classId) return false;
       }
 
       return true;
@@ -381,6 +417,7 @@ export function LedgerContent({
     let totalBilledFees = 0;
     let totalPaidFromCharges = 0;
     filteredChargeItems.forEach((item) => {
+      if (item.status === "WAIVED") return;
       const amt = Number(item.amount || 0);
       const paid = Number(item.paidAmount || 0);
       totalBilledFees += amt;
@@ -569,6 +606,18 @@ export function LedgerContent({
       }
     });
 
+    // Populate Pending Dues (Receivables) for each class from filteredChargeItems
+    filteredChargeItems.forEach((item) => {
+      const cId = item.charge?.student?.classId;
+      if (cId && classMap.has(cId) && item.status !== "WAIVED") {
+        const due = Math.max(
+          0,
+          Number(item.amount || 0) - Number(item.paidAmount || 0),
+        );
+        classMap.get(cId)!.receivables += due;
+      }
+    });
+
     const classBreakdown = Array.from(classMap.values())
       .map((item) => {
         const totalBilled = item.collectedAmount + item.receivables;
@@ -577,12 +626,18 @@ export function LedgerContent({
           recoveryRate:
             totalBilled > 0
               ? Math.round((item.collectedAmount / totalBilled) * 100)
-              : item.collectedAmount > 0
-                ? 100
-                : 0,
+              : 0,
         };
       })
-      .sort((a, b) => b.collectedAmount - a.collectedAmount);
+      .sort((a, b) => {
+        const activeA = a.collectedAmount > 0 || a.receivables > 0 ? 1 : 0;
+        const activeB = b.collectedAmount > 0 || b.receivables > 0 ? 1 : 0;
+        if (activeA !== activeB) return activeB - activeA;
+        if (b.collectedAmount !== a.collectedAmount) {
+          return b.collectedAmount - a.collectedAmount;
+        }
+        return b.receivables - a.receivables;
+      });
 
     return {
       totalInflow,
@@ -711,6 +766,46 @@ export function LedgerContent({
       });
       rows.push([]);
 
+      // Section 5: Granular Transaction & Expense Logs
+      rows.push(["TRANSACTION & EXPENSE AUDIT LOGS"]);
+      rows.push([
+        "Date",
+        "Stream Type",
+        "Receipt / Voucher Ref",
+        "Particulars",
+        "Category / Class",
+        "Payment Mode",
+        "Amount (INR)",
+      ]);
+
+      filteredTransactions.forEach((tx) => {
+        rows.push([
+          new Date(tx.date || tx.createdAt).toLocaleDateString("en-IN"),
+          "INFLOW (Collection)",
+          tx.receiptNo || tx.reference || "N/A",
+          tx.student?.name || "Student",
+          tx.student?.class?.name
+            ? `Class ${tx.student.class.name}`
+            : "Fee Collection",
+          tx.method || "CASH",
+          Number(tx.amount || 0).toFixed(2),
+        ]);
+      });
+
+      filteredExpenses.forEach((exp) => {
+        rows.push([
+          new Date(exp.date || exp.createdAt).toLocaleDateString("en-IN"),
+          "OUTFLOW (Expense)",
+          exp.referenceNo || "N/A",
+          exp.title || "Expense",
+          exp.category?.name || "General Expense",
+          exp.paymentMethod || "CASH",
+          `-${Number(exp.amount || 0).toFixed(2)}`,
+        ]);
+      });
+
+      rows.push([]);
+
       // CSV Blob download
       const csvContent =
         "data:text/csv;charset=utf-8," +
@@ -804,8 +899,23 @@ export function LedgerContent({
           availablePaymentMethods={availablePaymentMethods}
         />
 
-        {/* Statistics Cards (The Core of the Page) */}
+        {/* Statistics Cards */}
         <LedgerStatCards metrics={calculatedMetrics} />
+
+        {/* Transaction & Expense Audit Logs Table */}
+        <LedgerTable
+          transactions={filteredTransactions}
+          expenses={filteredExpenses}
+          advances={filteredAdvances}
+          onViewReceipt={handleOpenReceipt}
+        />
+
+        {/* Fee Receipt & Invoice Modal */}
+        <FeeReceiptModal
+          isOpen={receiptModal.open}
+          onClose={() => setReceiptModal({ open: false, data: null })}
+          receiptData={receiptModal.data}
+        />
       </div>
     </ConfigProvider>
   );
