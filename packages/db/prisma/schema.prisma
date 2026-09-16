@@ -25,9 +25,12 @@ model School {
   logoUrl          String?
   plan             SubscriptionPlan     @default(FREE)
   isActive         Boolean              @default(true)
-  lateFeeEnabled   Boolean              @default(false)
-  lateFeeAmount    Decimal?             @db.Decimal(10, 2)
-  lateFeeFrequency String?              @default("MONTHLY")
+  lateFeeEnabled          Boolean              @default(false)
+  lateFeeAmount           Decimal?             @db.Decimal(10, 2)
+  lateFeeFrequency        String?              @default("MONTHLY")
+  feePaymentMode              String               @default("ALLOW_PARTIAL")
+  minPartialPaymentAmount     Decimal?             @default(0) @db.Decimal(10, 2)
+  minPartialPaymentPercentage Decimal?             @default(0) @db.Decimal(5, 2)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   academicSessions AcademicSession[]

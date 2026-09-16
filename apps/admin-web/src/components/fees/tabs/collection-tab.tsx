@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import {
   allocatePayment,
@@ -26,6 +26,8 @@ import {
   ArrowUpRight,
   Bus,
   Printer,
+  FileText,
+  ShieldAlert,
 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
 
@@ -35,6 +37,7 @@ export function CollectionTab({
   components,
   canEdit,
   transactions,
+  school,
   onNavigate,
 }: any) {
   const router = useRouter();
@@ -44,18 +47,20 @@ export function CollectionTab({
   const [dynamicCharges, setDynamicCharges] = useState<any[]>([]);
   const [loadingDues, setLoadingDues] = useState(false);
 
-  // Payment States
-  const [selectedComponents, setSelectedComponents] = useState<
-    Record<string, boolean>
-  >({});
-  const [componentPayments, setComponentPayments] = useState<
-    Record<string, string>
-  >({});
+  // Month-based Payment States
+  const [selectedMonths, setSelectedMonths] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [monthPayments, setMonthPayments] = useState<Record<string, string>>(
+    {},
+  );
+  const [itemPayments, setItemPayments] = useState<Record<string, string>>({});
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>(
+    {},
+  );
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
-  const [expandedComponents, setExpandedComponents] = useState<
-    Record<string, boolean>
-  >({});
+  const [generalAdvance, setGeneralAdvance] = useState("");
 
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,8 +94,11 @@ export function CollectionTab({
   const handleSelectStudent = async (student: any) => {
     setSelectedStudent(student);
     setSearch("");
-    setSelectedComponents({});
-    setComponentPayments({});
+    setSelectedMonths({});
+    setMonthPayments({});
+    setItemPayments({});
+    setExpandedMonths({});
+    setGeneralAdvance("");
     setShowPreview(false);
     await refreshCurrentStudent(student.id);
   };
@@ -120,136 +128,248 @@ export function CollectionTab({
       0,
     ) || 0;
 
-  // Group by component
-  const componentSummary: Record<string, any> = {};
-  let totalOutstanding = 0;
-
-  for (const charge of studentCharges) {
-    for (const item of charge.items) {
-      const compName =
-        item.component?.name ||
-        components.find((c: any) => c.id === item.componentId)?.name ||
-        "Unknown";
-      const due =
-        item.status === "WAIVED"
-          ? 0
-          : Number(item.amount || 0) - Number(item.paidAmount || 0);
-      const category =
-        item.component?.category ||
-        components.find((c: any) => c.id === item.componentId)?.category;
-
-      if (!componentSummary[item.componentId]) {
-        componentSummary[item.componentId] = {
-          id: item.componentId,
-          name: compName,
-          totalDue: 0,
-          items: [],
-        };
-      }
-
-      // Add all items (paid and unpaid) to show history inside the dropdown
-      componentSummary[item.componentId].items.push({
-        id: item.id,
-        chargeTitle: charge.title,
-        dueDate: charge.dueDate,
-        amount: Number(item.amount),
-        paidAmount: Number(item.paidAmount),
-        due: due,
-        status:
-          item.status === "WAIVED"
-            ? "WAIVED"
-            : due <= 0
-              ? "PAID"
-              : Number(item.paidAmount) > 0
-                ? "PARTIAL"
-                : "PENDING",
-        isLateFee: category === "LATE_FEE",
-      });
-
-      if (due > 0) {
-        componentSummary[item.componentId].totalDue += due;
-        totalOutstanding += due;
-      }
-    }
-  }
-
-  // Only show components that have some outstanding due in the collection table
-  const componentList = Object.values(componentSummary).filter(
-    (c) => c.totalDue > 0,
+  const effectiveSchool = dynamicStudent?.school || school || {};
+  const feePaymentMode = effectiveSchool.feePaymentMode || "ALLOW_PARTIAL";
+  const minPartialPaymentPercentage = Number(
+    effectiveSchool.minPartialPaymentPercentage || 0,
+  );
+  const minPartialPaymentAmount = Number(
+    effectiveSchool.minPartialPaymentAmount || 0,
   );
 
-  const toggleComponent = (id: string, totalDue: number) => {
-    const isSelected = !selectedComponents[id];
-    setSelectedComponents((prev) => ({ ...prev, [id]: isSelected }));
+  // Calculate monthly dues from studentCharges
+  const { monthList, totalOutstanding } = useMemo(() => {
+    let overallOutstanding = 0;
+    const list = (studentCharges || []).map((charge: any) => {
+      let monthTotalDue = 0;
+      let monthPaid = 0;
+      let monthNetCharge = 0;
+
+      const items = (charge.items || []).map((item: any) => {
+        const amt = Number(item.amount || 0);
+        const paid = Number(item.paidAmount || 0);
+        const due = item.status === "WAIVED" ? 0 : Math.max(0, amt - paid);
+        const compName =
+          item.component?.name ||
+          components?.find((c: any) => c.id === item.componentId)?.name ||
+          "Fee Component";
+        const category =
+          item.component?.category ||
+          components?.find((c: any) => c.id === item.componentId)?.category;
+
+        monthNetCharge += amt;
+        monthPaid += paid;
+        monthTotalDue += due;
+        overallOutstanding += due;
+
+        return {
+          id: item.id,
+          componentId: item.componentId,
+          componentName: compName,
+          amount: amt,
+          paidAmount: paid,
+          due,
+          status:
+            item.status === "WAIVED"
+              ? "WAIVED"
+              : due <= 0
+                ? "PAID"
+                : paid > 0
+                  ? "PARTIAL"
+                  : "PENDING",
+          isLateFee: category === "LATE_FEE",
+        };
+      });
+
+      return {
+        id: charge.id,
+        title: charge.title,
+        dueDate: charge.dueDate,
+        status: charge.status,
+        netCharge: monthNetCharge,
+        paidAmount: monthPaid,
+        totalDue: monthTotalDue,
+        items,
+      };
+    });
+
+    const activeMonths = list.filter((m: any) => m.totalDue > 0);
+    return { monthList: activeMonths, totalOutstanding: overallOutstanding };
+  }, [studentCharges, components]);
+
+  // Handle Month Amount Change with Pro-Rata Auto-Distribution across items
+  const updateMonthPayment = (chargeId: string, amountStr: string) => {
+    const charge = monthList.find((m: any) => m.id === chargeId);
+    if (!charge) return;
+
+    setMonthPayments((prev) => ({ ...prev, [chargeId]: amountStr }));
+
+    const enteredAmount = Number(amountStr) || 0;
+
+    if (enteredAmount > 0) {
+      if (!selectedMonths[chargeId]) {
+        setSelectedMonths((prev) => ({ ...prev, [chargeId]: true }));
+      }
+
+      const updatedItemAllocations: Record<string, string> = {};
+      const eligibleItems = charge.items.filter((it: any) => it.due > 0);
+
+      if (enteredAmount >= charge.totalDue) {
+        for (const item of charge.items) {
+          if (item.due > 0) {
+            updatedItemAllocations[item.id] = item.due.toString();
+          } else {
+            updatedItemAllocations[item.id] = "";
+          }
+        }
+      } else if (charge.totalDue > 0 && eligibleItems.length > 0) {
+        let allocatedSum = 0;
+        const isIntegerPayment =
+          Number.isInteger(enteredAmount) &&
+          eligibleItems.every((it: any) => Number.isInteger(it.due));
+
+        eligibleItems.forEach((item: any, idx: number) => {
+          if (idx === eligibleItems.length - 1) {
+            const remainingBalance = enteredAmount - allocatedSum;
+            const lastAlloc = Math.max(
+              0,
+              Math.min(item.due, Math.round(remainingBalance * 100) / 100),
+            );
+            updatedItemAllocations[item.id] =
+              lastAlloc > 0
+                ? Number.isInteger(lastAlloc)
+                  ? lastAlloc.toString()
+                  : lastAlloc.toFixed(2)
+                : "";
+          } else {
+            const proportionalShare =
+              (item.due / charge.totalDue) * enteredAmount;
+            const roundedAlloc = isIntegerPayment
+              ? Math.min(item.due, Math.round(proportionalShare))
+              : Math.min(item.due, Math.round(proportionalShare * 100) / 100);
+
+            allocatedSum += roundedAlloc;
+            updatedItemAllocations[item.id] =
+              roundedAlloc > 0 ? roundedAlloc.toString() : "";
+          }
+        });
+
+        charge.items.forEach((item: any) => {
+          if (item.due <= 0) {
+            updatedItemAllocations[item.id] = "";
+          }
+        });
+      }
+
+      setItemPayments((prev) => ({ ...prev, ...updatedItemAllocations }));
+    } else {
+      setSelectedMonths((prev) => ({ ...prev, [chargeId]: false }));
+      const clearedItems: Record<string, string> = {};
+      charge.items.forEach((item: any) => {
+        clearedItems[item.id] = "";
+      });
+      setItemPayments((prev) => ({ ...prev, ...clearedItems }));
+    }
+  };
+
+  const toggleMonth = (chargeId: string, totalDue: number) => {
+    const isSelected = !selectedMonths[chargeId];
+    setSelectedMonths((prev) => ({ ...prev, [chargeId]: isSelected }));
 
     if (isSelected) {
-      setComponentPayments((prev) => ({ ...prev, [id]: totalDue.toString() }));
+      updateMonthPayment(chargeId, totalDue.toString());
     } else {
-      setComponentPayments((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
+      updateMonthPayment(chargeId, "");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected =
+      monthList.length > 0 && monthList.every((m: any) => selectedMonths[m.id]);
+
+    if (allSelected) {
+      setSelectedMonths({});
+      setMonthPayments({});
+      setItemPayments({});
+    } else {
+      const newSelected: Record<string, boolean> = {};
+      const newMonthPayments: Record<string, string> = {};
+      const newItemPayments: Record<string, string> = {};
+
+      monthList.forEach((m: any) => {
+        newSelected[m.id] = true;
+        newMonthPayments[m.id] = m.totalDue.toString();
+        m.items.forEach((item: any) => {
+          if (item.due > 0) {
+            newItemPayments[item.id] = item.due.toString();
+          }
+        });
       });
+
+      setSelectedMonths(newSelected);
+      setMonthPayments(newMonthPayments);
+      setItemPayments(newItemPayments);
     }
   };
 
-  const updateComponentPayment = (id: string, amount: string) => {
-    setComponentPayments((prev) => ({ ...prev, [id]: amount }));
-    if (Number(amount) > 0 && !selectedComponents[id]) {
-      setSelectedComponents((prev) => ({ ...prev, [id]: true }));
-    } else if (Number(amount) <= 0 && selectedComponents[id]) {
-      setSelectedComponents((prev) => ({ ...prev, [id]: false }));
-    }
-  };
+  const totalPayment = useMemo(() => {
+    const monthsTotal = Object.entries(monthPayments).reduce(
+      (sum, [id, val]) => {
+        if (selectedMonths[id]) {
+          return sum + (Number(val) || 0);
+        }
+        return sum;
+      },
+      0,
+    );
+    return monthsTotal + (Number(generalAdvance) || 0);
+  }, [monthPayments, selectedMonths, generalAdvance]);
 
-  const totalPayment = Object.values(componentPayments).reduce(
-    (sum, val) => sum + (Number(val) || 0),
-    0,
-  );
+  // Check if all selected months are being 100% paid
+  const isAllCleared = useMemo(() => {
+    const activeSelected = monthList.filter((m: any) => selectedMonths[m.id]);
+    if (activeSelected.length === 0) return true;
+    return activeSelected.every((m: any) => {
+      const entered = Number(monthPayments[m.id]) || 0;
+      return entered >= m.totalDue;
+    });
+  }, [monthList, selectedMonths, monthPayments]);
 
   const generatePreview = () => {
     const preview: any[] = [];
 
-    for (const [compId, amountStr] of Object.entries(componentPayments)) {
-      if (!selectedComponents[compId]) continue;
+    monthList.forEach((charge: any) => {
+      if (!selectedMonths[charge.id]) return;
 
-      let remaining = Number(amountStr);
-      if (remaining <= 0) continue;
+      const entered = Number(monthPayments[charge.id]) || 0;
+      if (entered <= 0) return;
 
-      const compData = componentSummary[compId];
-      if (!compData) continue;
+      const isMonthCleared = entered >= charge.totalDue;
+      const remainingDue = Math.max(0, charge.totalDue - entered);
 
-      const allocations = [];
-      // Sort items by due date asc (assuming they are already mostly sorted, but we'll sort here to be safe)
-      const sortedItems = [...compData.items].sort(
-        (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
-      );
-
-      for (const item of sortedItems) {
-        if (remaining <= 0) break;
-
-        const allocAmount = Math.min(item.due, remaining);
-
-        let newStatus = "Partial";
-        if (item.paidAmount + allocAmount >= item.amount) {
-          newStatus = "Paid";
+      const allocations: any[] = [];
+      charge.items.forEach((item: any) => {
+        const payVal = Number(itemPayments[item.id]) || 0;
+        if (payVal > 0) {
+          allocations.push({
+            componentName: item.componentName,
+            allocated: payVal,
+            newStatus:
+              item.paidAmount + payVal >= item.amount ? "Paid" : "Partial",
+          });
         }
-
-        allocations.push({
-          title: item.chargeTitle,
-          allocated: allocAmount,
-          newStatus,
-        });
-
-        remaining -= allocAmount;
-      }
+      });
 
       preview.push({
-        componentName: compData.name,
+        chargeTitle: charge.title,
+        dueDate: charge.dueDate,
+        entered,
+        totalDue: charge.totalDue,
+        remainingDue,
+        isMonthCleared,
         allocations,
-        advance: remaining > 0 ? remaining : 0,
       });
-    }
+    });
 
     return preview;
   };
@@ -293,26 +413,84 @@ export function CollectionTab({
     toast.loading("Processing payment transaction...", { id: toastId });
 
     try {
-      const payloadPayments = Object.entries(componentPayments)
-        .filter(([id, val]) => selectedComponents[id] && Number(val) > 0)
-        .map(([id, val]) => ({ componentId: id, amount: Number(val) }));
+      // Validate policy
+      if (feePaymentMode === "FULL_ONLY") {
+        for (const [mId, val] of Object.entries(monthPayments)) {
+          if (!selectedMonths[mId]) continue;
+          const num = Number(val) || 0;
+          const targetMonth = monthList.find((m: any) => m.id === mId);
+          if (targetMonth && num > 0 && num < targetMonth.totalDue) {
+            toast.error(
+              `School policy requires clearing ${targetMonth.title} fully (₹${targetMonth.totalDue}). Partial payments are disabled.`,
+              { id: toastId },
+            );
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      } else if (feePaymentMode === "ALLOW_PARTIAL") {
+        for (const [mId, val] of Object.entries(monthPayments)) {
+          if (!selectedMonths[mId]) continue;
+          const num = Number(val) || 0;
+          const targetMonth = monthList.find((m: any) => m.id === mId);
+          if (!targetMonth || num <= 0) continue;
+
+          const minReq =
+            minPartialPaymentPercentage > 0
+              ? Math.ceil(
+                  (targetMonth.netCharge * minPartialPaymentPercentage) / 100,
+                )
+              : minPartialPaymentAmount;
+
+          if (minReq > 0) {
+            // LOOPHOLE PREVENTION:
+            // If remaining due <= minReq, student must pay the remaining balance in full!
+            if (targetMonth.totalDue <= minReq && num < targetMonth.totalDue) {
+              toast.error(
+                `The remaining due for ${targetMonth.title} is ₹${targetMonth.totalDue}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minReq})` : `₹${minReq}`}). It must be cleared in full.`,
+                { id: toastId },
+              );
+              setIsSubmitting(false);
+              return;
+            } else if (num < minReq && num < targetMonth.totalDue) {
+              toast.error(
+                `Payment for ${targetMonth.title} must be at least ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minReq})` : `₹${minReq}`}.`,
+                { id: toastId },
+              );
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        }
+      }
+
+      const payloadPayments = Object.entries(monthPayments)
+        .filter(([id, val]) => selectedMonths[id] && Number(val) > 0)
+        .map(([id, val]) => ({ chargeId: id, amount: Number(val) }));
 
       const res = await allocatePayment({
         studentId: currentStudent.id,
-        componentPayments: payloadPayments,
+        monthPayments: payloadPayments,
+        generalAdvanceAmount:
+          Number(generalAdvance) > 0 ? Number(generalAdvance) : undefined,
         method: paymentMethod as any,
-        reference,
+        reference: reference || undefined,
       });
 
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
         const receiptNo = (res as any).receiptNo || "Receipt Created";
-        toast.success(`Payment successful! Receipt: ${receiptNo}`, {
+        const docLabel = (res as any).receiptData?.isPartial
+          ? "Provisional Invoice"
+          : "Official Clearance Bill";
+        toast.success(`Payment recorded! ${docLabel}: ${receiptNo}`, {
           id: toastId,
         });
-        setComponentPayments({});
-        setSelectedComponents({});
+        setMonthPayments({});
+        setSelectedMonths({});
+        setItemPayments({});
+        setGeneralAdvance("");
         setShowPreview(false);
 
         if ((res as any).receiptData) {
@@ -454,11 +632,39 @@ export function CollectionTab({
             })()}
 
             <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-              <div className="p-4 border-b bg-muted/20 flex justify-between items-center">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-violet-600" />{" "}
-                  Outstanding Fees by Component
-                </h3>
+              <div className="p-4 border-b bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-violet-600" />
+                  <h3 className="font-semibold text-foreground">
+                    Outstanding Monthly Fee Dues
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      feePaymentMode === "FULL_ONLY"
+                        ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    }`}
+                  >
+                    {feePaymentMode === "FULL_ONLY" ? (
+                      <>
+                        <ShieldAlert className="w-3 h-3 text-purple-600" />
+                        Full Due Clearance Required
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Partial Allowed{" "}
+                        {minPartialPaymentPercentage > 0
+                          ? `(Min ${minPartialPaymentPercentage}%)`
+                          : minPartialPaymentAmount > 0
+                            ? `(Min ₹${minPartialPaymentAmount})`
+                            : ""}
+                      </>
+                    )}
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -466,28 +672,70 @@ export function CollectionTab({
                   <thead className="bg-muted/10 border-b">
                     <tr>
                       <th className="w-10 px-4 py-3 text-center">
-                        <input type="checkbox" className="rounded" />
+                        <input
+                          type="checkbox"
+                          className="rounded text-violet-600 focus:ring-violet-500"
+                          checked={
+                            monthList.length > 0 &&
+                            monthList.every((m: any) => selectedMonths[m.id])
+                          }
+                          onChange={toggleSelectAll}
+                        />
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                        Fee Component
+                        Month / Charge
                       </th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                        Total Due
+                        Net Billed
                       </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">
-                        Amount to Pay
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Paid
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Remaining Due
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-44">
+                        Pay Amount (₹)
                       </th>
                       <th className="px-4 py-3 w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {componentList.map((comp: any) => {
-                      const isExpanded = expandedComponents[comp.id];
+                    {monthList.map((charge: any) => {
+                      const isExpanded = expandedMonths[charge.id];
+                      const enteredVal = monthPayments[charge.id] || "";
+                      const enteredNum = Number(enteredVal) || 0;
+
+                      const minRequiredForMonth =
+                        minPartialPaymentPercentage > 0
+                          ? Math.ceil(
+                              (charge.netCharge * minPartialPaymentPercentage) /
+                                100,
+                            )
+                          : minPartialPaymentAmount;
+
+                      // LOOPHOLE PREVENTION: If remaining due <= minRequiredForMonth, student must pay remaining in full
+                      const isRemainingBelowThreshold =
+                        minRequiredForMonth > 0 &&
+                        charge.totalDue <= minRequiredForMonth;
+                      const isFullDueOnlyForCharge =
+                        feePaymentMode === "FULL_ONLY" ||
+                        isRemainingBelowThreshold;
+
+                      const hasPartialWarning =
+                        feePaymentMode === "ALLOW_PARTIAL" &&
+                        enteredNum > 0 &&
+                        (isRemainingBelowThreshold
+                          ? enteredNum < charge.totalDue
+                          : minRequiredForMonth > 0 &&
+                            enteredNum < minRequiredForMonth &&
+                            enteredNum < charge.totalDue);
+
                       return (
-                        <React.Fragment key={comp.id}>
+                        <React.Fragment key={charge.id}>
                           <tr
                             className={
-                              selectedComponents[comp.id]
+                              selectedMonths[charge.id]
                                 ? "bg-violet-50/30 dark:bg-violet-900/10"
                                 : ""
                             }
@@ -496,41 +744,106 @@ export function CollectionTab({
                               <input
                                 type="checkbox"
                                 className="rounded text-violet-600 focus:ring-violet-500"
-                                checked={!!selectedComponents[comp.id]}
+                                checked={!!selectedMonths[charge.id]}
                                 onChange={() =>
-                                  toggleComponent(comp.id, comp.totalDue)
+                                  toggleMonth(charge.id, charge.totalDue)
                                 }
                               />
                             </td>
-                            <td className="px-4 py-3 font-medium">
-                              {comp.name}
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-foreground">
+                                {charge.title}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-xs text-muted-foreground">
+                                  Due:{" "}
+                                  {new Date(charge.dueDate).toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${
+                                    charge.status === "PARTIAL"
+                                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                                      : "bg-red-50 text-red-700 border-red-200"
+                                  }`}
+                                >
+                                  {charge.status}
+                                </span>
+                              </div>
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-red-600">
-                              {formatCurrency(comp.totalDue)}
+                            <td className="px-4 py-3 text-right font-medium text-foreground">
+                              {formatCurrency(charge.netCharge)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(charge.paidAmount)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-red-600 dark:text-red-400">
+                              {formatCurrency(charge.totalDue)}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <input
-                                type="number"
-                                className="w-full text-right bg-background border rounded-md p-2 focus:ring-2 focus:ring-violet-500 outline-none"
-                                placeholder="0.00"
-                                value={componentPayments[comp.id] || ""}
-                                onChange={(e) =>
-                                  updateComponentPayment(
-                                    comp.id,
-                                    e.target.value,
-                                  )
-                                }
-                              />
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  disabled={isFullDueOnlyForCharge}
+                                  className={`w-full text-right bg-background border rounded-md p-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none ${
+                                    isFullDueOnlyForCharge
+                                      ? "opacity-80 bg-muted/40 cursor-not-allowed font-semibold text-violet-700 dark:text-violet-300"
+                                      : hasPartialWarning
+                                        ? "border-red-400 focus:ring-red-400"
+                                        : ""
+                                  }`}
+                                  placeholder="0.00"
+                                  value={enteredVal}
+                                  onChange={(e) =>
+                                    updateMonthPayment(
+                                      charge.id,
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                                {feePaymentMode === "FULL_ONLY" && (
+                                  <span className="block text-[10px] text-muted-foreground mt-0.5">
+                                    Full due only
+                                  </span>
+                                )}
+                                {feePaymentMode === "ALLOW_PARTIAL" &&
+                                  isRemainingBelowThreshold && (
+                                    <span className="block text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+                                      Full remainder required (≤{" "}
+                                      {minPartialPaymentPercentage > 0
+                                        ? `${minPartialPaymentPercentage}%`
+                                        : `₹${minRequiredForMonth}`}
+                                      )
+                                    </span>
+                                  )}
+                                {hasPartialWarning &&
+                                  !isRemainingBelowThreshold && (
+                                    <span className="block text-[10px] text-red-500 font-medium mt-0.5">
+                                      Min pay:{" "}
+                                      {minPartialPaymentPercentage > 0
+                                        ? `${minPartialPaymentPercentage}% (₹${minRequiredForMonth})`
+                                        : `₹${minRequiredForMonth}`}
+                                    </span>
+                                  )}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-center">
                               <button
+                                type="button"
                                 onClick={() =>
-                                  setExpandedComponents((prev) => ({
+                                  setExpandedMonths((prev) => ({
                                     ...prev,
-                                    [comp.id]: !isExpanded,
+                                    [charge.id]: !isExpanded,
                                   }))
                                 }
-                                className="text-muted-foreground hover:text-foreground"
+                                className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted"
+                                title="View Component Breakdown"
                               >
                                 {isExpanded ? (
                                   <ChevronUp className="w-4 h-4" />
@@ -542,109 +855,135 @@ export function CollectionTab({
                           </tr>
                           {isExpanded && (
                             <tr className="bg-muted/5">
-                              <td colSpan={5} className="p-0 border-b">
+                              <td colSpan={7} className="p-0 border-b">
                                 <div className="px-10 py-3 bg-muted/10 inset-shadow-sm">
+                                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                                    Component Breakdown ({charge.title})
+                                  </p>
                                   <table className="w-full text-xs">
-                                    <tbody>
-                                      {comp.items.map(
-                                        (item: any, idx: number) => (
-                                          <tr
-                                            key={idx}
-                                            className="border-b last:border-0 border-muted/50"
-                                          >
-                                            <td className="py-2 text-muted-foreground flex items-center gap-2">
-                                              <span>{item.chargeTitle}</span>
-                                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted border">
-                                                {new Date(
-                                                  item.dueDate,
-                                                ).toLocaleDateString("en-GB", {
-                                                  month: "short",
-                                                  year: "numeric",
-                                                })}
+                                    <thead>
+                                      <tr className="border-b border-muted text-muted-foreground">
+                                        <th className="py-1.5 text-left font-medium">
+                                          Component
+                                        </th>
+                                        <th className="py-1.5 text-right font-medium">
+                                          Amount
+                                        </th>
+                                        <th className="py-1.5 text-right font-medium">
+                                          Paid
+                                        </th>
+                                        <th className="py-1.5 text-right font-medium">
+                                          Remaining Due
+                                        </th>
+                                        <th className="py-1.5 text-right font-medium">
+                                          This Payment
+                                        </th>
+                                        <th className="py-1.5 text-right font-medium">
+                                          Status / Action
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-muted/40">
+                                      {charge.items.map((item: any) => (
+                                        <tr
+                                          key={item.id}
+                                          className="hover:bg-muted/20"
+                                        >
+                                          <td className="py-2 text-foreground font-medium">
+                                            {item.componentName}
+                                          </td>
+                                          <td className="py-2 text-right text-muted-foreground">
+                                            {formatCurrency(item.amount)}
+                                          </td>
+                                          <td className="py-2 text-right text-emerald-600 font-medium">
+                                            {formatCurrency(item.paidAmount)}
+                                          </td>
+                                          <td className="py-2 text-right font-bold text-red-600">
+                                            {formatCurrency(item.due)}
+                                          </td>
+                                          <td className="py-2 text-right font-medium text-violet-600">
+                                            {itemPayments[item.id]
+                                              ? formatCurrency(
+                                                  Number(itemPayments[item.id]),
+                                                )
+                                              : "-"}
+                                          </td>
+                                          <td className="py-2 text-right">
+                                            {item.status === "PAID" ? (
+                                              <span className="text-green-600 font-medium inline-flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3" />{" "}
+                                                Paid
                                               </span>
-                                            </td>
-                                            <td className="py-2 text-right">
-                                              {item.status === "PAID" ? (
-                                                <span className="text-green-600 font-medium flex items-center justify-end gap-1">
-                                                  <CheckCircle2 className="w-3 h-3" />{" "}
-                                                  Paid
+                                            ) : item.status === "WAIVED" ? (
+                                              <span className="text-muted-foreground font-medium">
+                                                Waived
+                                              </span>
+                                            ) : (
+                                              <div className="flex justify-end items-center gap-2">
+                                                <span className="text-amber-600 font-medium text-[11px]">
+                                                  {item.paidAmount > 0
+                                                    ? "Partial"
+                                                    : "Pending"}
                                                 </span>
-                                              ) : item.status === "WAIVED" ? (
-                                                <span className="text-muted-foreground font-medium flex items-center justify-end gap-1">
-                                                  Waived
-                                                </span>
-                                              ) : (
-                                                <div className="flex justify-end items-center gap-2">
-                                                  <span>
-                                                    Due:{" "}
-                                                    {formatCurrency(item.due)}
-                                                  </span>
-                                                  {item.isLateFee &&
-                                                    canEdit && (
-                                                      <button
-                                                        disabled={
-                                                          waivingItemId ===
-                                                          item.id
-                                                        }
-                                                        onClick={async () => {
-                                                          setWaivingItemId(
+                                                {item.isLateFee && canEdit && (
+                                                  <button
+                                                    disabled={
+                                                      waivingItemId === item.id
+                                                    }
+                                                    onClick={async () => {
+                                                      setWaivingItemId(item.id);
+                                                      const toastId = `waive-${item.id}`;
+                                                      toast.loading(
+                                                        "Waiving late fee...",
+                                                        { id: toastId },
+                                                      );
+                                                      try {
+                                                        const res =
+                                                          await waiveFeeChargeItem(
                                                             item.id,
                                                           );
-                                                          const toastId = `waive-${item.id}`;
-                                                          toast.loading(
-                                                            "Waiving late fee...",
+                                                        if (res.error)
+                                                          toast.error(
+                                                            res.error,
                                                             { id: toastId },
                                                           );
-                                                          try {
-                                                            const res =
-                                                              await waiveFeeChargeItem(
-                                                                item.id,
-                                                              );
-                                                            if (res.error)
-                                                              toast.error(
-                                                                res.error,
-                                                                { id: toastId },
-                                                              );
-                                                            else {
-                                                              toast.success(
-                                                                "Late fee waived",
-                                                                { id: toastId },
-                                                              );
-                                                              if (
-                                                                currentStudent?.id
-                                                              ) {
-                                                                await refreshCurrentStudent(
-                                                                  currentStudent.id,
-                                                                );
-                                                              }
-                                                              router.refresh();
-                                                            }
-                                                          } catch {
-                                                            toast.error(
-                                                              "Failed to waive late fee",
-                                                              { id: toastId },
-                                                            );
-                                                          } finally {
-                                                            setWaivingItemId(
-                                                              null,
+                                                        else {
+                                                          toast.success(
+                                                            "Late fee waived",
+                                                            { id: toastId },
+                                                          );
+                                                          if (
+                                                            currentStudent?.id
+                                                          ) {
+                                                            await refreshCurrentStudent(
+                                                              currentStudent.id,
                                                             );
                                                           }
-                                                        }}
-                                                        className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
-                                                      >
-                                                        {waivingItemId ===
-                                                          item.id && (
-                                                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                                        )}
-                                                        Waive
-                                                      </button>
+                                                          router.refresh();
+                                                        }
+                                                      } catch {
+                                                        toast.error(
+                                                          "Failed to waive late fee",
+                                                          { id: toastId },
+                                                        );
+                                                      } finally {
+                                                        setWaivingItemId(null);
+                                                      }
+                                                    }}
+                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
+                                                  >
+                                                    {waivingItemId ===
+                                                      item.id && (
+                                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
                                                     )}
-                                                </div>
-                                              )}
-                                            </td>
-                                          </tr>
-                                        ),
-                                      )}
+                                                    Waive
+                                                  </button>
+                                                )}
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
                                     </tbody>
                                   </table>
                                 </div>
@@ -654,13 +993,19 @@ export function CollectionTab({
                         </React.Fragment>
                       );
                     })}
-                    {componentList.length === 0 && (
+                    {monthList.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={7}
                           className="p-8 text-center text-muted-foreground"
                         >
-                          No outstanding fees.
+                          <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                          <p className="font-semibold text-foreground">
+                            All dues cleared!
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            This student has no outstanding monthly fee dues.
+                          </p>
                         </td>
                       </tr>
                     )}
@@ -753,7 +1098,7 @@ export function CollectionTab({
         ) : (
           <div className="bg-card border border-dashed rounded-xl h-64 flex flex-col items-center justify-center text-muted-foreground">
             <Wallet className="w-12 h-12 mb-4 opacity-20" />
-            <p>Search and select a student to view their component-wise dues</p>
+            <p>Search and select a student to view their monthly fee dues</p>
           </div>
         )}
 
@@ -776,7 +1121,7 @@ export function CollectionTab({
               <thead className="bg-muted/10 border-b">
                 <tr>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                    Receipt No
+                    Receipt / Invoice No
                   </th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                     Student
@@ -793,40 +1138,58 @@ export function CollectionTab({
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {transactions?.slice(0, 5).map((txn: any) => (
-                  <tr key={txn.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReceipt(txn.receiptNo)}
-                        disabled={
-                          receiptModal.loadingReceiptNo === txn.receiptNo
-                        }
-                        className="font-medium text-violet-600 hover:text-violet-700 inline-flex items-center gap-1 cursor-pointer"
-                        title="View & Print Receipt"
-                      >
-                        {receiptModal.loadingReceiptNo === txn.receiptNo ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Printer className="w-3.5 h-3.5" />
-                        )}
-                        {txn.receiptNo}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">{txn.student?.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(txn.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-green-600">
-                      {formatCurrency(Number(txn.amount))}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted">
-                        {txn.paymentMethod}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {transactions?.slice(0, 5).map((txn: any) => {
+                  const isPartialTxn = txn.allocations?.some(
+                    (a: any) =>
+                      a.chargeItem?.charge?.status !== "PAID" &&
+                      a.chargeItem?.status !== "PAID",
+                  );
+                  return (
+                    <tr key={txn.id} className="hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReceipt(txn.receiptNo)}
+                            disabled={
+                              receiptModal.loadingReceiptNo === txn.receiptNo
+                            }
+                            className="font-medium text-violet-600 hover:text-violet-700 inline-flex items-center gap-1 cursor-pointer"
+                            title="View & Print Document"
+                          >
+                            {receiptModal.loadingReceiptNo === txn.receiptNo ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Printer className="w-3.5 h-3.5" />
+                            )}
+                            {txn.receiptNo}
+                          </button>
+                          {isPartialTxn ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                              Invoice
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                              Bill
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">{txn.student?.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {new Date(txn.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-green-600">
+                        {formatCurrency(Number(txn.amount))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border bg-muted">
+                          {txn.paymentMethod}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {(!transactions || transactions.length === 0) && (
                   <tr>
                     <td
@@ -861,6 +1224,36 @@ export function CollectionTab({
                 {formatCurrency(totalPayment)}
               </span>
             </div>
+
+            {/* Document Type Indicator */}
+            {totalPayment > 0 && (
+              <div
+                className={`p-3 rounded-xl border text-xs ${
+                  isAllCleared
+                    ? "bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                    : "bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-bold">
+                  {isAllCleared ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>Document: Official Clearance Bill</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span>Document: Provisional Fee Invoice</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[11px] mt-1 text-muted-foreground">
+                  {isAllCleared
+                    ? "Full monthly clearance receipt will be generated. All dues settled."
+                    : "A provisional dues invoice will be generated. The official clearance bill is locked until remaining dues are 100% cleared."}
+                </p>
+              </div>
+            )}
 
             <FormField label="Payment Method">
               <select
@@ -899,36 +1292,53 @@ export function CollectionTab({
                 <h4 className="font-bold text-sm">Allocation Preview</h4>
                 <div className="text-xs space-y-3 bg-muted/20 p-3 rounded-lg border">
                   {generatePreview().map((p, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <div className="font-bold text-violet-600">
-                        {p.componentName}
+                    <div
+                      key={idx}
+                      className="space-y-1.5 pb-2 border-b last:border-0 border-muted"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-foreground">
+                          {p.chargeTitle}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            p.isMonthCleared
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          }`}
+                        >
+                          {p.isMonthCleared
+                            ? "Full Settlement"
+                            : `Remaining: ₹${p.remainingDue}`}
+                        </span>
+                      </div>
+                      <div className="text-muted-foreground flex justify-between">
+                        <span>Allocating:</span>
+                        <span className="font-semibold text-violet-600">
+                          {formatCurrency(p.entered)}
+                        </span>
                       </div>
                       {p.allocations.map((a: any, i: number) => (
                         <div
                           key={i}
-                          className="flex justify-between text-muted-foreground"
+                          className="flex justify-between text-muted-foreground pl-2 text-[11px]"
                         >
-                          <span>{a.title}</span>
+                          <span>• {a.componentName}</span>
                           <span>
-                            {formatCurrency(a.allocated)} →{" "}
+                            {formatCurrency(a.allocated)} (
                             <span
                               className={
                                 a.newStatus === "Paid"
                                   ? "text-green-600 font-medium"
-                                  : "text-orange-500 font-medium"
+                                  : "text-amber-500 font-medium"
                               }
                             >
                               {a.newStatus}
                             </span>
+                            )
                           </span>
                         </div>
                       ))}
-                      {p.advance > 0 && (
-                        <div className="flex justify-between text-green-600 font-medium mt-1">
-                          <span>{p.componentName} Advance</span>
-                          <span>+{formatCurrency(p.advance)}</span>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -952,14 +1362,20 @@ export function CollectionTab({
                   <button
                     disabled={isSubmitting}
                     onClick={() => handlePayment(true)}
-                    className="w-full py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-transform active:scale-95 shadow-md shadow-violet-500/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer"
+                    className={`w-full py-3 text-white rounded-xl font-bold text-sm transition-transform active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer ${
+                      isAllCleared
+                        ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
+                        : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
+                    }`}
                   >
                     {isSubmitting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Printer className="w-4 h-4" />
                     )}
-                    Confirm & Print Receipt
+                    {isAllCleared
+                      ? "Confirm & Print Official Bill"
+                      : "Confirm & Print Dues Invoice"}
                   </button>
                 </div>
               </div>

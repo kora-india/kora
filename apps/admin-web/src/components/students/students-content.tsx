@@ -1165,7 +1165,7 @@ export function StudentsContent({
                                                     Net Charge
                                                   </th>
                                                   <th className="text-right font-medium pb-2">
-                                                    Advance Paid
+                                                    Paid
                                                   </th>
                                                   <th className="text-right font-medium pb-2">
                                                     Payable
@@ -1250,28 +1250,48 @@ export function StudentsContent({
                                           )}
                                         </p>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handlePrintPastReceipt(tx.receiptNo)
-                                        }
-                                        disabled={
-                                          receiptModal.loadingReceiptNo ===
-                                          tx.receiptNo
-                                        }
-                                        className="p-2 rounded-lg border hover:bg-violet-50 dark:hover:bg-violet-950/40 text-violet-600 dark:text-violet-400 transition-colors flex items-center gap-1 text-xs font-medium cursor-pointer"
-                                        title="Print Receipt"
-                                      >
-                                        {receiptModal.loadingReceiptNo ===
-                                        tx.receiptNo ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                          <Printer className="w-3.5 h-3.5" />
-                                        )}
-                                        <span className="hidden sm:inline">
-                                          Print
-                                        </span>
-                                      </button>
+                                      {(() => {
+                                        const isPartial = tx.allocations?.some(
+                                          (a: any) =>
+                                            a.chargeItem?.charge?.status !==
+                                              "PAID" &&
+                                            a.chargeItem?.status !== "PAID",
+                                        );
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handlePrintPastReceipt(
+                                                tx.receiptNo,
+                                              )
+                                            }
+                                            disabled={
+                                              receiptModal.loadingReceiptNo ===
+                                              tx.receiptNo
+                                            }
+                                            className={`p-2 rounded-lg border transition-colors flex items-center gap-1 text-xs font-medium cursor-pointer ${
+                                              isPartial
+                                                ? "hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+                                                : "hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                                            }`}
+                                            title={
+                                              isPartial
+                                                ? "Print Dues Invoice"
+                                                : "Print Official Clearance Bill"
+                                            }
+                                          >
+                                            {receiptModal.loadingReceiptNo ===
+                                            tx.receiptNo ? (
+                                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : (
+                                              <Printer className="w-3.5 h-3.5" />
+                                            )}
+                                            <span className="hidden sm:inline">
+                                              {isPartial ? "Invoice" : "Bill"}
+                                            </span>
+                                          </button>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                 ),

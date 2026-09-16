@@ -78,10 +78,9 @@ export function StudentFeeCollection({
   // Process month-wise charge records with their items
   const { monthList, totalOutstanding } = useMemo(() => {
     let overallOutstanding = 0;
-
     const list = studentCharges.map((charge: any) => {
       let monthNetCharge = 0;
-      let monthAdvancePaid = 0;
+      let monthPaid = 0;
       let monthTotalDue = 0;
 
       const items = (charge.items || []).map((item: any) => {
@@ -94,7 +93,7 @@ export function StudentFeeCollection({
           compName.toLowerCase().includes("late");
 
         monthNetCharge += amt;
-        monthAdvancePaid += paid;
+        monthPaid += paid;
         monthTotalDue += due;
 
         return {
@@ -124,7 +123,7 @@ export function StudentFeeCollection({
         dueDate: charge.dueDate,
         status: charge.status,
         netCharge: monthNetCharge,
-        advancePaid: monthAdvancePaid,
+        paidAmount: monthPaid,
         totalDue: monthTotalDue,
         items,
       };
@@ -133,6 +132,14 @@ export function StudentFeeCollection({
     const activeMonths = list.filter((m: any) => m.totalDue > 0);
     return { monthList: activeMonths, totalOutstanding: overallOutstanding };
   }, [studentCharges]);
+
+  const feePaymentMode = student?.school?.feePaymentMode || "ALLOW_PARTIAL";
+  const minPartialPaymentPercentage = Number(
+    student?.school?.minPartialPaymentPercentage || 0,
+  );
+  const minPartialPaymentAmount = Number(
+    student?.school?.minPartialPaymentAmount || 0,
+  );
 
   // Handle Month Amount Change with Pro-Rata (Percentage) Auto-Distribution
   const updateMonthPayment = (chargeId: string, amountStr: string) => {
@@ -375,37 +382,66 @@ export function StudentFeeCollection({
     toast.loading("Processing payment transaction...", { id: toastId });
 
     try {
-      // Collect all item-wise payments
-      const payloadItemPayments: { chargeItemId: string; amount: number }[] =
-        [];
-      let extraSurplusAdvance = Number(generalAdvance) || 0;
-
-      monthList.forEach((charge: any) => {
-        if (!selectedMonths[charge.id]) return;
-
-        let allocatedInItems = 0;
-        charge.items.forEach((item: any) => {
-          const itemVal = Number(itemPayments[item.id]) || 0;
-          if (itemVal > 0) {
-            allocatedInItems += itemVal;
-            payloadItemPayments.push({
-              chargeItemId: item.id,
-              amount: itemVal,
-            });
+      // Validate policies before dispatching
+      if (feePaymentMode === "FULL_ONLY") {
+        for (const [mId, val] of Object.entries(monthPayments)) {
+          if (!selectedMonths[mId]) continue;
+          const num = Number(val) || 0;
+          const targetMonth = monthList.find((m: any) => m.id === mId);
+          if (targetMonth && num > 0 && num < targetMonth.totalDue) {
+            toast.error(
+              `School policy requires clearing ${targetMonth.title} fully (₹${targetMonth.totalDue}). Partial payments are disabled.`,
+              { id: toastId },
+            );
+            setIsSubmitting(false);
+            return;
           }
-        });
-
-        const monthVal = Number(monthPayments[charge.id]) || 0;
-        if (monthVal > allocatedInItems) {
-          extraSurplusAdvance += monthVal - allocatedInItems;
         }
-      });
+      } else if (feePaymentMode === "ALLOW_PARTIAL") {
+        for (const [mId, val] of Object.entries(monthPayments)) {
+          if (!selectedMonths[mId]) continue;
+          const num = Number(val) || 0;
+          const targetMonth = monthList.find((m: any) => m.id === mId);
+          if (!targetMonth || num <= 0) continue;
+
+          const minReq =
+            minPartialPaymentPercentage > 0
+              ? Math.ceil(
+                  (targetMonth.netCharge * minPartialPaymentPercentage) / 100,
+                )
+              : minPartialPaymentAmount;
+
+          if (minReq > 0) {
+            // LOOPHOLE PREVENTION: If remaining due <= minReq, must pay full remaining balance
+            if (targetMonth.totalDue <= minReq && num < targetMonth.totalDue) {
+              toast.error(
+                `The remaining due for ${targetMonth.title} is ₹${targetMonth.totalDue}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minReq})` : `₹${minReq}`}). It must be cleared in full.`,
+                { id: toastId },
+              );
+              setIsSubmitting(false);
+              return;
+            } else if (num < minReq && num < targetMonth.totalDue) {
+              toast.error(
+                `Payment for ${targetMonth.title} must be at least ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minReq})` : `₹${minReq}`}.`,
+                { id: toastId },
+              );
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        }
+      }
+
+      // Collect month payments directly
+      const payloadMonthPayments = Object.entries(monthPayments)
+        .filter(([id, val]) => selectedMonths[id] && Number(val) > 0)
+        .map(([id, val]) => ({ chargeId: id, amount: Number(val) }));
 
       const res = await allocatePayment({
         studentId: student.id,
-        itemPayments: payloadItemPayments,
+        monthPayments: payloadMonthPayments,
         generalAdvanceAmount:
-          extraSurplusAdvance > 0 ? extraSurplusAdvance : undefined,
+          Number(generalAdvance) > 0 ? Number(generalAdvance) : undefined,
         method: paymentMethod as any,
         reference: reference || undefined,
         remarks: remarks || undefined,
@@ -588,9 +624,7 @@ export function StudentFeeCollection({
                 <th className="py-2.5 px-3 text-right font-medium">
                   Net Charge
                 </th>
-                <th className="py-2.5 px-3 text-right font-medium">
-                  Advance Paid
-                </th>
+                <th className="py-2.5 px-3 text-right font-medium">Paid</th>
                 <th className="py-2.5 px-3 text-right font-medium">Payable</th>
                 <th className="py-2.5 px-3 text-right font-medium w-40">
                   Pay Amount (₹)
@@ -659,22 +693,80 @@ export function StudentFeeCollection({
                         {formatCurrency(month.netCharge)}
                       </td>
                       <td className="py-3 px-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(month.advancePaid)}
+                        {formatCurrency(month.paidAmount)}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">
                         {formatCurrency(month.totalDue)}
                       </td>
                       <td className="py-3 px-3 text-right">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={monthPayments[month.id] || ""}
-                          onChange={(e) =>
-                            updateMonthPayment(month.id, e.target.value)
-                          }
-                          disabled={!canEdit}
-                          className="w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
-                        />
+                        {(() => {
+                          const minRequiredForMonth =
+                            minPartialPaymentPercentage > 0
+                              ? Math.ceil(
+                                  (month.netCharge *
+                                    minPartialPaymentPercentage) /
+                                    100,
+                                )
+                              : minPartialPaymentAmount;
+
+                          const isRemainingBelowThreshold =
+                            minRequiredForMonth > 0 &&
+                            month.totalDue <= minRequiredForMonth;
+                          const isFullDueOnlyForMonth =
+                            feePaymentMode === "FULL_ONLY" ||
+                            isRemainingBelowThreshold;
+
+                          return (
+                            <>
+                              <input
+                                type="number"
+                                placeholder="0"
+                                value={monthPayments[month.id] || ""}
+                                readOnly={isFullDueOnlyForMonth}
+                                onChange={(e) =>
+                                  !isFullDueOnlyForMonth &&
+                                  updateMonthPayment(month.id, e.target.value)
+                                }
+                                disabled={!canEdit}
+                                className={`w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none ${
+                                  isFullDueOnlyForMonth
+                                    ? "bg-muted/30 cursor-not-allowed text-muted-foreground"
+                                    : ""
+                                }`}
+                              />
+                              {feePaymentMode === "FULL_ONLY" && (
+                                <span className="block text-[9px] text-muted-foreground mt-0.5 font-medium">
+                                  Full Due Only
+                                </span>
+                              )}
+                              {feePaymentMode === "ALLOW_PARTIAL" &&
+                                isRemainingBelowThreshold && (
+                                  <span className="block text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                                    Must Pay Remainder (≤{" "}
+                                    {minPartialPaymentPercentage > 0
+                                      ? `${minPartialPaymentPercentage}%`
+                                      : `₹${minRequiredForMonth}`}
+                                    )
+                                  </span>
+                                )}
+                              {feePaymentMode === "ALLOW_PARTIAL" &&
+                                !isRemainingBelowThreshold &&
+                                minRequiredForMonth > 0 &&
+                                Number(monthPayments[month.id]) > 0 &&
+                                Number(monthPayments[month.id]) <
+                                  minRequiredForMonth &&
+                                Number(monthPayments[month.id]) <
+                                  month.totalDue && (
+                                  <span className="block text-[9px] text-rose-600 font-semibold mt-0.5">
+                                    Min{" "}
+                                    {minPartialPaymentPercentage > 0
+                                      ? `${minPartialPaymentPercentage}% (₹${minRequiredForMonth})`
+                                      : `₹${minRequiredForMonth}`}
+                                  </span>
+                                )}
+                            </>
+                          );
+                        })()}
                       </td>
                     </tr>
 
@@ -704,7 +796,7 @@ export function StudentFeeCollection({
                                     Net Charge
                                   </th>
                                   <th className="text-right pb-1 font-medium">
-                                    Advance Paid
+                                    Paid
                                   </th>
                                   <th className="text-right pb-1 font-medium">
                                     Payable

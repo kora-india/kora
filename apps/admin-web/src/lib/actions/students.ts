@@ -214,11 +214,18 @@ export async function getStudentDetails(id: string) {
 
   try {
     const student = await getCache(
-      `cache:${user.schoolId}:students:details:v4:${id}`,
+      `cache:${user.schoolId}:students:details:v5:${id}`,
       async () => {
         const s = await prisma.student.findUnique({
           where: { id, schoolId: user.schoolId },
           include: {
+            school: {
+              select: {
+                feePaymentMode: true,
+                minPartialPaymentPercentage: true,
+                minPartialPaymentAmount: true,
+              },
+            },
             class: true,
             section: true,
             fees: {

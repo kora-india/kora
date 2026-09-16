@@ -51,17 +51,17 @@ export function getReceiptFileName(receiptData: FeeReceiptData): string {
     }
   }
 
-  return `${cleanName}_${month}_${year}`;
+  const docPrefix =
+    receiptData.documentType === "PARTIAL_INVOICE" ? "Invoice" : "Receipt";
+  return `${cleanName}_${docPrefix}_${month}_${year}`;
 }
 
 /**
  * Triggers an isolated print using a dedicated hidden iframe.
- * Guarantees that:
- * 1. The output document is never blank (isolated DOM with pure CSS).
- * 2. The suggested PDF filename in Chrome's "Save as PDF" dialog matches document.title (name_month_year).
- * 3. Does not interfere with parent page layout or global print rules.
  */
 export function printReceipt(receiptData: FeeReceiptData) {
+  const isInvoice =
+    receiptData.documentType === "PARTIAL_INVOICE" || receiptData.isPartial;
   const fileName = getReceiptFileName(receiptData);
   const prevTitle = document.title;
   document.title = fileName;
@@ -154,6 +154,26 @@ export function printReceipt(receiptData: FeeReceiptData) {
             margin-top: 4px;
             color: #000000;
           }
+          .doc-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+          }
+          .badge-invoice {
+            border: 1px solid #b45309;
+            background: #fef3c7;
+            color: #92400e;
+          }
+          .badge-receipt {
+            border: 1px solid #15803d;
+            background: #dcfce7;
+            color: #166534;
+          }
           .meta-section {
             font-size: 11.5px;
             line-height: 1.4;
@@ -198,7 +218,8 @@ export function printReceipt(receiptData: FeeReceiptData) {
             border-bottom: 0.5px solid #d1d5db;
           }
           .row-total td,
-          .row-amount-paid td {
+          .row-amount-paid td,
+          .row-remaining td {
             border-top: 1px solid #000000;
             font-weight: 700;
           }
@@ -209,6 +230,15 @@ export function printReceipt(receiptData: FeeReceiptData) {
             font-size: 10px;
             line-height: 1.35;
           }
+          .notice-box {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            padding: 6px;
+            margin-top: 6px;
+            font-size: 10px;
+            color: #92400e;
+            line-height: 1.3;
+          }
         </style>
       </head>
       <body>
@@ -217,13 +247,18 @@ export function printReceipt(receiptData: FeeReceiptData) {
             <div class="school-name">${receiptData.schoolName || "Horizon Private School"}</div>
             ${receiptData.schoolAddress ? `<div class="school-sub">${receiptData.schoolAddress}</div>` : ""}
             ${receiptData.schoolContact ? `<div class="school-sub">${receiptData.schoolContact}</div>` : ""}
-            <div class="receipt-title">SCHOOL FEE TRANSACTION RECEIPT</div>
+            <div class="receipt-title">${isInvoice ? "PROVISIONAL FEE INVOICE & DUES STATEMENT" : "OFFICIAL SCHOOL FEE CLEARANCE BILL"}</div>
+            <div>
+              <span class="doc-badge ${isInvoice ? "badge-invoice" : "badge-receipt"}">
+                ${isInvoice ? "PARTIAL PAYMENT — DUES PENDING" : "CLEARED / FULLY PAID"}
+              </span>
+            </div>
           </div>
 
           <div class="meta-section">
             <div><span class="bold">Transaction Timestamp:</span> ${receiptData.timestamp}</div>
             <div class="meta-flex">
-              <div><span class="bold">Receipt No:</span> ${receiptData.receiptNo}</div>
+              <div><span class="bold">Document / Receipt No:</span> ${receiptData.receiptNo}</div>
               <div><span class="bold">Reg No:</span> ${receiptData.regNo}</div>
             </div>
             <div class="meta-flex">
@@ -235,20 +270,33 @@ export function printReceipt(receiptData: FeeReceiptData) {
           <table class="receipt-table">
             <thead>
               <tr>
-                <th class="col-head bold">Fee Head</th>
-                <th class="col-amount bold">Amount</th>
+                <th class="col-head bold">Fee Head / Component</th>
+                <th class="col-amount bold">Amount (₹)</th>
               </tr>
             </thead>
             <tbody>
               ${itemsRows}
               <tr class="row-total">
-                <td class="col-head bold">Total</td>
-                <td class="col-amount bold">${Number(receiptData.total).toFixed(2)}</td>
+                <td class="col-head bold">${isInvoice ? "Total Month Charge / Billed" : "Total Fee"}</td>
+                <td class="col-amount bold">${Number(isInvoice ? receiptData.monthTotalBilled || receiptData.total : receiptData.total).toFixed(2)}</td>
               </tr>
               <tr class="row-amount-paid">
-                <td class="col-head bold">Amount Paid</td>
+                <td class="col-head bold">${isInvoice ? "Amount Paid (This Installment)" : "Amount Paid"}</td>
                 <td class="col-amount bold">${Number(receiptData.amountPaid).toFixed(2)}</td>
               </tr>
+              ${
+                isInvoice
+                  ? `
+              <tr class="row-remaining" style="color: #b91c1c;">
+                <td class="col-head bold">Remaining Balance Due</td>
+                <td class="col-amount bold">${Number(receiptData.monthRemainingDue || 0).toFixed(2)}</td>
+              </tr>`
+                  : `
+              <tr class="row-remaining" style="color: #15803d;">
+                <td class="col-head bold">Remaining Due</td>
+                <td class="col-amount bold">0.00 (Fully Cleared)</td>
+              </tr>`
+              }
               ${
                 receiptData.paidForMonths
                   ? `
@@ -262,7 +310,11 @@ export function printReceipt(receiptData: FeeReceiptData) {
               </tr>
               <tr class="row-full">
                 <td colspan="2" class="disclaimer">
-                  Receipt generated by ${receiptData.generatedBy}. This is a computer generated receipt and does not require a signature. Please bring this receipt the next time you come to pay the fees.
+                  ${
+                    isInvoice
+                      ? `<strong>PROVISIONAL DUES INVOICE:</strong> Generated by ${receiptData.generatedBy}. This is a provisional installment invoice showing partial payment. The official Fee Clearance Bill will only be issued once the total remaining dues (₹${Number(receiptData.monthRemainingDue || 0).toFixed(2)}) are cleared in full.`
+                      : `<strong>OFFICIAL CLEARANCE BILL:</strong> Generated by ${receiptData.generatedBy}. All dues for the specified month/period are completely settled. This is a computer generated document and does not require a physical signature.`
+                  }
                 </td>
               </tr>
             </tbody>
@@ -328,6 +380,8 @@ export function FeeReceiptModal({
 
   if (!isOpen || !receiptData) return null;
 
+  const isInvoice =
+    receiptData.documentType === "PARTIAL_INVOICE" || receiptData.isPartial;
   const fileName = getReceiptFileName(receiptData);
 
   const handleManualPrint = () => {
@@ -341,7 +395,20 @@ export function FeeReceiptModal({
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/80">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">
-              Fee Receipt
+              {isInvoice
+                ? "Provisional Fee Invoice"
+                : "Official Fee Clearance Bill"}
+            </span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded font-medium border ${
+                isInvoice
+                  ? "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+                  : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+              }`}
+            >
+              {isInvoice
+                ? `Partial Paid (₹${Number(receiptData.monthRemainingDue || 0).toFixed(0)} Due)`
+                : "Cleared / Full"}
             </span>
             <span className="text-xs font-mono text-muted-foreground bg-neutral-200/60 dark:bg-neutral-800 px-2 py-0.5 rounded">
               {receiptData.receiptNo}
@@ -352,10 +419,14 @@ export function FeeReceiptModal({
             <button
               type="button"
               onClick={handleManualPrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-white text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer ${
+                isInvoice
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
             >
               <Printer className="w-3.5 h-3.5" />
-              Print Receipt
+              {isInvoice ? "Print Dues Invoice" : "Print Official Bill"}
             </button>
             <button
               type="button"
@@ -381,7 +452,7 @@ export function FeeReceiptModal({
 
         {/* Scrollable Receipt Preview Container */}
         <div className="p-6 sm:p-8 bg-neutral-100 dark:bg-neutral-950/50 flex justify-center max-h-[75vh] overflow-y-auto">
-          {/* Exact Visual Receipt Paper matching Image 2 */}
+          {/* Visual Paper Document */}
           <div className="w-full max-w-[520px] bg-white text-black p-6 sm:p-7 shadow-md border border-neutral-300 font-sans select-none">
             {/* School Header */}
             <div className="text-center space-y-0.5 pb-2">
@@ -399,8 +470,23 @@ export function FeeReceiptModal({
                 </p>
               )}
               <h2 className="text-sm font-bold text-black uppercase tracking-wider pt-1">
-                SCHOOL FEE TRANSACTION RECEIPT
+                {isInvoice
+                  ? "PROVISIONAL FEE INVOICE & DUES STATEMENT"
+                  : "OFFICIAL SCHOOL FEE CLEARANCE BILL"}
               </h2>
+              <div>
+                <span
+                  className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wide ${
+                    isInvoice
+                      ? "border-amber-700 bg-amber-50 text-amber-900"
+                      : "border-green-700 bg-green-50 text-green-900"
+                  }`}
+                >
+                  {isInvoice
+                    ? "PARTIAL PAYMENT — DUES PENDING"
+                    : "CLEARED / FULLY PAID"}
+                </span>
+              </div>
             </div>
 
             {/* Meta Information */}
@@ -411,7 +497,7 @@ export function FeeReceiptModal({
               </div>
               <div className="flex justify-between items-center">
                 <div>
-                  <span className="font-bold">Receipt No: </span>
+                  <span className="font-bold">Document / Receipt No: </span>
                   <span>{receiptData.receiptNo}</span>
                 </div>
                 <div>
@@ -439,10 +525,10 @@ export function FeeReceiptModal({
                 <thead>
                   <tr className="border-b border-black font-bold">
                     <th className="border-r border-black p-1.5 text-left font-bold w-[72%]">
-                      Fee Head
+                      Fee Head / Component
                     </th>
                     <th className="p-1.5 text-right font-bold w-[28%]">
-                      Amount
+                      Amount (₹)
                     </th>
                   </tr>
                 </thead>
@@ -461,22 +547,49 @@ export function FeeReceiptModal({
                   {/* Total Row */}
                   <tr className="border-t border-black font-bold">
                     <td className="border-r border-black px-2 py-1.5 text-left font-bold">
-                      Total
+                      {isInvoice ? "Total Month Charge / Billed" : "Total Fee"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono font-bold">
-                      {Number(receiptData.total).toFixed(2)}
+                      {Number(
+                        isInvoice
+                          ? receiptData.monthTotalBilled || receiptData.total
+                          : receiptData.total,
+                      ).toFixed(2)}
                     </td>
                   </tr>
 
                   {/* Amount Paid Row */}
                   <tr className="border-t border-black font-bold">
                     <td className="border-r border-black px-2 py-1.5 text-left font-bold">
-                      Amount Paid
+                      {isInvoice
+                        ? "Amount Paid (This Installment)"
+                        : "Amount Paid"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono font-bold">
                       {Number(receiptData.amountPaid).toFixed(2)}
                     </td>
                   </tr>
+
+                  {/* Remaining Balance Row */}
+                  {isInvoice ? (
+                    <tr className="border-t border-black font-bold text-red-700">
+                      <td className="border-r border-black px-2 py-1.5 text-left font-bold">
+                        Remaining Balance Due
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono font-bold">
+                        {Number(receiptData.monthRemainingDue || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="border-t border-black font-bold text-emerald-700">
+                      <td className="border-r border-black px-2 py-1.5 text-left font-bold">
+                        Remaining Due
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono font-bold">
+                        0.00 (Fully Cleared)
+                      </td>
+                    </tr>
+                  )}
 
                   {/* Paid for Months Row */}
                   {receiptData.paidForMonths && (
@@ -498,19 +611,33 @@ export function FeeReceiptModal({
                     </td>
                   </tr>
 
-                  {/* Disclaimer & Authorization Row */}
+                  {/* Disclaimer & Notice Row */}
                   <tr className="border-t border-black">
                     <td
                       colSpan={2}
                       className="px-2 py-1.5 text-left text-[11px] leading-relaxed text-black"
                     >
-                      Receipt generated by{" "}
-                      <span className="font-medium">
-                        {receiptData.generatedBy}
-                      </span>
-                      . This is a computer generated receipt and does not
-                      require a signature. Please bring this receipt the next
-                      time you come to pay the fees.
+                      {isInvoice ? (
+                        <div>
+                          <strong>PROVISIONAL DUES INVOICE:</strong> Generated
+                          by {receiptData.generatedBy}. This is a provisional
+                          installment invoice showing remaining dues. The
+                          official Fee Clearance Bill will only be issued once
+                          the total remaining dues (₹
+                          {Number(receiptData.monthRemainingDue || 0).toFixed(
+                            2,
+                          )}
+                          ) are cleared in full.
+                        </div>
+                      ) : (
+                        <div>
+                          <strong>OFFICIAL CLEARANCE BILL:</strong> Generated by{" "}
+                          {receiptData.generatedBy}. All dues for the specified
+                          month/period are completely settled. This is a
+                          computer generated document and does not require a
+                          physical signature.
+                        </div>
+                      )}
                     </td>
                   </tr>
                 </tbody>
@@ -522,7 +649,9 @@ export function FeeReceiptModal({
         {/* Bottom Control Bar */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/80">
           <p className="text-xs text-muted-foreground">
-            Saves as portrait PDF formatted to single-sheet receipt standards.
+            {isInvoice
+              ? "Provisional installment invoice. Clearance bill locked until dues are 0."
+              : "Official settlement bill for cleared monthly fees."}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -535,10 +664,14 @@ export function FeeReceiptModal({
             <button
               type="button"
               onClick={handleManualPrint}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-white text-xs font-semibold shadow-sm transition-all cursor-pointer ${
+                isInvoice
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
             >
               <Printer className="w-3.5 h-3.5" />
-              Print Receipt
+              {isInvoice ? "Print Dues Invoice" : "Print Official Bill"}
             </button>
           </div>
         </div>

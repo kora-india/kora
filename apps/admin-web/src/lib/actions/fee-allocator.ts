@@ -35,10 +35,18 @@ export interface FeeReceiptData {
   paidForMonths: string;
   paymentType: string;
   generatedBy: string;
+
+  // Partial vs Clearance Bill tracking
+  isPartial: boolean;
+  documentType: "OFFICIAL_RECEIPT" | "PARTIAL_INVOICE";
+  monthTotalBilled: number;
+  monthTotalPaid: number;
+  monthRemainingDue: number;
 }
 
 export async function allocatePayment(data: {
   studentId: string;
+  monthPayments?: { chargeId: string; amount: number }[];
   itemPayments?: { chargeItemId: string; amount: number }[];
   componentPayments?: { componentId: string; amount: number }[];
   generalAdvanceAmount?: number;
@@ -49,20 +57,46 @@ export async function allocatePayment(data: {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
+  const monthTotal = (data.monthPayments || []).reduce(
+    (sum, mp) => sum + (Number(mp.amount) || 0),
+    0,
+  );
   const itemTotal = (data.itemPayments || []).reduce(
-    (sum, ip) => sum + ip.amount,
+    (sum, ip) => sum + (Number(ip.amount) || 0),
     0,
   );
   const componentTotal = (data.componentPayments || []).reduce(
-    (sum, cp) => sum + cp.amount,
+    (sum, cp) => sum + (Number(cp.amount) || 0),
     0,
   );
   const totalPayment =
-    itemTotal + componentTotal + (data.generalAdvanceAmount || 0);
+    monthTotal +
+    itemTotal +
+    componentTotal +
+    (Number(data.generalAdvanceAmount) || 0);
+
   if (totalPayment <= 0)
     return { error: "Payment amount must be greater than zero." };
 
   try {
+    // 0. Fetch school fee policy
+    const school = await prisma.school.findUnique({
+      where: { id: user.schoolId },
+      select: {
+        feePaymentMode: true,
+        minPartialPaymentPercentage: true,
+        minPartialPaymentAmount: true,
+      },
+    });
+
+    const feePaymentMode = school?.feePaymentMode || "ALLOW_PARTIAL";
+    const minPartialPaymentPercentage = Number(
+      school?.minPartialPaymentPercentage || 0,
+    );
+    const minPartialPaymentAmount = Number(
+      school?.minPartialPaymentAmount || 0,
+    );
+
     const receiptNo = `RCP-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
 
     const result = await prisma.$transaction(
@@ -84,10 +118,122 @@ export async function allocatePayment(data: {
         const allocationsCreated = [];
         const affectedChargeIds = new Set<string>();
 
-        // 2. Allocate item-wise payments if provided
+        // 2. Allocate Month-wise payments if provided
+        if (data.monthPayments && data.monthPayments.length > 0) {
+          for (const mp of data.monthPayments) {
+            const enteredAmount = Number(mp.amount) || 0;
+            if (enteredAmount <= 0) continue;
+
+            const charge = await tx.feeCharge.findUnique({
+              where: { id: mp.chargeId },
+              include: {
+                items: {
+                  include: { component: true },
+                },
+              },
+            });
+
+            if (!charge || charge.studentId !== data.studentId) continue;
+
+            // Calculate total billed amount and remaining due for this charge
+            let totalChargeBilled = 0;
+            let totalChargeDue = 0;
+
+            for (const it of charge.items) {
+              if (it.status === "WAIVED") continue;
+              const amt = Number(it.amount || 0);
+              const paid = Number(it.paidAmount || 0);
+              totalChargeBilled += amt;
+              totalChargeDue += Math.max(0, amt - paid);
+            }
+
+            // Policy Enforcements
+            if (enteredAmount < totalChargeDue) {
+              if (feePaymentMode === "FULL_ONLY") {
+                throw new Error(
+                  `Payment failed: School policy requires clearing the full monthly due of ₹${totalChargeDue.toFixed(2)} for ${charge.title}. Partial payments are disabled.`,
+                );
+              } else if (feePaymentMode === "ALLOW_PARTIAL") {
+                // Calculate minimum installment threshold based on the month's total billed charge
+                let minRequired = 0;
+                if (minPartialPaymentPercentage > 0) {
+                  minRequired = Math.ceil(
+                    (totalChargeBilled * minPartialPaymentPercentage) / 100,
+                  );
+                } else if (minPartialPaymentAmount > 0) {
+                  minRequired = minPartialPaymentAmount;
+                }
+
+                // LOOPHOLE PREVENTION:
+                // If remaining due is already <= minRequired threshold (e.g. ₹200 left on a ₹1,000 charge where min 80% is ₹800),
+                // the student CANNOT pay a fraction of the remaining ₹200; they must clear it in full!
+                if (minRequired > 0 && totalChargeDue <= minRequired) {
+                  throw new Error(
+                    `Payment failed: The remaining due for ${charge.title} is ₹${totalChargeDue.toFixed(2)}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minRequired})` : `₹${minRequired}`}). The remaining balance must be cleared in full.`,
+                  );
+                } else if (minRequired > 0 && enteredAmount < minRequired) {
+                  throw new Error(
+                    `Payment failed: Minimum partial payment for ${charge.title} is ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minRequired.toFixed(2)})` : `₹${minRequired.toFixed(2)}`}.`,
+                  );
+                }
+              }
+            }
+
+            // Distribute entered amount across unpaid charge items
+            let remainingForCharge = enteredAmount;
+            const eligibleItems = charge.items.filter(
+              (it) => it.status !== "WAIVED",
+            );
+
+            for (const item of eligibleItems) {
+              if (remainingForCharge <= 0) break;
+              const itemDue = Math.max(
+                0,
+                Number(item.amount) - Number(item.paidAmount),
+              );
+              if (itemDue <= 0) continue;
+
+              const allocAmount = Math.min(itemDue, remainingForCharge);
+              allocationsCreated.push({
+                paymentId: payment.id,
+                chargeItemId: item.id,
+                amount: allocAmount,
+              });
+
+              remainingForCharge -= allocAmount;
+
+              const newPaidAmount = Number(item.paidAmount) + allocAmount;
+              const newItemStatus =
+                newPaidAmount >= Number(item.amount)
+                  ? FeeStatus.PAID
+                  : FeeStatus.PARTIAL;
+
+              await tx.feeChargeItem.update({
+                where: { id: item.id },
+                data: { paidAmount: newPaidAmount, status: newItemStatus },
+              });
+            }
+
+            affectedChargeIds.add(charge.id);
+
+            // True surplus (paid more than the total month due) goes to advance
+            if (remainingForCharge > 0) {
+              await tx.advanceLedger.create({
+                data: {
+                  studentId: data.studentId,
+                  amount: remainingForCharge,
+                  description: `Surplus Advance from payment ${receiptNo} for ${charge.title}`,
+                },
+              });
+            }
+          }
+        }
+
+        // 3. Allocate item-wise payments if provided
         if (data.itemPayments && data.itemPayments.length > 0) {
           for (const ip of data.itemPayments) {
-            if (ip.amount <= 0) continue;
+            const itemAmount = Number(ip.amount) || 0;
+            if (itemAmount <= 0) continue;
 
             const item = await tx.feeChargeItem.findUnique({
               where: { id: ip.chargeItemId },
@@ -97,8 +243,8 @@ export async function allocatePayment(data: {
             if (!item || item.charge.studentId !== data.studentId) continue;
 
             const due = Number(item.amount) - Number(item.paidAmount);
-            const allocAmount = Math.min(due, ip.amount);
-            const surplus = Math.max(0, ip.amount - due);
+            const allocAmount = Math.min(due, itemAmount);
+            const surplus = Math.max(0, itemAmount - due);
 
             if (allocAmount > 0) {
               allocationsCreated.push({
@@ -108,12 +254,10 @@ export async function allocatePayment(data: {
               });
 
               const newPaidAmount = Number(item.paidAmount) + allocAmount;
-              let newItemStatus = item.status;
-              if (newPaidAmount >= Number(item.amount)) {
-                newItemStatus = FeeStatus.PAID;
-              } else if (newPaidAmount > 0) {
-                newItemStatus = FeeStatus.PARTIAL;
-              }
+              const newItemStatus =
+                newPaidAmount >= Number(item.amount)
+                  ? FeeStatus.PAID
+                  : FeeStatus.PARTIAL;
 
               await tx.feeChargeItem.update({
                 where: { id: item.id },
@@ -136,7 +280,7 @@ export async function allocatePayment(data: {
           }
         }
 
-        // 3. Allocate component-wise payments if provided
+        // 4. Allocate component-wise payments if provided
         if (data.componentPayments && data.componentPayments.length > 0) {
           for (const cp of data.componentPayments) {
             if (cp.amount <= 0) continue;
@@ -173,12 +317,10 @@ export async function allocatePayment(data: {
 
                 // Update item status
                 const newPaidAmount = Number(item.paidAmount) + allocAmount;
-                let newItemStatus = item.status;
-                if (newPaidAmount >= Number(item.amount)) {
-                  newItemStatus = FeeStatus.PAID;
-                } else if (newPaidAmount > 0) {
-                  newItemStatus = FeeStatus.PARTIAL;
-                }
+                const newItemStatus =
+                  newPaidAmount >= Number(item.amount)
+                    ? FeeStatus.PAID
+                    : FeeStatus.PARTIAL;
 
                 await tx.feeChargeItem.update({
                   where: { id: item.id },
@@ -189,7 +331,7 @@ export async function allocatePayment(data: {
               }
             }
 
-            // Create component-specific advance if there's remaining amount
+            // Create component-specific advance if there's remaining surplus
             if (remainingAmount > 0) {
               await tx.advanceLedger.create({
                 data: {
@@ -203,7 +345,7 @@ export async function allocatePayment(data: {
           }
         }
 
-        // 4. Create General Advance if explicitly provided
+        // 5. Create General Advance if explicitly provided
         if (data.generalAdvanceAmount && data.generalAdvanceAmount > 0) {
           await tx.advanceLedger.create({
             data: {
@@ -214,14 +356,14 @@ export async function allocatePayment(data: {
           });
         }
 
-        // 5. Create Allocations
+        // 6. Create Allocations
         if (allocationsCreated.length > 0) {
           await tx.paymentAllocation.createMany({
             data: allocationsCreated,
           });
         }
 
-        // 6. Update Parent Charge Statuses
+        // 7. Update Parent Charge Statuses
         for (const chargeId of Array.from(affectedChargeIds)) {
           const items = await tx.feeChargeItem.findMany({
             where: { chargeId },
@@ -295,7 +437,16 @@ export async function getFeeReceiptDetails(
         allocations: {
           include: {
             chargeItem: {
-              include: { component: true, charge: true },
+              include: {
+                component: true,
+                charge: {
+                  include: {
+                    items: {
+                      include: { component: true },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -332,15 +483,19 @@ export async function getFeeReceiptDetails(
 
     const headMap: Record<string, number> = {};
     const monthsSet = new Set<string>();
+    const chargesMap = new Map<string, any>();
 
     for (const alloc of payment.allocations) {
       const compName = alloc.chargeItem?.component?.name || "Fee";
       const amt = Number(alloc.amount || 0);
       headMap[compName] = (headMap[compName] || 0) + amt;
 
-      const chargeTitle = alloc.chargeItem?.charge?.title;
-      if (chargeTitle) {
-        monthsSet.add(chargeTitle);
+      const charge = alloc.chargeItem?.charge;
+      if (charge) {
+        monthsSet.add(charge.title);
+        if (!chargesMap.has(charge.id)) {
+          chargesMap.set(charge.id, charge);
+        }
       }
     }
 
@@ -381,6 +536,36 @@ export async function getFeeReceiptDetails(
 
     const generatedBy = user.name || "School Administration";
 
+    // Determine if this payment leaves dues or clears the month
+    let monthTotalBilled = 0;
+    let monthTotalPaid = 0;
+    let monthRemainingDue = 0;
+    let isPartial = false;
+
+    if (chargesMap.size > 0) {
+      chargesMap.forEach((charge) => {
+        let chargeBilled = 0;
+        let chargePaid = 0;
+        charge.items?.forEach((it: any) => {
+          if (it.status !== "WAIVED") {
+            const amt = Number(it.amount || 0);
+            const pd = Number(it.paidAmount || 0);
+            chargeBilled += amt;
+            chargePaid += pd;
+          }
+        });
+        monthTotalBilled += chargeBilled;
+        monthTotalPaid += chargePaid;
+        const due = Math.max(0, chargeBilled - chargePaid);
+        monthRemainingDue += due;
+        if (due > 0 || charge.status !== "PAID") {
+          isPartial = true;
+        }
+      });
+    }
+
+    const documentType = isPartial ? "PARTIAL_INVOICE" : "OFFICIAL_RECEIPT";
+
     const data: FeeReceiptData = {
       schoolName: school?.name || "Horizon Private School",
       schoolAddress,
@@ -396,6 +581,11 @@ export async function getFeeReceiptDetails(
       paidForMonths,
       paymentType,
       generatedBy,
+      isPartial,
+      documentType,
+      monthTotalBilled: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
+      monthTotalPaid: monthTotalPaid > 0 ? monthTotalPaid : txAmount,
+      monthRemainingDue,
     };
 
     return { success: true, data };
@@ -433,6 +623,13 @@ export async function getStudentFeeDues(studentId: string) {
     const student = await prisma.student.findUnique({
       where: { id: studentId, schoolId: user.schoolId },
       include: {
+        school: {
+          select: {
+            feePaymentMode: true,
+            minPartialPaymentPercentage: true,
+            minPartialPaymentAmount: true,
+          },
+        },
         advanceLedgers: true,
         class: { select: { id: true, name: true } },
         section: { select: { id: true, name: true } },

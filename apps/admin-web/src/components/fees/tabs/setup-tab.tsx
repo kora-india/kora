@@ -28,10 +28,12 @@ import {
   updateFeeComponent,
   updateFeeStructure,
   saveLateFeeSettings,
+  saveFeeCollectionPolicy,
 } from "@/lib/actions/fee-settings";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
+import { ShieldCheck, Banknote } from "lucide-react";
 
 interface Props {
   sessions: any[];
@@ -94,6 +96,17 @@ export function SetupTab({
       lateFeeEnabled: school?.lateFeeEnabled || false,
       lateFeeAmount: Number(school?.lateFeeAmount) || undefined,
       lateFeeFrequency: school?.lateFeeFrequency || "MONTHLY",
+    },
+  });
+
+  const policyForm = useForm({
+    defaultValues: {
+      feePaymentMode:
+        (school?.feePaymentMode as "FULL_ONLY" | "ALLOW_PARTIAL") ||
+        "ALLOW_PARTIAL",
+      minPartialPaymentPercentage:
+        Number(school?.minPartialPaymentPercentage) || 0,
+      minPartialPaymentAmount: Number(school?.minPartialPaymentAmount) || 0,
     },
   });
 
@@ -276,6 +289,27 @@ export function SetupTab({
     }
   };
 
+  const onPolicySubmit = async (data: any) => {
+    const toastId = "policy-submit";
+    toast.loading("Updating fee collection policy...", { id: toastId });
+    try {
+      const res = await saveFeeCollectionPolicy({
+        feePaymentMode: data.feePaymentMode,
+        minPartialPaymentPercentage: Number(
+          data.minPartialPaymentPercentage || 0,
+        ),
+        minPartialPaymentAmount: Number(data.minPartialPaymentAmount || 0),
+      });
+      if (res.error) toast.error(res.error, { id: toastId });
+      else
+        toast.success("Fee collection policy updated successfully", {
+          id: toastId,
+        });
+    } catch {
+      toast.error("Failed to update fee collection policy", { id: toastId });
+    }
+  };
+
   // Helper Calculations
   const activeSession = sessions.find((s) => s.isCurrent) || sessions[0];
 
@@ -319,7 +353,7 @@ export function SetupTab({
       {/* ------------------------------------------------------------- */}
       {/* 1. TOP SUMMARY STRIP: Quick Institutional Status Overview     */}
       {/* ------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Active Session Card */}
         <div className="bg-card border rounded-2xl p-4 shadow-sm flex items-center justify-between hover:border-violet-300 dark:hover:border-violet-800 transition-colors">
           <div className="space-y-1">
@@ -347,11 +381,10 @@ export function SetupTab({
               Fee Components
             </p>
             <p className="text-lg font-bold text-foreground">
-              {components.length} Items
+              {components.length} Heads
             </p>
             <p className="text-[11px] text-muted-foreground">
-              {components.filter((c) => !c.isOptional).length} Mandatory,{" "}
-              {components.filter((c) => c.isOptional).length} Optional
+              Tuition, transport &amp; custom
             </p>
           </div>
           <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400">
@@ -369,11 +402,46 @@ export function SetupTab({
               {structures.length} Plans
             </p>
             <p className="text-[11px] text-muted-foreground">
-              Configured for classes & grades
+              Configured for classes &amp; grades
             </p>
           </div>
           <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
             <Layers className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Collection Policy Card */}
+        <div className="bg-card border rounded-2xl p-4 shadow-sm flex items-center justify-between hover:border-violet-300 dark:hover:border-violet-800 transition-colors">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Collection Policy
+            </p>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`inline-block w-2 h-2 rounded-full ${
+                  school?.feePaymentMode === "FULL_ONLY"
+                    ? "bg-blue-500"
+                    : "bg-emerald-500"
+                }`}
+              />
+              <p className="text-sm font-bold text-foreground truncate max-w-[130px]">
+                {school?.feePaymentMode === "FULL_ONLY"
+                  ? "Full Due Only"
+                  : "Allow Partial"}
+              </p>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {school?.feePaymentMode === "FULL_ONLY"
+                ? "Installments blocked"
+                : Number(school?.minPartialPaymentPercentage) > 0
+                  ? `Min ${Number(school.minPartialPaymentPercentage)}% / pay`
+                  : Number(school?.minPartialPaymentAmount) > 0
+                    ? `Min ₹${Number(school.minPartialPaymentAmount)} / pay`
+                    : "No min limit set"}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+            <ShieldCheck className="w-5 h-5" />
           </div>
         </div>
 
@@ -581,6 +649,140 @@ export function SetupTab({
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   )}
                   Save Late Fee Policy
+                </button>
+              )}
+            </form>
+          </div>
+
+          {/* Fee Collection Policy Card */}
+          <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2.5 pb-3 border-b">
+              <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-foreground">
+                  Fee Collection Policy
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Installment rules, partial dues &amp; clearance bill access
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={policyForm.handleSubmit(onPolicySubmit)}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground">
+                  Student Clearance Mode
+                </label>
+
+                <div className="grid grid-cols-1 gap-2.5">
+                  {/* Option 1: Full Only */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      policyForm.watch("feePaymentMode") === "FULL_ONLY"
+                        ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
+                        : "bg-background hover:bg-muted/30 border-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      value="FULL_ONLY"
+                      {...policyForm.register("feePaymentMode")}
+                      className="mt-1 text-violet-600 focus:ring-violet-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <span>1. Full Due Clearance Only</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-semibold">
+                          Strict
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Student can only clear each month&apos;s dues in full.
+                        Partial installment entries are disabled. Official
+                        clearance bill is issued immediately upon payment.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Allow Partial */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL"
+                        ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
+                        : "bg-background hover:bg-muted/30 border-muted"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      value="ALLOW_PARTIAL"
+                      {...policyForm.register("feePaymentMode")}
+                      className="mt-1 text-violet-600 focus:ring-violet-500"
+                    />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <span>2. Allow Partial Month Payments</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">
+                          Flexible
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Student can clear dues in partial installments. Issues a
+                        provisional dues invoice until the entire month&apos;s
+                        balance is cleared.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Min Partial Payment Input */}
+              {policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL" && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2 pt-1"
+                >
+                  <FormField
+                    label="Minimum Partial Payment Percentage (%)"
+                    required
+                  >
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="100"
+                        placeholder="e.g. 80"
+                        {...policyForm.register("minPartialPaymentPercentage")}
+                        className={inputCls}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Percentage of the month&apos;s total billed fee required
+                      per installment (e.g. 80%). If remaining due is less than
+                      or equal to this threshold, the student must clear the
+                      remaining balance in full.
+                    </p>
+                  </FormField>
+                </motion.div>
+              )}
+
+              {canEdit && (
+                <button
+                  type="submit"
+                  disabled={policyForm.formState.isSubmitting}
+                  className="w-full h-9 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  {policyForm.formState.isSubmitting && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  Save Fee Collection Policy
                 </button>
               )}
             </form>

@@ -10,12 +10,18 @@ async function getFinanceSession() {
   if (!session?.user) return null;
   const user = session.user;
   if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role)) return null;
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role))
+    return null;
   return { ...user, schoolId: user.schoolId };
 }
 
 // -- Academic Sessions
-export async function createAcademicSession(data: { name: string; startDate: string; endDate: string; isCurrent: boolean }) {
+export async function createAcademicSession(data: {
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -24,7 +30,7 @@ export async function createAcademicSession(data: { name: string; startDate: str
       // Unset current session if this one is true
       await prisma.academicSession.updateMany({
         where: { schoolId: user.schoolId },
-        data: { isCurrent: false }
+        data: { isCurrent: false },
       });
     }
 
@@ -34,8 +40,8 @@ export async function createAcademicSession(data: { name: string; startDate: str
         name: data.name,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        isCurrent: data.isCurrent
-      }
+        isCurrent: data.isCurrent,
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
@@ -49,7 +55,12 @@ export async function createAcademicSession(data: { name: string; startDate: str
 }
 
 // -- Fee Components
-export async function createFeeComponent(data: { name: string; amount: number; frequency: FeeFrequency; isOptional: boolean }) {
+export async function createFeeComponent(data: {
+  name: string;
+  amount: number;
+  frequency: FeeFrequency;
+  isOptional: boolean;
+}) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -60,8 +71,8 @@ export async function createFeeComponent(data: { name: string; amount: number; f
         name: data.name,
         amount: data.amount,
         frequency: data.frequency,
-        isOptional: data.isOptional
-      }
+        isOptional: data.isOptional,
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
@@ -74,7 +85,11 @@ export async function createFeeComponent(data: { name: string; amount: number; f
 }
 
 // -- Fee Structures
-export async function createFeeStructure(data: { name: string; sessionId: string; components: { componentId: string, amount?: number }[] }) {
+export async function createFeeStructure(data: {
+  name: string;
+  sessionId: string;
+  components: { componentId: string; amount?: number }[];
+}) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -85,9 +100,12 @@ export async function createFeeStructure(data: { name: string; sessionId: string
         sessionId: data.sessionId,
         name: data.name,
         items: {
-          create: data.components.map(c => ({ componentId: c.componentId, amount: c.amount }))
-        }
-      }
+          create: data.components.map((c) => ({
+            componentId: c.componentId,
+            amount: c.amount,
+          })),
+        },
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
@@ -99,24 +117,27 @@ export async function createFeeStructure(data: { name: string; sessionId: string
 }
 
 // -- Class Assignments
-export async function assignFeeStructureToClass(classId: string, structureId: string) {
+export async function assignFeeStructureToClass(
+  classId: string,
+  structureId: string,
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
     // Upsert assignment for class
     const existing = await prisma.classFeeStructure.findFirst({
-      where: { classId }
+      where: { classId },
     });
 
     if (existing) {
       await prisma.classFeeStructure.update({
         where: { id: existing.id },
-        data: { structureId }
+        data: { structureId },
       });
     } else {
       await prisma.classFeeStructure.create({
-        data: { classId, structureId }
+        data: { classId, structureId },
       });
     }
 
@@ -131,7 +152,12 @@ export async function assignFeeStructureToClass(classId: string, structureId: st
 }
 
 // -- Student Overrides
-export async function setStudentFeeOverride(studentId: string, sessionId: string, componentId: string, data: { isExempt: boolean; discountAmount: number; amount?: number }) {
+export async function setStudentFeeOverride(
+  studentId: string,
+  sessionId: string,
+  componentId: string,
+  data: { isExempt: boolean; discountAmount: number; amount?: number },
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -141,9 +167,9 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
         studentId_sessionId_componentId: {
           studentId,
           sessionId,
-          componentId
-        }
-      }
+          componentId,
+        },
+      },
     });
 
     if (existing) {
@@ -152,8 +178,8 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
         data: {
           isExempt: data.isExempt,
           discountAmount: data.discountAmount,
-          amount: data.amount
-        }
+          amount: data.amount,
+        },
       });
     } else {
       await prisma.studentFeeOverride.create({
@@ -163,8 +189,8 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
           componentId,
           isExempt: data.isExempt,
           discountAmount: data.discountAmount,
-          amount: data.amount
-        }
+          amount: data.amount,
+        },
       });
     }
 
@@ -178,7 +204,15 @@ export async function setStudentFeeOverride(studentId: string, sessionId: string
 }
 
 // -- Update Academic Session
-export async function updateAcademicSession(id: string, data: { name: string; startDate: string; endDate: string; isCurrent: boolean }) {
+export async function updateAcademicSession(
+  id: string,
+  data: {
+    name: string;
+    startDate: string;
+    endDate: string;
+    isCurrent: boolean;
+  },
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -186,7 +220,7 @@ export async function updateAcademicSession(id: string, data: { name: string; st
     if (data.isCurrent) {
       await prisma.academicSession.updateMany({
         where: { schoolId: user.schoolId },
-        data: { isCurrent: false }
+        data: { isCurrent: false },
       });
     }
 
@@ -196,8 +230,8 @@ export async function updateAcademicSession(id: string, data: { name: string; st
         name: data.name,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        isCurrent: data.isCurrent
-      }
+        isCurrent: data.isCurrent,
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
@@ -211,7 +245,15 @@ export async function updateAcademicSession(id: string, data: { name: string; st
 }
 
 // -- Update Fee Component
-export async function updateFeeComponent(id: string, data: { name: string; amount: number; frequency: FeeFrequency; isOptional: boolean }) {
+export async function updateFeeComponent(
+  id: string,
+  data: {
+    name: string;
+    amount: number;
+    frequency: FeeFrequency;
+    isOptional: boolean;
+  },
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -222,8 +264,8 @@ export async function updateFeeComponent(id: string, data: { name: string; amoun
         name: data.name,
         amount: data.amount,
         frequency: data.frequency,
-        isOptional: data.isOptional
-      }
+        isOptional: data.isOptional,
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
@@ -236,7 +278,14 @@ export async function updateFeeComponent(id: string, data: { name: string; amoun
 }
 
 // -- Update Fee Structure
-export async function updateFeeStructure(id: string, data: { name: string; sessionId: string; components: { componentId: string, amount?: number }[] }) {
+export async function updateFeeStructure(
+  id: string,
+  data: {
+    name: string;
+    sessionId: string;
+    components: { componentId: string; amount?: number }[];
+  },
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -249,9 +298,12 @@ export async function updateFeeStructure(id: string, data: { name: string; sessi
         name: data.name,
         items: {
           deleteMany: {},
-          create: data.components.map(c => ({ componentId: c.componentId, amount: c.amount }))
-        }
-      }
+          create: data.components.map((c) => ({
+            componentId: c.componentId,
+            amount: c.amount,
+          })),
+        },
+      },
     });
 
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
@@ -263,7 +315,11 @@ export async function updateFeeStructure(id: string, data: { name: string; sessi
 }
 
 // -- Late Fee Settings
-export async function saveLateFeeSettings(data: { lateFeeEnabled: boolean; lateFeeAmount?: number; lateFeeFrequency?: string }) {
+export async function saveLateFeeSettings(data: {
+  lateFeeEnabled: boolean;
+  lateFeeAmount?: number;
+  lateFeeFrequency?: string;
+}) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -272,15 +328,16 @@ export async function saveLateFeeSettings(data: { lateFeeEnabled: boolean; lateF
       where: { id: user.schoolId },
       data: {
         lateFeeEnabled: data.lateFeeEnabled,
-        lateFeeAmount: data.lateFeeAmount !== undefined ? data.lateFeeAmount : null,
+        lateFeeAmount:
+          data.lateFeeAmount !== undefined ? data.lateFeeAmount : null,
         lateFeeFrequency: data.lateFeeFrequency || "MONTHLY",
-      }
+      },
     });
 
     // If enabled, ensure the "Late Fee" FeeComponent exists
     if (data.lateFeeEnabled) {
       const existing = await prisma.feeComponent.findFirst({
-        where: { schoolId: user.schoolId, category: "LATE_FEE" }
+        where: { schoolId: user.schoolId, category: "LATE_FEE" },
       });
       if (!existing) {
         await prisma.feeComponent.create({
@@ -291,19 +348,61 @@ export async function saveLateFeeSettings(data: { lateFeeEnabled: boolean; lateF
             amount: data.lateFeeAmount || 0,
             frequency: "MONTHLY",
             isOptional: false,
-          }
+          },
         });
-      } else if (existing.amount && Number(existing.amount) !== data.lateFeeAmount) {
-         await prisma.feeComponent.update({
-           where: { id: existing.id },
-           data: { amount: data.lateFeeAmount || 0 }
-         });
+      } else if (
+        existing.amount &&
+        Number(existing.amount) !== data.lateFeeAmount
+      ) {
+        await prisma.feeComponent.update({
+          where: { id: existing.id },
+          data: { amount: data.lateFeeAmount || 0 },
+        });
       }
     }
 
     await invalidateCache(`cache:${user.schoolId}:school:*`);
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+// -- Fee Collection Policy Settings
+export async function saveFeeCollectionPolicy(data: {
+  feePaymentMode: "FULL_ONLY" | "ALLOW_PARTIAL";
+  minPartialPaymentPercentage?: number;
+  minPartialPaymentAmount?: number;
+}) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  try {
+    const minPercent =
+      data.feePaymentMode === "ALLOW_PARTIAL"
+        ? data.minPartialPaymentPercentage !== undefined &&
+          !isNaN(Number(data.minPartialPaymentPercentage))
+          ? Math.max(0, Math.min(100, Number(data.minPartialPaymentPercentage)))
+          : 0
+        : 0;
+
+    await prisma.school.update({
+      where: { id: user.schoolId },
+      data: {
+        feePaymentMode: data.feePaymentMode,
+        minPartialPaymentPercentage: minPercent,
+        minPartialPaymentAmount:
+          data.minPartialPaymentAmount !== undefined &&
+          !isNaN(Number(data.minPartialPaymentAmount))
+            ? Number(data.minPartialPaymentAmount)
+            : 0,
+      },
+    });
+
+    await invalidateCache(`cache:${user.schoolId}:school:*`);
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {

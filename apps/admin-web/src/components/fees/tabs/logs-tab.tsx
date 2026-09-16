@@ -398,80 +398,102 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredTransactions.map((tx: any) => (
-                  <tr
-                    key={tx.id}
-                    onClick={() => setSelectedTx(tx)}
-                    className="hover:bg-muted/30 transition-colors cursor-pointer group"
-                  >
-                    <td className="px-4 py-3 font-mono font-bold text-violet-600 dark:text-violet-400">
-                      {tx.receiptNo}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(tx.date || tx.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-foreground">
-                        {tx.student?.name}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Roll: {tx.student?.rollNumber || "-"}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                          tx.method === "CASH"
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                            : tx.method === "UPI"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              : tx.method === "CHEQUE"
-                                ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300"
-                                : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                        }`}
-                      >
-                        {tx.method || "CASH"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-muted-foreground truncate max-w-[120px]">
-                      {tx.reference || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="font-black text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1">
-                        <ArrowDownRight className="w-3.5 h-3.5" />
-                        {formatCurrency(Number(tx.amount))}
-                      </div>
-                      {tx.allocations?.some(
-                        (a: any) =>
-                          a.chargeItem?.component?.category === "LATE_FEE",
-                      ) && (
-                        <span className="inline-block mt-0.5 text-[9px] bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 px-1.5 py-0.2 rounded font-bold uppercase">
-                          Late Fine Included
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right"
-                      onClick={(e) => e.stopPropagation()}
+                {filteredTransactions.map((tx: any) => {
+                  const isPartialTx = tx.allocations?.some(
+                    (a: any) =>
+                      a.chargeItem?.charge?.status !== "PAID" &&
+                      a.chargeItem?.status !== "PAID",
+                  );
+                  return (
+                    <tr
+                      key={tx.id}
+                      onClick={() => setSelectedTx(tx)}
+                      className="hover:bg-muted/30 transition-colors cursor-pointer group"
                     >
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReceipt(tx.receiptNo)}
-                        disabled={
-                          receiptModal.loadingReceiptNo === tx.receiptNo
-                        }
-                        className="p-1.5 text-muted-foreground hover:text-violet-600 hover:bg-muted rounded-lg transition-colors cursor-pointer"
-                        title="Print Official Receipt"
-                      >
-                        {receiptModal.loadingReceiptNo === tx.receiptNo ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
-                        ) : (
-                          <Printer className="w-4 h-4" />
+                      <td className="px-4 py-3 font-mono font-bold text-violet-600 dark:text-violet-400">
+                        <div className="flex items-center gap-1.5">
+                          <span>{tx.receiptNo}</span>
+                          {isPartialTx ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                              Invoice
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                              Bill
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {formatDate(tx.date || tx.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-foreground">
+                          {tx.student?.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Roll: {tx.student?.rollNumber || "-"}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                            tx.method === "CASH"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                              : tx.method === "UPI"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : tx.method === "CHEQUE"
+                                  ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                          }`}
+                        >
+                          {tx.method || "CASH"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-muted-foreground truncate max-w-[120px]">
+                        {tx.reference || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="font-black text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1">
+                          <ArrowDownRight className="w-3.5 h-3.5" />
+                          {formatCurrency(Number(tx.amount))}
+                        </div>
+                        {tx.allocations?.some(
+                          (a: any) =>
+                            a.chargeItem?.component?.category === "LATE_FEE",
+                        ) && (
+                          <span className="inline-block mt-0.5 text-[9px] bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                            Late Fine Included
+                          </span>
                         )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td
+                        className="px-4 py-3 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceipt(tx.receiptNo)}
+                          disabled={
+                            receiptModal.loadingReceiptNo === tx.receiptNo
+                          }
+                          className="p-1.5 text-muted-foreground hover:text-violet-600 hover:bg-muted rounded-lg transition-colors cursor-pointer"
+                          title={
+                            isPartialTx
+                              ? "Print Dues Invoice"
+                              : "Print Official Clearance Bill"
+                          }
+                        >
+                          {receiptModal.loadingReceiptNo === tx.receiptNo ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
+                          ) : (
+                            <Printer className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {filteredTransactions.length === 0 && (
                   <tr>
@@ -664,16 +686,33 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
               </div>
             </div>
 
-            {/* Print Official Receipt Button */}
+            {/* Print Document Button */}
             <div className="flex justify-end pt-2 border-t">
-              <button
-                type="button"
-                onClick={() => handleOpenReceipt(selectedTx.receiptNo)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Official Receipt</span>
-              </button>
+              {(() => {
+                const isPartial = selectedTx.allocations?.some(
+                  (a: any) =>
+                    a.chargeItem?.charge?.status !== "PAID" &&
+                    a.chargeItem?.status !== "PAID",
+                );
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReceipt(selectedTx.receiptNo)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer ${
+                      isPartial
+                        ? "bg-amber-600 hover:bg-amber-700"
+                        : "bg-emerald-600 hover:bg-emerald-700"
+                    }`}
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>
+                      {isPartial
+                        ? "Print Dues Invoice"
+                        : "Print Official Clearance Bill"}
+                    </span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
         )}
