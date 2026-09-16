@@ -16,8 +16,11 @@ import {
   ArrowRight,
   Receipt,
   FileSpreadsheet,
+  CheckSquare,
+  Square,
+  Search,
 } from "lucide-react";
-import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
+import { FormField, inputCls } from "@/components/ui/form-field";
 import { formatCurrency } from "@schoolos/utils";
 
 interface GeneratorTabProps {
@@ -38,7 +41,8 @@ export function GeneratorTab({
   canEdit = false,
 }: Readonly<GeneratorTabProps>) {
   const [loading, setLoading] = useState(false);
-  const [selectedClassId, setSelectedClassId] = useState("");
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [classSearch, setClassSearch] = useState("");
   const [feeTitle, setFeeTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
 
@@ -64,36 +68,125 @@ export function GeneratorTab({
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const nextMonthTitle = `${monthNames[nextMonthDate.getMonth()]} ${nextMonthDate.getFullYear()} Tuition Fee`;
 
-  // Pre-flight validation for selected class
-  const selectedClass = classes.find((c: any) => c.id === selectedClassId);
-  const studentsInClass = useMemo(() => {
-    if (!selectedClassId) return [];
-    return students.filter((s: any) => s.classId === selectedClassId);
-  }, [students, selectedClassId]);
+  // Student count by class map
+  const studentCountByClass = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of students) {
+      if (s.classId) {
+        map[s.classId] = (map[s.classId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [students]);
 
-  const assignedStructureId =
-    selectedClass?.classFeeStructures?.[0]?.structureId;
-  const assignedStructure = structures.find(
-    (s: any) => s.id === assignedStructureId,
-  );
+  // Structure by class map
+  const structureByClass = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const c of classes) {
+      const structId = c.classFeeStructures?.[0]?.structureId;
+      if (structId) {
+        const struct = structures.find((s: any) => s.id === structId);
+        if (struct) map[c.id] = struct;
+      }
+    }
+    return map;
+  }, [classes, structures]);
 
-  const estimatedFeePerStudent = useMemo(() => {
-    if (!assignedStructure?.items) return 0;
-    return assignedStructure.items.reduce(
-      (sum: number, item: any) =>
-        sum + Number(item.amount || item.component?.amount || 0),
+  // Fee per student by class
+  const feePerStudentByClass = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of classes) {
+      const struct = structureByClass[c.id];
+      if (struct?.items) {
+        map[c.id] = struct.items.reduce(
+          (sum: number, item: any) =>
+            sum + Number(item.amount || item.component?.amount || 0),
+          0,
+        );
+      } else {
+        map[c.id] = 0;
+      }
+    }
+    return map;
+  }, [classes, structureByClass]);
+
+  // Selected classes metadata
+  const selectedClasses = useMemo(() => {
+    const idSet = new Set(selectedClassIds);
+    return classes.filter((c: any) => idSet.has(c.id));
+  }, [classes, selectedClassIds]);
+
+  const classesWithPlan = useMemo(() => {
+    return selectedClasses.filter((c: any) => Boolean(structureByClass[c.id]));
+  }, [selectedClasses, structureByClass]);
+
+  const classesWithoutPlan = useMemo(() => {
+    return selectedClasses.filter((c: any) => !structureByClass[c.id]);
+  }, [selectedClasses, structureByClass]);
+
+  const totalStudentsInSelection = useMemo(() => {
+    return selectedClasses.reduce(
+      (sum: number, c: any) => sum + (studentCountByClass[c.id] || 0),
       0,
     );
-  }, [assignedStructure]);
+  }, [selectedClasses, studentCountByClass]);
 
-  const estimatedTotalBilling = estimatedFeePerStudent * studentsInClass.length;
+  const totalEstimatedBilling = useMemo(() => {
+    return classesWithPlan.reduce((sum: number, c: any) => {
+      const count = studentCountByClass[c.id] || 0;
+      const fee = feePerStudentByClass[c.id] || 0;
+      return sum + count * fee;
+    }, 0);
+  }, [classesWithPlan, studentCountByClass, feePerStudentByClass]);
+
+  // Filtered classes for the selector grid
+  const filteredClasses = useMemo(() => {
+    if (!classSearch.trim()) return classes;
+    const q = classSearch.toLowerCase().trim();
+    return classes.filter((c: any) => c.name?.toLowerCase().includes(q));
+  }, [classes, classSearch]);
+
+  const allReadyClasses = useMemo(() => {
+    return classes.filter((c: any) => Boolean(structureByClass[c.id]));
+  }, [classes, structureByClass]);
+
+  // Toggle single class
+  const toggleClass = (classId: string) => {
+    setSelectedClassIds((prev) =>
+      prev.includes(classId)
+        ? prev.filter((id) => id !== classId)
+        : [...prev, classId],
+    );
+  };
+
+  // Select all classes
+  const selectAllClasses = () => {
+    setSelectedClassIds(classes.map((c: any) => c.id));
+  };
+
+  // Select only classes with fee plans
+  const selectReadyOnly = () => {
+    setSelectedClassIds(allReadyClasses.map((c: any) => c.id));
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedClassIds([]);
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEdit) return;
 
-    if (!selectedClassId || !feeTitle.trim() || !dueDate) {
-      toast.error("Please fill in all required fields");
+    if (selectedClassIds.length === 0) {
+      toast.error("Please select at least one class to generate fees");
+      return;
+    }
+
+    if (!feeTitle.trim() || !dueDate) {
+      toast.error(
+        "Please provide both a fee charge title and a payment due date",
+      );
       return;
     }
 
@@ -104,17 +197,19 @@ export function GeneratorTab({
       return;
     }
 
-    if (!assignedStructure) {
+    if (classesWithPlan.length === 0) {
       toast.error(
-        `Class "${selectedClass?.name}" does not have a fee structure assigned. Assign one in Class & Student Setup first.`,
+        "None of the selected classes have an assigned fee plan. Assign fee structures in Class & Student Setup first.",
       );
       return;
     }
 
     setLoading(true);
+    // Send the ready classes with plans to be billed
+    const targetClassIds = classesWithPlan.map((c: any) => c.id);
     const res = await generateMonthlyFees(
       activeSession.id,
-      selectedClassId,
+      targetClassIds,
       feeTitle,
       dueDate,
     );
@@ -124,8 +219,13 @@ export function GeneratorTab({
       toast.error(res.error);
     } else {
       toast.success(
-        `Generated periodic fee obligations for ${res.generatedCount} students successfully`,
+        `Generated periodic fee obligations for ${res.generatedCount} students across ${classesWithPlan.length} classes successfully!`,
       );
+      if (res.skippedOrErrors && res.skippedOrErrors.length > 0) {
+        toast.info(
+          `Note: ${res.skippedOrErrors.length} classes were skipped or encountered warnings.`,
+        );
+      }
       setFeeTitle("");
       setDueDate("");
     }
@@ -273,37 +373,143 @@ export function GeneratorTab({
                 />
               </FormField>
 
-              {/* Target Class Selector */}
-              <FormField label="Target Class / Grade" required>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className={selectCls}
-                  required
-                >
-                  <option value="">-- Choose a target class --</option>
-                  {classes.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
+              {/* Multi-Class Target Selector */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-foreground">
+                    Target Classes / Grades{" "}
+                    <span className="text-destructive">*</span>
+                  </label>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {selectedClassIds.length} of {classes.length} selected
+                  </span>
+                </div>
 
-              {/* Pre-Flight Inspection Card */}
-              {selectedClass && (
+                {/* Quick Selection Shortcuts */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={selectAllClasses}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-muted/70 hover:bg-muted text-foreground border border-border transition-colors cursor-pointer"
+                    >
+                      Select All ({classes.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectReadyOnly}
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200/60 dark:border-emerald-800/40 transition-colors cursor-pointer"
+                    >
+                      Ready Only ({allReadyClasses.length})
+                    </button>
+                  </div>
+                  {selectedClassIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearSelection}
+                      className="text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+
+                {/* Search / Filter Input */}
+                {classes.length > 6 && (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Filter classes by name..."
+                      value={classSearch}
+                      onChange={(e) => setClassSearch(e.target.value)}
+                      className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border bg-muted/20 focus:bg-background focus:outline-none focus:ring-1 focus:ring-violet-500 transition-all placeholder:text-muted-foreground/70"
+                    />
+                  </div>
+                )}
+
+                {/* Class Selection Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1.5 border rounded-xl bg-muted/10">
+                  {filteredClasses.map((c: any) => {
+                    const isSelected = selectedClassIds.includes(c.id);
+                    const hasPlan = Boolean(structureByClass[c.id]);
+                    const studentCount = studentCountByClass[c.id] || 0;
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleClass(c.id)}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? "border-violet-600 bg-violet-50/70 dark:bg-violet-950/40 shadow-xs ring-1 ring-violet-500/30"
+                            : "border-border/70 bg-card hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className="mt-0.5 text-violet-600 dark:text-violet-400 shrink-0">
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          ) : (
+                            <Square className="w-4 h-4 text-muted-foreground/60" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {c.name}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-muted-foreground font-medium">
+                              {studentCount}{" "}
+                              {studentCount === 1 ? "student" : "students"}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/50">
+                              •
+                            </span>
+                            {hasPlan ? (
+                              <span className="inline-flex items-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                No Plan
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {filteredClasses.length === 0 && (
+                    <div className="col-span-full text-center py-6 text-xs text-muted-foreground">
+                      No classes found matching &quot;{classSearch}&quot;
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Pre-Flight Inspection Card for Selected Classes */}
+              {selectedClassIds.length > 0 && (
                 <div className="p-4 rounded-xl border bg-muted/30 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-foreground">
-                      Class Inspection Pre-Flight
+                      Cohort Inspection Pre-Flight
                     </span>
-                    {assignedStructure ? (
+                    {classesWithoutPlan.length === 0 ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                        <CheckCircle2 className="w-3 h-3" /> Ready to Bill
+                        <CheckCircle2 className="w-3 h-3" /> All{" "}
+                        {selectedClassIds.length} Classes Ready
+                      </span>
+                    ) : classesWithPlan.length > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        <AlertTriangle className="w-3 h-3" />{" "}
+                        {classesWithPlan.length} Ready,{" "}
+                        {classesWithoutPlan.length} Missing Plan
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                        <AlertTriangle className="w-3 h-3" /> Missing Structure
+                        <AlertTriangle className="w-3 h-3" /> Missing Fee
+                        Structures
                       </span>
                     )}
                   </div>
@@ -311,18 +517,20 @@ export function GeneratorTab({
                   <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t">
                     <div>
                       <p className="text-muted-foreground text-[11px]">
-                        Enrolled Students
+                        Target Scope
                       </p>
                       <p className="font-bold text-foreground">
-                        {studentsInClass.length} Students
+                        {selectedClassIds.length}{" "}
+                        {selectedClassIds.length === 1 ? "Class" : "Classes"} (
+                        {classesWithPlan.length} ready)
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-[11px]">
-                        Assigned Plan
+                        Enrolled Students
                       </p>
-                      <p className="font-bold text-foreground truncate">
-                        {assignedStructure?.name || "None"}
+                      <p className="font-bold text-foreground">
+                        {totalStudentsInSelection} Students
                       </p>
                     </div>
                     <div>
@@ -330,16 +538,32 @@ export function GeneratorTab({
                         Est. Total Batch
                       </p>
                       <p className="font-bold text-emerald-600">
-                        {formatCurrency(estimatedTotalBilling)}
+                        {formatCurrency(totalEstimatedBilling)}
                       </p>
                     </div>
                   </div>
 
-                  {!assignedStructure && (
+                  {classesWithoutPlan.length > 0 && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300 font-medium bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800/40">
+                      ⚠️ Note: The following{" "}
+                      {classesWithoutPlan.length === 1
+                        ? "class lacks"
+                        : "classes lack"}{" "}
+                      an assigned fee structure and will be skipped during
+                      generation:{" "}
+                      <span className="font-bold">
+                        {classesWithoutPlan.map((c: any) => c.name).join(", ")}
+                      </span>
+                      . You can assign fee structures in the Class &amp; Student
+                      Setup tab.
+                    </p>
+                  )}
+
+                  {classesWithPlan.length === 0 && (
                     <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
-                      ⚠️ You cannot generate fees for this class until a Fee
-                      Structure is assigned in the &quot;Class &amp; Student
-                      Setup&quot; tab.
+                      ⚠️ You cannot generate fees until at least one selected
+                      class has an assigned Fee Structure in Class &amp; Student
+                      Setup.
                     </p>
                   )}
                 </div>
@@ -360,19 +584,29 @@ export function GeneratorTab({
               <button
                 type="submit"
                 disabled={
-                  loading || !canEdit || !selectedClassId || !assignedStructure
+                  loading ||
+                  !canEdit ||
+                  selectedClassIds.length === 0 ||
+                  classesWithPlan.length === 0
                 }
                 className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Processing Batch Generation...</span>
+                    <span>
+                      Processing Batch Generation ({classesWithPlan.length}{" "}
+                      Classes)...
+                    </span>
                   </>
+                ) : selectedClassIds.length === 0 ? (
+                  <span>Select Target Classes to Generate Fees</span>
                 ) : (
                   <>
                     <span>
-                      Generate Fee Charges for {selectedClass?.name || "Class"}
+                      Generate Fee Charges for {classesWithPlan.length}{" "}
+                      {classesWithPlan.length === 1 ? "Class" : "Classes"} (
+                      {totalStudentsInSelection} Students)
                     </span>
                     <ArrowRight className="w-4 h-4" />
                   </>
