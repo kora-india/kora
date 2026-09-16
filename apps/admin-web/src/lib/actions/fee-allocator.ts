@@ -42,6 +42,10 @@ export interface FeeReceiptData {
   monthTotalBilled: number;
   monthTotalPaid: number;
   monthRemainingDue: number;
+
+  // Multi-month and late fee metadata
+  monthCount?: number;
+  lateFeeTotal?: number;
 }
 
 export async function allocatePayment(data: {
@@ -481,15 +485,10 @@ export async function getFeeReceiptDetails(
       hour12: true,
     });
 
-    const headMap: Record<string, number> = {};
     const monthsSet = new Set<string>();
     const chargesMap = new Map<string, any>();
 
     for (const alloc of payment.allocations) {
-      const compName = alloc.chargeItem?.component?.name || "Fee";
-      const amt = Number(alloc.amount || 0);
-      headMap[compName] = (headMap[compName] || 0) + amt;
-
       const charge = alloc.chargeItem?.charge;
       if (charge) {
         monthsSet.add(charge.title);
@@ -499,22 +498,81 @@ export async function getFeeReceiptDetails(
       }
     }
 
-    const items: FeeReceiptItem[] = Object.entries(headMap).map(
-      ([head, amount]) => ({
-        head,
-        amount,
-      }),
-    );
+    const monthCount =
+      chargesMap.size > 0
+        ? chargesMap.size
+        : monthsSet.size > 0
+          ? monthsSet.size
+          : 1;
 
-    const totalAllocated = items.reduce((sum, item) => sum + item.amount, 0);
-    const txAmount = Number(payment.amount || 0);
+    // Helper to detect late fee components
+    const isLateFeeComp = (item: any) =>
+      item?.component?.category === "LATE_FEE" ||
+      item?.component?.name?.toLowerCase().includes("late");
 
-    if (txAmount > totalAllocated) {
-      items.push({
-        head: "General Advance Credit",
-        amount: txAmount - totalAllocated,
+    // Extract actual 1-month rate/price for each unique component
+    const regularHeadMap = new Map<string, number>();
+    let totalLateFeeAcrossCharges = 0;
+    let singleLateFeeRate = 0;
+
+    if (chargesMap.size > 0) {
+      chargesMap.forEach((charge) => {
+        charge.items?.forEach((it: any) => {
+          if (it.status === "WAIVED") return;
+          const compName = it.component?.name || "Fee";
+          const compAmount = Number(it.amount || 0);
+
+          if (isLateFeeComp(it)) {
+            totalLateFeeAcrossCharges += compAmount;
+            if (singleLateFeeRate === 0 && compAmount > 0) {
+              singleLateFeeRate = compAmount;
+            }
+          } else {
+            // Keep the actual 1-month rate (not multiplied across months)
+            if (!regularHeadMap.has(compName) && compAmount > 0) {
+              regularHeadMap.set(compName, compAmount);
+            }
+          }
+        });
       });
-    } else if (items.length === 0 && txAmount > 0) {
+    }
+
+    // Fallback: If no charge structure linked, inspect allocations
+    if (regularHeadMap.size === 0) {
+      for (const alloc of payment.allocations) {
+        const item = alloc.chargeItem;
+        const compName = item?.component?.name || "Fee";
+        const compAmount = Number(item?.amount || alloc.amount || 0);
+
+        if (isLateFeeComp(item)) {
+          totalLateFeeAcrossCharges += Number(alloc.amount || 0);
+          if (singleLateFeeRate === 0) singleLateFeeRate = compAmount;
+        } else {
+          if (!regularHeadMap.has(compName) && compAmount > 0) {
+            regularHeadMap.set(compName, compAmount);
+          }
+        }
+      }
+    }
+
+    const items: FeeReceiptItem[] = [];
+    regularHeadMap.forEach((oneMonthAmt, head) => {
+      items.push({
+        head,
+        amount: oneMonthAmt,
+      });
+    });
+
+    if (totalLateFeeAcrossCharges > 0) {
+      items.push({
+        head: "Late Fine / Overdue Penalty",
+        amount:
+          singleLateFeeRate > 0 ? singleLateFeeRate : totalLateFeeAcrossCharges,
+      });
+    }
+
+    const txAmount = Number(payment.amount || 0);
+    if (items.length === 0 && txAmount > 0) {
       items.push({
         head: "Fee Payment",
         amount: txAmount,
@@ -526,7 +584,7 @@ export async function getFeeReceiptDetails(
     if (monthsList.length === 1) {
       paidForMonths = `${monthsList[0]} - ${monthsList[0]}`;
     } else if (monthsList.length > 1) {
-      paidForMonths = `${monthsList[0]} - ${monthsList[monthsList.length - 1]}`;
+      paidForMonths = `${monthsList[0]} - ${monthsList[monthsList.length - 1]} (${monthsList.length} Months)`;
     }
 
     const methodStr = (payment.method || "CASH").replace(/_/g, " ");
@@ -576,7 +634,7 @@ export async function getFeeReceiptDetails(
       studentName: student.name,
       className,
       items,
-      total: txAmount,
+      total: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
       amountPaid: txAmount,
       paidForMonths,
       paymentType,
@@ -586,6 +644,8 @@ export async function getFeeReceiptDetails(
       monthTotalBilled: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
       monthTotalPaid: monthTotalPaid > 0 ? monthTotalPaid : txAmount,
       monthRemainingDue,
+      monthCount,
+      lateFeeTotal: totalLateFeeAcrossCharges,
     };
 
     return { success: true, data };

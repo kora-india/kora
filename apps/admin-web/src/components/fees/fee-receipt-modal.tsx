@@ -277,7 +277,17 @@ export function printReceipt(receiptData: FeeReceiptData) {
             <tbody>
               ${itemsRows}
               <tr class="row-total">
-                <td class="col-head bold">${isInvoice ? "Total Month Charge / Billed" : "Total Fee"}</td>
+                <td class="col-head bold">
+                  ${
+                    isInvoice
+                      ? receiptData.monthCount && receiptData.monthCount > 1
+                        ? `Total Billed (${receiptData.monthCount} Months)`
+                        : "Total Month Charge / Billed"
+                      : receiptData.monthCount && receiptData.monthCount > 1
+                        ? `Total Fee (${receiptData.monthCount} Months)`
+                        : "Total Fee"
+                  }
+                </td>
                 <td class="col-amount bold">${Number(isInvoice ? receiptData.monthTotalBilled || receiptData.total : receiptData.total).toFixed(2)}</td>
               </tr>
               <tr class="row-amount-paid">
@@ -547,7 +557,13 @@ export function FeeReceiptModal({
                   {/* Total Row */}
                   <tr className="border-t border-black font-bold">
                     <td className="border-r border-black px-2 py-1.5 text-left font-bold">
-                      {isInvoice ? "Total Month Charge / Billed" : "Total Fee"}
+                      {isInvoice
+                        ? receiptData.monthCount && receiptData.monthCount > 1
+                          ? `Total Billed (${receiptData.monthCount} Months)`
+                          : "Total Month Charge / Billed"
+                        : receiptData.monthCount && receiptData.monthCount > 1
+                          ? `Total Fee (${receiptData.monthCount} Months)`
+                          : "Total Fee"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono font-bold">
                       {Number(
