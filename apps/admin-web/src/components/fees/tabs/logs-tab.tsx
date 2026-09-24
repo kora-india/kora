@@ -479,9 +479,7 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
                           }
                           className="p-1.5 text-muted-foreground hover:text-violet-600 hover:bg-muted rounded-lg transition-colors cursor-pointer"
                           title={
-                            isPartialTx
-                              ? "Print Dues Invoice"
-                              : "Print Official Clearance Bill"
+                            isPartialTx ? "Print Dues Invoice" : "Print Receipt"
                           }
                         >
                           {receiptModal.loadingReceiptNo === tx.receiptNo ? (
@@ -706,9 +704,7 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>
-                      {isPartial
-                        ? "Print Dues Invoice"
-                        : "Print Official Clearance Bill"}
+                      {isPartial ? "Print Dues Invoice" : "Print Receipt"}
                     </span>
                   </button>
                 );

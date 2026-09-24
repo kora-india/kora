@@ -483,7 +483,7 @@ export function CollectionTab({
         const receiptNo = (res as any).receiptNo || "Receipt Created";
         const docLabel = (res as any).receiptData?.isPartial
           ? "Provisional Invoice"
-          : "Official Clearance Bill";
+          : "Official Receipt";
         toast.success(`Payment recorded! ${docLabel}: ${receiptNo}`, {
           id: toastId,
         });
@@ -1238,7 +1238,7 @@ export function CollectionTab({
                   {isAllCleared ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>Document: Official Clearance Bill</span>
+                      <span>Document: Official Fee Receipt</span>
                     </>
                   ) : (
                     <>
@@ -1249,8 +1249,8 @@ export function CollectionTab({
                 </div>
                 <p className="text-[11px] mt-1 text-muted-foreground">
                   {isAllCleared
-                    ? "Full monthly clearance receipt will be generated. All dues settled."
-                    : "A provisional dues invoice will be generated. The official clearance bill is locked until remaining dues are 100% cleared."}
+                    ? "Full monthly fee receipt will be generated. All dues settled."
+                    : "A provisional dues invoice will be generated. The official receipt is locked until remaining dues are 100% cleared."}
                 </p>
               </div>
             )}

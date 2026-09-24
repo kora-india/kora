@@ -1277,7 +1277,7 @@ export function StudentsContent({
                                             title={
                                               isPartial
                                                 ? "Print Dues Invoice"
-                                                : "Print Official Clearance Bill"
+                                                : "Print Receipt"
                                             }
                                           >
                                             {receiptModal.loadingReceiptNo ===
@@ -1287,7 +1287,9 @@ export function StudentsContent({
                                               <Printer className="w-3.5 h-3.5" />
                                             )}
                                             <span className="hidden sm:inline">
-                                              {isPartial ? "Invoice" : "Bill"}
+                                              {isPartial
+                                                ? "Invoice"
+                                                : "Receipt"}
                                             </span>
                                           </button>
                                         );
