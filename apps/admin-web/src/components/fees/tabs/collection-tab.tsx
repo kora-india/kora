@@ -61,6 +61,7 @@ export function CollectionTab({
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [generalAdvance, setGeneralAdvance] = useState("");
+  const [quickPayAmount, setQuickPayAmount] = useState("");
 
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,6 +100,7 @@ export function CollectionTab({
     setItemPayments({});
     setExpandedMonths({});
     setGeneralAdvance("");
+    setQuickPayAmount("");
     setShowPreview(false);
     await refreshCurrentStudent(student.id);
   };
@@ -309,6 +311,73 @@ export function CollectionTab({
       setSelectedMonths(newSelected);
       setMonthPayments(newMonthPayments);
       setItemPayments(newItemPayments);
+    }
+  };
+
+  /**
+   * Fast Oldest-First Auto Allocation (FIFO)
+   * Allocates a lump sum received from parent/staff chronologically across unpaid months.
+   */
+  const handleQuickPay = (amountToAllocate: number) => {
+    let remaining = amountToAllocate;
+    const newSelected: Record<string, boolean> = {};
+    const newMonthPayments: Record<string, string> = {};
+    const newItemPayments: Record<string, string> = {};
+
+    for (const charge of monthList) {
+      if (remaining <= 0) {
+        newSelected[charge.id] = false;
+        newMonthPayments[charge.id] = "";
+        charge.items.forEach((it: any) => {
+          newItemPayments[it.id] = "";
+        });
+      } else {
+        const payForMonth = Math.min(charge.totalDue, remaining);
+        newSelected[charge.id] = true;
+        newMonthPayments[charge.id] = payForMonth.toString();
+        remaining -= payForMonth;
+
+        const eligibleItems = charge.items.filter((it: any) => it.due > 0);
+        if (payForMonth >= charge.totalDue) {
+          charge.items.forEach((it: any) => {
+            if (it.due > 0) newItemPayments[it.id] = it.due.toString();
+          });
+        } else if (eligibleItems.length > 0) {
+          let allocatedSum = 0;
+          eligibleItems.forEach((it: any, idx: number) => {
+            if (idx === eligibleItems.length - 1) {
+              const lastAlloc = Math.max(
+                0,
+                Math.min(
+                  it.due,
+                  Math.round((payForMonth - allocatedSum) * 100) / 100,
+                ),
+              );
+              newItemPayments[it.id] =
+                lastAlloc > 0
+                  ? Number.isInteger(lastAlloc)
+                    ? lastAlloc.toString()
+                    : lastAlloc.toFixed(2)
+                  : "";
+            } else {
+              const share = (it.due / charge.totalDue) * payForMonth;
+              const rounded = Math.min(it.due, Math.round(share));
+              allocatedSum += rounded;
+              newItemPayments[it.id] = rounded > 0 ? rounded.toString() : "";
+            }
+          });
+        }
+      }
+    }
+
+    setSelectedMonths(newSelected);
+    setMonthPayments(newMonthPayments);
+    setItemPayments(newItemPayments);
+
+    if (remaining > 0) {
+      setGeneralAdvance(remaining.toString());
+    } else {
+      setGeneralAdvance("");
     }
   };
 
@@ -553,28 +622,32 @@ export function CollectionTab({
 
         {currentStudent ? (
           <div className="space-y-6">
-            <div className="bg-card border rounded-xl p-5 flex justify-between items-center shadow-sm">
+            {/* Student Header Card */}
+            <div className="bg-card border rounded-xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
               <div>
-                <h2 className="text-xl font-bold">{currentStudent.name}</h2>
-                <p className="text-sm text-muted-foreground">
+                <h2 className="text-xl font-bold text-foreground">
+                  {currentStudent.name}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Class {currentStudent.class?.name} • Roll No:{" "}
-                  {currentStudent.rollNumber}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Total Outstanding:{" "}
-                  <span className="font-bold text-red-600">
-                    {formatCurrency(totalOutstanding)}
+                  <span className="font-semibold text-foreground">
+                    {currentStudent.rollNumber}
                   </span>
                 </p>
               </div>
-              <div className="text-right bg-green-50/50 dark:bg-green-950/20 p-4 rounded-lg border border-green-100 dark:border-green-900">
-                <p className="text-sm text-muted-foreground">Advance Balance</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(advanceBalance)}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="text-right bg-green-50/60 dark:bg-green-950/20 px-4 py-2.5 rounded-xl border border-green-200 dark:border-green-900/60">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Advance Balance
+                  </p>
+                  <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                    {formatCurrency(advanceBalance)}
+                  </p>
+                </div>
               </div>
             </div>
 
+            {/* Transport Service Opted-In Banner */}
             {(() => {
               const activeTransport = currentStudent?.transports?.[0];
               if (!activeTransport) return null;
@@ -631,6 +704,147 @@ export function CollectionTab({
               );
             })()}
 
+            {/* Top Payment Summary Deck */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-card border rounded-xl p-4 shadow-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total Outstanding
+                </span>
+                <p className="text-2xl font-black text-red-600 dark:text-red-400 mt-1">
+                  {formatCurrency(totalOutstanding)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Across {monthList.length} fee charge
+                  {monthList.length === 1 ? "" : "s"}
+                </p>
+              </div>
+
+              <div className="bg-card border border-violet-200 dark:border-violet-900/50 rounded-xl p-4 shadow-sm bg-violet-50/20 dark:bg-violet-950/10">
+                <span className="text-xs font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                  Paying Now
+                </span>
+                <p className="text-2xl font-black text-violet-600 dark:text-violet-400 mt-1">
+                  {formatCurrency(totalPayment)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Total collected this payment
+                </p>
+              </div>
+
+              <div
+                className={`border rounded-xl p-4 shadow-sm ${
+                  Math.max(
+                    0,
+                    totalOutstanding -
+                      (totalPayment - (Number(generalAdvance) || 0)),
+                  ) === 0
+                    ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800"
+                    : "bg-amber-50/30 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800"
+                }`}
+              >
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wider ${
+                    Math.max(
+                      0,
+                      totalOutstanding -
+                        (totalPayment - (Number(generalAdvance) || 0)),
+                    ) === 0
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "text-amber-700 dark:text-amber-300"
+                  }`}
+                >
+                  Remaining After Payment
+                </span>
+                <p
+                  className={`text-2xl font-black mt-1 ${
+                    Math.max(
+                      0,
+                      totalOutstanding -
+                        (totalPayment - (Number(generalAdvance) || 0)),
+                    ) === 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {formatCurrency(
+                    Math.max(
+                      0,
+                      totalOutstanding -
+                        (totalPayment - (Number(generalAdvance) || 0)),
+                    ),
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {Math.max(
+                    0,
+                    totalOutstanding -
+                      (totalPayment - (Number(generalAdvance) || 0)),
+                  ) === 0
+                    ? "All outstanding dues cleared!"
+                    : "Pending remaining balance"}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Pay / Auto Allocation Bar */}
+            {monthList.length > 0 && canEdit && (
+              <div className="bg-card border rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                    <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
+                    Quick Pay / Lump Sum:
+                  </span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      placeholder="e.g. 6000"
+                      value={quickPayAmount}
+                      onChange={(e) => setQuickPayAmount(e.target.value)}
+                      className="w-36 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const amt = Number(quickPayAmount);
+                      if (amt > 0) handleQuickPay(amt);
+                    }}
+                    disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
+                    className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                  >
+                    Allocate Oldest First
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickPayAmount(totalOutstanding.toString());
+                      handleQuickPay(totalOutstanding);
+                    }}
+                    className="h-8 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+                  >
+                    Pay Full Due ({formatCurrency(totalOutstanding)})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickPayAmount("");
+                      setSelectedMonths({});
+                      setMonthPayments({});
+                      setItemPayments({});
+                      setGeneralAdvance("");
+                    }}
+                    className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Outstanding Monthly Fee Dues Table */}
             <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
               <div className="p-4 border-b bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -683,19 +897,22 @@ export function CollectionTab({
                         />
                       </th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                        Month / Charge
+                        Month
                       </th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                        Net Billed
+                        Fee Due
                       </th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                        Paid
-                      </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
-                        Remaining Due
+                        Previously Paid
                       </th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground w-44">
-                        Pay Amount (₹)
+                        Paying Now (₹)
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                        Balance Due
+                      </th>
+                      <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                        Status
                       </th>
                       <th className="px-4 py-3 w-10"></th>
                     </tr>
@@ -705,6 +922,10 @@ export function CollectionTab({
                       const isExpanded = expandedMonths[charge.id];
                       const enteredVal = monthPayments[charge.id] || "";
                       const enteredNum = Number(enteredVal) || 0;
+                      const balanceAfterPayment = Math.max(
+                        0,
+                        charge.totalDue - enteredNum,
+                      );
 
                       const minRequiredForMonth =
                         minPartialPaymentPercentage > 0
@@ -730,6 +951,16 @@ export function CollectionTab({
                           : minRequiredForMonth > 0 &&
                             enteredNum < minRequiredForMonth &&
                             enteredNum < charge.totalDue);
+
+                      const isMonthPaidInFull =
+                        enteredNum >= charge.totalDue && charge.totalDue > 0;
+                      const isMonthPartiallyPaid =
+                        (enteredNum > 0 && enteredNum < charge.totalDue) ||
+                        (enteredNum === 0 && charge.paidAmount > 0);
+                      const totalPaidForMonth = charge.paidAmount + enteredNum;
+                      const coveragePct = Math.round(
+                        (totalPaidForMonth / (charge.netCharge || 1)) * 100,
+                      );
 
                       return (
                         <React.Fragment key={charge.id}>
@@ -765,15 +996,6 @@ export function CollectionTab({
                                     },
                                   )}
                                 </span>
-                                <span
-                                  className={`text-[10px] px-1.5 py-0.2 rounded font-medium border ${
-                                    charge.status === "PARTIAL"
-                                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                                      : "bg-red-50 text-red-700 border-red-200"
-                                  }`}
-                                >
-                                  {charge.status}
-                                </span>
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-foreground">
@@ -781,9 +1003,6 @@ export function CollectionTab({
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(charge.paidAmount)}
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-red-600 dark:text-red-400">
-                              {formatCurrency(charge.totalDue)}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <div className="relative">
@@ -833,6 +1052,33 @@ export function CollectionTab({
                                   )}
                               </div>
                             </td>
+                            <td className="px-4 py-3 text-right font-bold">
+                              <span
+                                className={
+                                  balanceAfterPayment > 0
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }
+                              >
+                                {formatCurrency(balanceAfterPayment)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {isMonthPaidInFull ? (
+                                <span className="inline-block text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                  PAID
+                                </span>
+                              ) : isMonthPartiallyPaid ? (
+                                <span className="inline-block text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 whitespace-nowrap">
+                                  {coveragePct}% paid • ₹
+                                  {balanceAfterPayment.toFixed(0)} due
+                                </span>
+                              ) : (
+                                <span className="inline-block text-[10px] px-2 py-0.5 rounded font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
+                                  UNPAID
+                                </span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-center">
                               <button
                                 type="button"
@@ -855,7 +1101,7 @@ export function CollectionTab({
                           </tr>
                           {isExpanded && (
                             <tr className="bg-muted/5">
-                              <td colSpan={7} className="p-0 border-b">
+                              <td colSpan={8} className="p-0 border-b">
                                 <div className="px-10 py-3 bg-muted/10 inset-shadow-sm">
                                   <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                                     Component Breakdown ({charge.title})
@@ -996,7 +1242,7 @@ export function CollectionTab({
                     {monthList.length === 0 && (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={8}
                           className="p-8 text-center text-muted-foreground"
                         >
                           <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
@@ -1166,11 +1412,11 @@ export function CollectionTab({
                           </button>
                           {isPartialTxn ? (
                             <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
-                              Invoice
+                              Receipt (Partial)
                             </span>
                           ) : (
                             <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
-                              Bill
+                              Receipt (Full)
                             </span>
                           )}
                         </div>
@@ -1238,19 +1484,21 @@ export function CollectionTab({
                   {isAllCleared ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>Document: Official Fee Receipt</span>
+                      <span>Document: Fee Payment Receipt (Paid in Full)</span>
                     </>
                   ) : (
                     <>
                       <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                      <span>Document: Provisional Fee Invoice</span>
+                      <span>
+                        Document: Fee Payment Receipt (Partial Payment)
+                      </span>
                     </>
                   )}
                 </div>
                 <p className="text-[11px] mt-1 text-muted-foreground">
                   {isAllCleared
-                    ? "Full monthly fee receipt will be generated. All dues settled."
-                    : "A provisional dues invoice will be generated. The official receipt is locked until remaining dues are 100% cleared."}
+                    ? "Official fee payment receipt will be generated. All selected dues settled."
+                    : "Fee payment receipt will be generated detailing payment received and remaining dues."}
                 </p>
               </div>
             )}
@@ -1362,20 +1610,14 @@ export function CollectionTab({
                   <button
                     disabled={isSubmitting}
                     onClick={() => handlePayment(true)}
-                    className={`w-full py-3 text-white rounded-xl font-bold text-sm transition-transform active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer ${
-                      isAllCleared
-                        ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
-                        : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
-                    }`}
+                    className="w-full py-3 text-white rounded-xl font-bold text-sm transition-transform active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
                   >
                     {isSubmitting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Printer className="w-4 h-4" />
                     )}
-                    {isAllCleared
-                      ? "Confirm & Print Official Bill"
-                      : "Confirm & Print Dues Invoice"}
+                    Confirm & Print Receipt
                   </button>
                 </div>
               </div>

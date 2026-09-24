@@ -20,6 +20,18 @@ export interface FeeReceiptItem {
   amount: number;
 }
 
+export interface FeeReceiptMonthAllocation {
+  chargeId: string;
+  month: string;
+  dueDate?: string | Date;
+  feeDue: number; // Original month bill
+  previouslyPaid: number; // Paid before this transaction
+  paidNow: number; // Paid in this transaction
+  balanceDue: number; // Remaining after this transaction
+  status: "PAID" | "PARTIALLY PAID" | "UNPAID";
+  coveragePercent?: number; // e.g. 80
+}
+
 export interface FeeReceiptData {
   schoolName: string;
   schoolAddress: string;
@@ -27,6 +39,7 @@ export interface FeeReceiptData {
   timestamp: string;
   receiptNo: string;
   regNo: string;
+  rollNumber?: string;
   studentName: string;
   className: string;
   items: FeeReceiptItem[];
@@ -42,6 +55,13 @@ export interface FeeReceiptData {
   monthTotalBilled: number;
   monthTotalPaid: number;
   monthRemainingDue: number;
+
+  // New Summary & Allocation Fields
+  outstandingBefore: number;
+  remainingOutstanding: number;
+  paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT";
+  paymentStatusText: string;
+  monthAllocations: FeeReceiptMonthAllocation[];
 
   // Multi-month and late fee metadata
   monthCount?: number;
@@ -122,9 +142,25 @@ export async function allocatePayment(data: {
         const allocationsCreated = [];
         const affectedChargeIds = new Set<string>();
 
-        // 2. Allocate Month-wise payments if provided
+        // 2. Allocate Month-wise payments if provided (FIFO: oldest due date first)
         if (data.monthPayments && data.monthPayments.length > 0) {
-          for (const mp of data.monthPayments) {
+          const chargeDates = await tx.feeCharge.findMany({
+            where: { id: { in: data.monthPayments.map((m) => m.chargeId) } },
+            select: { id: true, dueDate: true },
+          });
+          const chargeDateMap = new Map<string, number>();
+          chargeDates.forEach((c) =>
+            chargeDateMap.set(c.id, new Date(c.dueDate).getTime() || 0),
+          );
+
+          const sortedMonthPayments = [...data.monthPayments].sort((a, b) => {
+            return (
+              (chargeDateMap.get(a.chargeId) || 0) -
+              (chargeDateMap.get(b.chargeId) || 0)
+            );
+          });
+
+          for (const mp of sortedMonthPayments) {
             const enteredAmount = Number(mp.amount) || 0;
             if (enteredAmount <= 0) continue;
 
@@ -622,6 +658,91 @@ export async function getFeeReceiptDetails(
       });
     }
 
+    // Build granular month-by-month allocation breakdown (WHAT WAS DUE -> PREVIOUSLY PAID -> PAID TODAY -> BALANCE)
+    const monthAllocations: FeeReceiptMonthAllocation[] = [];
+    let outstandingBefore = 0;
+
+    // Sort charges by dueDate ascending
+    const sortedCharges = Array.from(chargesMap.values()).sort(
+      (a: any, b: any) =>
+        new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+    );
+
+    sortedCharges.forEach((charge: any) => {
+      let feeDue = 0;
+      let totalPaidSoFar = 0;
+
+      charge.items?.forEach((it: any) => {
+        if (it.status !== "WAIVED") {
+          feeDue += Number(it.amount || 0);
+          totalPaidSoFar += Number(it.paidAmount || 0);
+        }
+      });
+
+      // Sum of allocations specifically from THIS payment for this charge
+      const paidNow = payment.allocations
+        .filter((a: any) => a.chargeItem?.chargeId === charge.id)
+        .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0);
+
+      const previouslyPaid = Math.max(0, totalPaidSoFar - paidNow);
+      const balanceDue = Math.max(0, feeDue - totalPaidSoFar);
+      const status: "PAID" | "PARTIALLY PAID" | "UNPAID" =
+        balanceDue <= 0
+          ? "PAID"
+          : previouslyPaid + paidNow > 0
+            ? "PARTIALLY PAID"
+            : "UNPAID";
+      const coveragePercent =
+        feeDue > 0
+          ? Math.round(((previouslyPaid + paidNow) / feeDue) * 100)
+          : 100;
+
+      outstandingBefore += feeDue - previouslyPaid;
+
+      monthAllocations.push({
+        chargeId: charge.id,
+        month: charge.title,
+        dueDate: charge.dueDate,
+        feeDue,
+        previouslyPaid,
+        paidNow,
+        balanceDue,
+        status,
+        coveragePercent,
+      });
+    });
+
+    // Check for advance / surplus in this payment
+    const totalAllocatedToCharges = monthAllocations.reduce(
+      (sum, m) => sum + m.paidNow,
+      0,
+    );
+    const advanceSurplus = Math.max(0, txAmount - totalAllocatedToCharges);
+    if (advanceSurplus > 0) {
+      monthAllocations.push({
+        chargeId: "advance-deposit",
+        month: "Advance / Prepaid Balance Deposit",
+        feeDue: advanceSurplus,
+        previouslyPaid: 0,
+        paidNow: advanceSurplus,
+        balanceDue: 0,
+        status: "PAID",
+        coveragePercent: 100,
+      });
+    }
+
+    if (outstandingBefore === 0) {
+      outstandingBefore = txAmount;
+    }
+
+    const remainingOutstanding = Math.max(0, outstandingBefore - txAmount);
+    const paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT" =
+      remainingOutstanding <= 0 ? "PAID_IN_FULL" : "PARTIAL_PAYMENT";
+    const paymentStatusText =
+      remainingOutstanding <= 0
+        ? "PAID IN FULL"
+        : `PARTIAL PAYMENT — ₹${remainingOutstanding.toLocaleString("en-IN")} DUE`;
+
     const documentType = isPartial ? "PARTIAL_INVOICE" : "OFFICIAL_RECEIPT";
 
     const data: FeeReceiptData = {
@@ -631,6 +752,7 @@ export async function getFeeReceiptDetails(
       timestamp,
       receiptNo: payment.receiptNo,
       regNo,
+      rollNumber: student.rollNumber || "-",
       studentName: student.name,
       className,
       items,
@@ -643,7 +765,12 @@ export async function getFeeReceiptDetails(
       documentType,
       monthTotalBilled: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
       monthTotalPaid: monthTotalPaid > 0 ? monthTotalPaid : txAmount,
-      monthRemainingDue,
+      monthRemainingDue: remainingOutstanding,
+      outstandingBefore,
+      remainingOutstanding,
+      paymentStatus,
+      paymentStatusText,
+      monthAllocations,
       monthCount,
       lateFeeTotal: totalLateFeeAcrossCharges,
     };

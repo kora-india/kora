@@ -49,6 +49,7 @@ export function StudentFeeCollection({
     {},
   );
   const [generalAdvance, setGeneralAdvance] = useState("");
+  const [quickPayAmount, setQuickPayAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -293,6 +294,72 @@ export function StudentFeeCollection({
     }
   };
 
+  /**
+   * Fast Oldest-First Auto Allocation (FIFO)
+   */
+  const handleQuickPay = (amountToAllocate: number) => {
+    let remaining = amountToAllocate;
+    const newSelected: Record<string, boolean> = {};
+    const newMonthPayments: Record<string, string> = {};
+    const newItemPayments: Record<string, string> = {};
+
+    for (const charge of monthList) {
+      if (remaining <= 0) {
+        newSelected[charge.id] = false;
+        newMonthPayments[charge.id] = "";
+        charge.items.forEach((it: any) => {
+          newItemPayments[it.id] = "";
+        });
+      } else {
+        const payForMonth = Math.min(charge.totalDue, remaining);
+        newSelected[charge.id] = true;
+        newMonthPayments[charge.id] = payForMonth.toString();
+        remaining -= payForMonth;
+
+        const eligibleItems = charge.items.filter((it: any) => it.due > 0);
+        if (payForMonth >= charge.totalDue) {
+          charge.items.forEach((it: any) => {
+            if (it.due > 0) newItemPayments[it.id] = it.due.toString();
+          });
+        } else if (eligibleItems.length > 0) {
+          let allocatedSum = 0;
+          eligibleItems.forEach((it: any, idx: number) => {
+            if (idx === eligibleItems.length - 1) {
+              const lastAlloc = Math.max(
+                0,
+                Math.min(
+                  it.due,
+                  Math.round((payForMonth - allocatedSum) * 100) / 100,
+                ),
+              );
+              newItemPayments[it.id] =
+                lastAlloc > 0
+                  ? Number.isInteger(lastAlloc)
+                    ? lastAlloc.toString()
+                    : lastAlloc.toFixed(2)
+                  : "";
+            } else {
+              const share = (it.due / charge.totalDue) * payForMonth;
+              const rounded = Math.min(it.due, Math.round(share));
+              allocatedSum += rounded;
+              newItemPayments[it.id] = rounded > 0 ? rounded.toString() : "";
+            }
+          });
+        }
+      }
+    }
+
+    setSelectedMonths(newSelected);
+    setMonthPayments(newMonthPayments);
+    setItemPayments(newItemPayments);
+
+    if (remaining > 0) {
+      setGeneralAdvance(remaining.toString());
+    } else {
+      setGeneralAdvance("");
+    }
+  };
+
   // Total calculated payment across all selected months + extra advance
   const totalPayment = useMemo(() => {
     const monthsTotal = Object.entries(monthPayments).reduce(
@@ -503,29 +570,148 @@ export function StudentFeeCollection({
           )}
         </div>
 
-        {advanceBalance > 0 ? (
-          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 rounded-xl flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5" /> Advance Available
-              </span>
-              <p className="text-2xl font-black text-emerald-900 dark:text-emerald-100 mt-1">
-                {formatCurrency(advanceBalance)}
-              </p>
-            </div>
-            <span className="text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 rounded-md font-medium">
-              Credit Active
+        {/* Top Payment Summary Deck */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          <div className="bg-card border rounded-xl p-3.5 shadow-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Total Outstanding
             </span>
+            <p className="text-xl font-black text-red-600 dark:text-red-400 mt-0.5">
+              {formatCurrency(totalOutstanding)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {monthList.length} month{monthList.length === 1 ? "" : "s"} due
+            </p>
           </div>
-        ) : (
-          <div className="p-4 bg-muted/30 border rounded-xl flex items-center justify-between">
-            <div>
-              <span className="text-xs text-muted-foreground uppercase font-medium">
-                Advance Balance
+
+          <div className="bg-card border border-violet-200 dark:border-violet-900/50 rounded-xl p-3.5 shadow-sm bg-violet-50/20 dark:bg-violet-950/10">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+              Paying Now
+            </span>
+            <p className="text-xl font-black text-violet-600 dark:text-violet-400 mt-0.5">
+              {formatCurrency(totalPayment)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              This transaction
+            </p>
+          </div>
+
+          <div
+            className={`border rounded-xl p-3.5 shadow-sm ${
+              Math.max(
+                0,
+                totalOutstanding -
+                  (totalPayment - (Number(generalAdvance) || 0)),
+              ) === 0
+                ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800"
+                : "bg-amber-50/30 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800"
+            }`}
+          >
+            <span
+              className={`text-[11px] font-semibold uppercase tracking-wider ${
+                Math.max(
+                  0,
+                  totalOutstanding -
+                    (totalPayment - (Number(generalAdvance) || 0)),
+                ) === 0
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-amber-700 dark:text-amber-300"
+              }`}
+            >
+              Remaining Balance
+            </span>
+            <p
+              className={`text-xl font-black mt-0.5 ${
+                Math.max(
+                  0,
+                  totalOutstanding -
+                    (totalPayment - (Number(generalAdvance) || 0)),
+                ) === 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {formatCurrency(
+                Math.max(
+                  0,
+                  totalOutstanding -
+                    (totalPayment - (Number(generalAdvance) || 0)),
+                ),
+              )}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {Math.max(
+                0,
+                totalOutstanding -
+                  (totalPayment - (Number(generalAdvance) || 0)),
+              ) === 0
+                ? "All dues settled"
+                : "Pending balance"}
+            </p>
+          </div>
+
+          <div className="bg-card border rounded-xl p-3.5 shadow-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Advance Balance
+            </span>
+            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+              {formatCurrency(advanceBalance)}
+            </p>
+            <p className="text-[10px] text-muted-foreground">Prepaid credit</p>
+          </div>
+        </div>
+
+        {/* Quick Pay / Auto Allocation Bar */}
+        {monthList.length > 0 && canEdit && (
+          <div className="bg-card border rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wide">
+                Quick Pay (FIFO):
               </span>
-              <p className="text-xl font-bold text-muted-foreground mt-1">
-                ₹0.00
-              </p>
+              <input
+                type="number"
+                placeholder="Enter amount"
+                value={quickPayAmount}
+                onChange={(e) => setQuickPayAmount(e.target.value)}
+                className="w-32 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const amt = Number(quickPayAmount);
+                  if (amt > 0) handleQuickPay(amt);
+                }}
+                disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
+                className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                Auto-Allocate
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickPayAmount(totalOutstanding.toString());
+                  handleQuickPay(totalOutstanding);
+                }}
+                className="h-8 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+              >
+                Pay Full ({formatCurrency(totalOutstanding)})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickPayAmount("");
+                  setSelectedMonths({});
+                  setMonthPayments({});
+                  setItemPayments({});
+                  setGeneralAdvance("");
+                }}
+                className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                Reset
+              </button>
             </div>
           </div>
         )}
@@ -617,24 +803,40 @@ export function StudentFeeCollection({
                     className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                   />
                 </th>
-                <th className="py-2.5 px-3 text-left font-medium">
-                  Month / Charge
-                </th>
-                <th className="py-2.5 px-3 text-left font-medium">Due Date</th>
+                <th className="py-2.5 px-3 text-left font-medium">Month</th>
+                <th className="py-2.5 px-3 text-right font-medium">Fee Due</th>
                 <th className="py-2.5 px-3 text-right font-medium">
-                  Net Charge
+                  Previously Paid
                 </th>
-                <th className="py-2.5 px-3 text-right font-medium">Paid</th>
-                <th className="py-2.5 px-3 text-right font-medium">Payable</th>
                 <th className="py-2.5 px-3 text-right font-medium w-40">
-                  Pay Amount (₹)
+                  Paying Now (₹)
                 </th>
+                <th className="py-2.5 px-3 text-right font-medium">
+                  Balance Due
+                </th>
+                <th className="py-2.5 px-3 text-center font-medium">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {monthList.map((month: any) => {
                 const isSelected = !!selectedMonths[month.id];
                 const isExpanded = !!expandedMonths[month.id];
+                const enteredVal = monthPayments[month.id] || "";
+                const enteredNum = Number(enteredVal) || 0;
+                const balanceAfterPayment = Math.max(
+                  0,
+                  month.totalDue - enteredNum,
+                );
+
+                const isMonthPaidInFull =
+                  enteredNum >= month.totalDue && month.totalDue > 0;
+                const isMonthPartiallyPaid =
+                  (enteredNum > 0 && enteredNum < month.totalDue) ||
+                  (enteredNum === 0 && month.paidAmount > 0);
+                const totalPaidForMonth = month.paidAmount + enteredNum;
+                const coveragePct = Math.round(
+                  (totalPaidForMonth / (month.netCharge || 1)) * 100,
+                );
 
                 return (
                   <React.Fragment key={month.id}>
@@ -677,26 +879,20 @@ export function StudentFeeCollection({
                           <span className="font-semibold text-foreground">
                             {month.title}
                           </span>
-                          <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-                            {month.items.length} component
-                            {month.items.length === 1 ? "" : "s"}
-                          </span>
                         </div>
-                      </td>
-                      <td className="py-3 px-3 text-xs text-muted-foreground">
-                        {new Date(month.dueDate).toLocaleDateString("en-IN", {
-                          month: "short",
-                          year: "numeric",
-                        })}
+                        <span className="text-[11px] text-muted-foreground pl-6 block">
+                          Due:{" "}
+                          {new Date(month.dueDate).toLocaleDateString("en-IN", {
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
                       </td>
                       <td className="py-3 px-3 text-right font-medium">
                         {formatCurrency(month.netCharge)}
                       </td>
                       <td className="py-3 px-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
                         {formatCurrency(month.paidAmount)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-amber-600 dark:text-amber-400">
-                        {formatCurrency(month.totalDue)}
                       </td>
                       <td className="py-3 px-3 text-right">
                         {(() => {
@@ -767,6 +963,33 @@ export function StudentFeeCollection({
                             </>
                           );
                         })()}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold">
+                        <span
+                          className={
+                            balanceAfterPayment > 0
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }
+                        >
+                          {formatCurrency(balanceAfterPayment)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        {isMonthPaidInFull ? (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                            PAID
+                          </span>
+                        ) : isMonthPartiallyPaid ? (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 whitespace-nowrap">
+                            {coveragePct}% paid • ₹
+                            {balanceAfterPayment.toFixed(0)} due
+                          </span>
+                        ) : (
+                          <span className="inline-block text-[10px] px-2 py-0.5 rounded font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
+                            UNPAID
+                          </span>
+                        )}
                       </td>
                     </tr>
 

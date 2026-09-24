@@ -415,11 +415,11 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
                           <span>{tx.receiptNo}</span>
                           {isPartialTx ? (
                             <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
-                              Invoice
+                              Receipt (Partial)
                             </span>
                           ) : (
                             <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
-                              Bill
+                              Receipt (Full)
                             </span>
                           )}
                         </div>
@@ -478,9 +478,7 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
                             receiptModal.loadingReceiptNo === tx.receiptNo
                           }
                           className="p-1.5 text-muted-foreground hover:text-violet-600 hover:bg-muted rounded-lg transition-colors cursor-pointer"
-                          title={
-                            isPartialTx ? "Print Dues Invoice" : "Print Receipt"
-                          }
+                          title="View & Print Receipt"
                         >
                           {receiptModal.loadingReceiptNo === tx.receiptNo ? (
                             <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
@@ -633,6 +631,38 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
               </div>
             </div>
 
+            {/* Month-Wise Allocation Breakdown */}
+            {(() => {
+              const monthBreakdown: Record<string, number> = {};
+              selectedTx.allocations?.forEach((a: any) => {
+                const monthName = a.chargeItem?.charge?.title || "Monthly Due";
+                monthBreakdown[monthName] =
+                  (monthBreakdown[monthName] || 0) + Number(a.amount);
+              });
+              const entries = Object.entries(monthBreakdown);
+              if (entries.length === 0) return null;
+              return (
+                <div className="bg-muted/20 border rounded-xl p-3">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Month Allocation Breakdown
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {entries.map(([mName, amt], idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-card border text-xs font-medium text-foreground shadow-2xs"
+                      >
+                        <span className="font-semibold">{mName}:</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          {formatCurrency(amt)}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Allocations Breakdown */}
             <div>
               <h4 className="font-bold mb-2 flex items-center gap-1.5 text-xs text-foreground">
@@ -686,29 +716,14 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
 
             {/* Print Document Button */}
             <div className="flex justify-end pt-2 border-t">
-              {(() => {
-                const isPartial = selectedTx.allocations?.some(
-                  (a: any) =>
-                    a.chargeItem?.charge?.status !== "PAID" &&
-                    a.chargeItem?.status !== "PAID",
-                );
-                return (
-                  <button
-                    type="button"
-                    onClick={() => handleOpenReceipt(selectedTx.receiptNo)}
-                    className={`inline-flex items-center gap-2 px-4 py-2 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer ${
-                      isPartial
-                        ? "bg-amber-600 hover:bg-amber-700"
-                        : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>
-                      {isPartial ? "Print Dues Invoice" : "Print Receipt"}
-                    </span>
-                  </button>
-                );
-              })()}
+              <button
+                type="button"
+                onClick={() => handleOpenReceipt(selectedTx.receiptNo)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>View & Print Receipt</span>
+              </button>
             </div>
           </div>
         )}
