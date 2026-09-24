@@ -98,7 +98,7 @@ export function printReceipt(receiptData: FeeReceiptData) {
       const isMonthPaid = m.status === "PAID" || m.balanceDue <= 0;
       const statusBadge = isMonthPaid
         ? `<span class="badge-status badge-paid">PAID</span>`
-        : `<span class="badge-status badge-partial">PARTIALLY PAID (${Math.round(m.coveragePercent || 0)}% paid • ₹${m.balanceDue.toFixed(2)} due)</span>`;
+        : `<span class="badge-status badge-partial">PARTIALLY PAID</span>`;
 
       return `
       <tr>
