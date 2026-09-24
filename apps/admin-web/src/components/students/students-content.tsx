@@ -869,7 +869,7 @@ export function StudentsContent({
             })
           }
           footer={null}
-          width={850}
+          width={1000}
           destroyOnHidden
           title={
             detailsModal.student

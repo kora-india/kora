@@ -22,6 +22,7 @@ import {
   Bus,
   Sparkles,
   Printer,
+  Zap,
 } from "lucide-react";
 import { Select } from "antd";
 
@@ -546,176 +547,140 @@ export function StudentFeeCollection({
 
   return (
     <div className="space-y-6 py-2">
-      {/* Top Banner: Outstanding Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="p-4 bg-violet-50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-violet-800 dark:text-violet-300 uppercase tracking-wide">
-              Total Outstanding Due
+      {/* Top Payment Summary Deck */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-card border rounded-xl p-3.5 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate block">
+            Total Outstanding
+          </span>
+          <p className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 font-mono">
+            {formatCurrency(totalOutstanding)}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            {monthList.length} month{monthList.length === 1 ? "" : "s"} due
+          </p>
+        </div>
+
+        <div className="bg-violet-50/40 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/60 rounded-xl p-3.5 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300 truncate block">
+            Paying Now
+          </span>
+          <p className="text-xl sm:text-2xl font-black text-violet-600 dark:text-violet-400 mt-1 font-mono">
+            {formatCurrency(totalPayment)}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            This transaction
+          </p>
+        </div>
+
+        {(() => {
+          const rem = Math.max(
+            0,
+            totalOutstanding - (totalPayment - (Number(generalAdvance) || 0)),
+          );
+          const isCleared = rem === 0;
+          return (
+            <div
+              className={`border rounded-xl p-3.5 shadow-2xs ${
+                isCleared
+                  ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800"
+                  : "bg-amber-50/30 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800"
+              }`}
+            >
+              <span
+                className={`text-[11px] font-semibold uppercase tracking-wider truncate block ${
+                  isCleared
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : "text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                Remaining Balance
+              </span>
+              <p
+                className={`text-xl sm:text-2xl font-black mt-1 font-mono ${
+                  isCleared
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                {formatCurrency(rem)}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                {isCleared ? "All dues settled" : "Pending balance"}
+              </p>
+            </div>
+          );
+        })()}
+
+        <div className="bg-card border rounded-xl p-3.5 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate block">
+            Advance Balance
+          </span>
+          <p className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
+            {formatCurrency(advanceBalance)}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+            Prepaid credit
+          </p>
+        </div>
+      </div>
+
+      {/* Quick Pay / FIFO Auto-Allocation Toolbar */}
+      {monthList.length > 0 && canEdit && (
+        <div className="bg-card border rounded-xl p-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap">
+              <Zap className="w-3.5 h-3.5 text-violet-600" /> Quick Allocate
+              (FIFO):
             </span>
-            <p className="text-2xl font-black text-violet-950 dark:text-violet-100 mt-1">
-              {formatCurrency(totalOutstanding)}
-            </p>
-          </div>
-          {monthList.length > 0 && canEdit && (
+            <input
+              type="number"
+              placeholder="Enter amount (₹)"
+              value={quickPayAmount}
+              onChange={(e) => setQuickPayAmount(e.target.value)}
+              className="w-36 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
+            />
             <button
               type="button"
-              onClick={selectAllMonths}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-colors shadow-sm"
+              onClick={() => {
+                const amt = Number(quickPayAmount);
+                if (amt > 0) handleQuickPay(amt);
+              }}
+              disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
+              className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-xs whitespace-nowrap"
             >
-              {monthList.every((m: any) => selectedMonths[m.id])
-                ? "Clear All"
-                : "Pay Full Dues"}
+              Auto-Allocate
             </button>
-          )}
-        </div>
-
-        {/* Top Payment Summary Deck */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-          <div className="bg-card border rounded-xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Total Outstanding
-            </span>
-            <p className="text-xl font-black text-red-600 dark:text-red-400 mt-0.5">
-              {formatCurrency(totalOutstanding)}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              {monthList.length} month{monthList.length === 1 ? "" : "s"} due
-            </p>
           </div>
 
-          <div className="bg-card border border-violet-200 dark:border-violet-900/50 rounded-xl p-3.5 shadow-sm bg-violet-50/20 dark:bg-violet-950/10">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
-              Paying Now
-            </span>
-            <p className="text-xl font-black text-violet-600 dark:text-violet-400 mt-0.5">
-              {formatCurrency(totalPayment)}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              This transaction
-            </p>
-          </div>
-
-          <div
-            className={`border rounded-xl p-3.5 shadow-sm ${
-              Math.max(
-                0,
-                totalOutstanding -
-                  (totalPayment - (Number(generalAdvance) || 0)),
-              ) === 0
-                ? "bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800"
-                : "bg-amber-50/30 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800"
-            }`}
-          >
-            <span
-              className={`text-[11px] font-semibold uppercase tracking-wider ${
-                Math.max(
-                  0,
-                  totalOutstanding -
-                    (totalPayment - (Number(generalAdvance) || 0)),
-                ) === 0
-                  ? "text-emerald-700 dark:text-emerald-300"
-                  : "text-amber-700 dark:text-amber-300"
-              }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setQuickPayAmount(totalOutstanding.toString());
+                handleQuickPay(totalOutstanding);
+              }}
+              className="h-8 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
             >
-              Remaining Balance
-            </span>
-            <p
-              className={`text-xl font-black mt-0.5 ${
-                Math.max(
-                  0,
-                  totalOutstanding -
-                    (totalPayment - (Number(generalAdvance) || 0)),
-                ) === 0
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-amber-600 dark:text-amber-400"
-              }`}
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Pay Full Dues ({formatCurrency(totalOutstanding)})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQuickPayAmount("");
+                setSelectedMonths({});
+                setMonthPayments({});
+                setItemPayments({});
+                setGeneralAdvance("");
+              }}
+              className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer whitespace-nowrap"
             >
-              {formatCurrency(
-                Math.max(
-                  0,
-                  totalOutstanding -
-                    (totalPayment - (Number(generalAdvance) || 0)),
-                ),
-              )}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              {Math.max(
-                0,
-                totalOutstanding -
-                  (totalPayment - (Number(generalAdvance) || 0)),
-              ) === 0
-                ? "All dues settled"
-                : "Pending balance"}
-            </p>
-          </div>
-
-          <div className="bg-card border rounded-xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Advance Balance
-            </span>
-            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-              {formatCurrency(advanceBalance)}
-            </p>
-            <p className="text-[10px] text-muted-foreground">Prepaid credit</p>
+              Reset
+            </button>
           </div>
         </div>
-
-        {/* Quick Pay / Auto Allocation Bar */}
-        {monthList.length > 0 && canEdit && (
-          <div className="bg-card border rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-sm">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-foreground uppercase tracking-wide">
-                Quick Pay (FIFO):
-              </span>
-              <input
-                type="number"
-                placeholder="Enter amount"
-                value={quickPayAmount}
-                onChange={(e) => setQuickPayAmount(e.target.value)}
-                className="w-32 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const amt = Number(quickPayAmount);
-                  if (amt > 0) handleQuickPay(amt);
-                }}
-                disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
-                className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
-              >
-                Auto-Allocate
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setQuickPayAmount(totalOutstanding.toString());
-                  handleQuickPay(totalOutstanding);
-                }}
-                className="h-8 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
-              >
-                Pay Full ({formatCurrency(totalOutstanding)})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setQuickPayAmount("");
-                  setSelectedMonths({});
-                  setMonthPayments({});
-                  setItemPayments({});
-                  setGeneralAdvance("");
-                }}
-                className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Transport Alert if Opted-in */}
       {(() => {
@@ -803,18 +768,24 @@ export function StudentFeeCollection({
                     className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                   />
                 </th>
-                <th className="py-2.5 px-3 text-left font-medium">Month</th>
-                <th className="py-2.5 px-3 text-right font-medium">Fee Due</th>
-                <th className="py-2.5 px-3 text-right font-medium">
+                <th className="py-2.5 px-3 text-left font-medium whitespace-nowrap">
+                  Month
+                </th>
+                <th className="py-2.5 px-3 text-right font-medium whitespace-nowrap">
+                  Fee Due
+                </th>
+                <th className="py-2.5 px-3 text-right font-medium whitespace-nowrap">
                   Previously Paid
                 </th>
-                <th className="py-2.5 px-3 text-right font-medium w-40">
+                <th className="py-2.5 px-3 text-right font-medium w-40 whitespace-nowrap">
                   Paying Now (₹)
                 </th>
-                <th className="py-2.5 px-3 text-right font-medium">
+                <th className="py-2.5 px-3 text-right font-medium whitespace-nowrap">
                   Balance Due
                 </th>
-                <th className="py-2.5 px-3 text-center font-medium">Status</th>
+                <th className="py-2.5 px-3 text-center font-medium whitespace-nowrap">
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">

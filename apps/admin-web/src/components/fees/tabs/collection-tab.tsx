@@ -896,22 +896,22 @@ export function CollectionTab({
                           onChange={toggleSelectAll}
                         />
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap">
                         Month
                       </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">
                         Fee Due
                       </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">
                         Previously Paid
                       </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-44">
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground w-44 whitespace-nowrap">
                         Paying Now (₹)
                       </th>
-                      <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                      <th className="px-4 py-3 text-right font-medium text-muted-foreground whitespace-nowrap">
                         Balance Due
                       </th>
-                      <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                      <th className="px-4 py-3 text-center font-medium text-muted-foreground whitespace-nowrap">
                         Status
                       </th>
                       <th className="px-4 py-3 w-10"></th>
