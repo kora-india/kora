@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
@@ -9,7 +9,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Eye, EyeOff, ArrowLeft, MailCheck } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, MailCheck, RotateCw } from "lucide-react";
 
 const RegisterSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -25,7 +25,17 @@ export default function RegisterPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [otp, setOtp] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
 
   const {
     register,
@@ -48,11 +58,40 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(result.error || "Failed to send OTP");
 
       toast.success("OTP sent to your email");
+      setResendCooldown(30);
       setStep(2);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setIsSendingOtp(false);
+    }
+  };
+
+  const onResendOtp = async () => {
+    if (resendCooldown > 0 || isResendingOtp) return;
+    const email = getValues("email");
+    if (!email) {
+      toast.error("Email address is missing");
+      return;
+    }
+
+    setIsResendingOtp(true);
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to resend OTP");
+
+      toast.success("A new verification code has been sent to your email");
+      setOtp("");
+      setResendCooldown(30);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend OTP");
+    } finally {
+      setIsResendingOtp(false);
     }
   };
 
@@ -266,17 +305,71 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">
-                  Verification Code
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium block">
+                    Verification Code
+                  </label>
+                  {resendCooldown > 0 ? (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      Resend in{" "}
+                      <span className="font-semibold text-foreground">
+                        {resendCooldown}s
+                      </span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onResendOtp}
+                      disabled={isResendingOtp}
+                      className="text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 hover:underline inline-flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+                    >
+                      {isResendingOtp ? (
+                        <>
+                          <RotateCw className="w-3 h-3 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCw className="w-3 h-3" />
+                          Resend OTP
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   maxLength={6}
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\\D/g, ""))}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && otp.length === 6 && !isVerifying) {
+                      e.preventDefault();
+                      onVerifyOtp();
+                    }
+                  }}
                   placeholder="000000"
-                  className="w-full h-12 text-center tracking-[0.5em] text-lg px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
+                  className="w-full h-12 text-center tracking-[0.5em] text-lg px-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors font-mono"
+                  autoFocus
                 />
+                <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                  <span>Didn&apos;t receive the email?</span>
+                  {resendCooldown > 0 ? (
+                    <span>Check spam or wait {resendCooldown}s</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onResendOtp}
+                      disabled={isResendingOtp}
+                      className="text-violet-600 dark:text-violet-400 font-medium hover:underline inline-flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {isResendingOtp && (
+                        <RotateCw className="w-3 h-3 animate-spin" />
+                      )}
+                      Resend code
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-3">
