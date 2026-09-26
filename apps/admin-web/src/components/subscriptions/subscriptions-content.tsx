@@ -93,7 +93,8 @@ const PLANS_CONFIG = [
       "Priority Chat & Phone Support",
     ],
     highlight: true,
-    badgeColor: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+    badgeColor:
+      "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
   },
   {
     id: "ENTERPRISE",
@@ -112,22 +113,32 @@ const PLANS_CONFIG = [
       "Dedicated Account Manager (99.9% SLA)",
     ],
     highlight: false,
-    badgeColor: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+    badgeColor:
+      "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   },
 ];
 
-export function SubscriptionsContent({ schools, planCounts }: Readonly<SubscriptionsContentProps>) {
+export function SubscriptionsContent({
+  schools,
+  planCounts,
+}: Readonly<SubscriptionsContentProps>) {
   const router = useRouter();
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>("ALL");
-  const [planTarget, setPlanTarget] = useState<{ school: SchoolSubItem; plan: string } | null>(null);
+  const [planTarget, setPlanTarget] = useState<{
+    school: SchoolSubItem;
+    plan: string;
+  } | null>(null);
 
   const filteredSchools = schools.filter(
-    (s) => selectedPlanFilter === "ALL" || s.plan === selectedPlanFilter
+    (s) => selectedPlanFilter === "ALL" || s.plan === selectedPlanFilter,
   );
 
   const handlePlanChange = async () => {
     if (!planTarget) return;
-    const result = await updateSchoolPlan(planTarget.school.id, planTarget.plan);
+    const result = await updateSchoolPlan(
+      planTarget.school.id,
+      planTarget.plan,
+    );
     if (result.error) {
       toast.error(result.error);
       return;
@@ -137,19 +148,25 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
     router.refresh();
   };
 
-  const totalMonthlyRevenue = Object.entries(planCounts).reduce((acc, [plan, count]) => {
-    const config = PLANS_CONFIG.find((p) => p.id === plan);
-    return acc + (config ? config.price * count : 0);
-  }, 0);
+  const totalMonthlyRevenue = Object.entries(planCounts).reduce(
+    (acc, [plan, count]) => {
+      const config = PLANS_CONFIG.find((p) => p.id === plan);
+      return acc + (config ? config.price * count : 0);
+    },
+    0,
+  );
 
   return (
-    <div className="p-6 space-y-8 max-w-[1400px]">
+    <div className="p-6 space-y-8 w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">SaaS Subscription Plans & Billing</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            SaaS Subscription Plans & Billing
+          </h1>
           <p className="text-muted-foreground text-xs mt-1">
-            Manage multi-tenant subscription tiers, pricing limits, and school allocations
+            Manage multi-tenant subscription tiers, pricing limits, and school
+            allocations
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -185,7 +202,9 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
 
               <div>
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${plan.badgeColor}`}>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-md ${plan.badgeColor}`}
+                  >
                     {plan.name}
                   </span>
                   <span className="text-xs text-muted-foreground font-semibold">
@@ -198,10 +217,14 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
                     {plan.price === 0 ? "Free" : formatCurrency(plan.price)}
                   </span>
                   {plan.price > 0 && (
-                    <span className="text-xs text-muted-foreground font-medium">{plan.period}</span>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {plan.period}
+                    </span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground min-h-[32px]">{plan.description}</p>
+                <p className="text-[11px] text-muted-foreground min-h-[32px]">
+                  {plan.description}
+                </p>
 
                 <div className="my-4 py-3 border-y space-y-1.5 text-xs">
                   <div className="flex items-center justify-between font-medium text-foreground">
@@ -235,14 +258,20 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
 
               <button
                 type="button"
-                onClick={() => setSelectedPlanFilter(plan.id === selectedPlanFilter ? "ALL" : plan.id)}
+                onClick={() =>
+                  setSelectedPlanFilter(
+                    plan.id === selectedPlanFilter ? "ALL" : plan.id,
+                  )
+                }
                 className={`w-full h-8 text-xs font-semibold rounded-lg transition-colors border ${
                   selectedPlanFilter === plan.id
                     ? "bg-violet-600 text-white border-violet-600"
                     : "bg-muted/50 text-foreground hover:bg-muted"
                 }`}
               >
-                {selectedPlanFilter === plan.id ? "Showing Enrolled Schools" : `Filter by ${plan.name}`}
+                {selectedPlanFilter === plan.id
+                  ? "Showing Enrolled Schools"
+                  : `Filter by ${plan.name}`}
               </button>
             </div>
           );
@@ -288,16 +317,27 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
                 <th className="h-9 px-4 text-left font-medium">School</th>
                 <th className="h-9 px-3 text-left font-medium">Subdomain</th>
                 <th className="h-9 px-3 text-left font-medium">Current Plan</th>
-                <th className="h-9 px-3 text-left font-medium">Student Usage</th>
-                <th className="h-9 px-3 text-left font-medium">Teacher Usage</th>
+                <th className="h-9 px-3 text-left font-medium">
+                  Student Usage
+                </th>
+                <th className="h-9 px-3 text-left font-medium">
+                  Teacher Usage
+                </th>
                 <th className="h-9 px-4 text-right font-medium">Change Tier</th>
               </tr>
             </thead>
             <tbody>
               {filteredSchools.map((s) => (
-                <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="py-3 px-4 font-semibold text-foreground">{s.name}</td>
-                  <td className="py-3 px-3 font-mono text-muted-foreground">{s.subdomain}</td>
+                <tr
+                  key={s.id}
+                  className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                >
+                  <td className="py-3 px-4 font-semibold text-foreground">
+                    {s.name}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-muted-foreground">
+                    {s.subdomain}
+                  </td>
                   <td className="py-3 px-3">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
                       {s.plan}
@@ -305,19 +345,23 @@ export function SubscriptionsContent({ schools, planCounts }: Readonly<Subscript
                   </td>
                   <td className="py-3 px-3">
                     <span className="text-muted-foreground">
-                      {s.studentCount} / {s.maxStudents === Infinity ? "Unlimited" : s.maxStudents}
+                      {s.studentCount} /{" "}
+                      {s.maxStudents === Infinity ? "Unlimited" : s.maxStudents}
                     </span>
                   </td>
                   <td className="py-3 px-3">
                     <span className="text-muted-foreground">
-                      {s.teacherCount} / {s.maxTeachers === Infinity ? "Unlimited" : s.maxTeachers}
+                      {s.teacherCount} /{" "}
+                      {s.maxTeachers === Infinity ? "Unlimited" : s.maxTeachers}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">
                     <select
                       aria-label="Change school subscription tier"
                       value={s.plan}
-                      onChange={(e) => setPlanTarget({ school: s, plan: e.target.value })}
+                      onChange={(e) =>
+                        setPlanTarget({ school: s, plan: e.target.value })
+                      }
                       className="h-7 px-2 border rounded-md text-[11px] bg-background font-medium focus:ring-1 focus:ring-violet-500"
                     >
                       <option value="FREE">FREE</option>

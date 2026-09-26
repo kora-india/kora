@@ -330,7 +330,7 @@ export function TransportContent({
         },
       }}
     >
-      <div className="flex-1 space-y-5 p-4 md:p-8 pt-6 max-w-[1400px]">
+      <div className="flex-1 space-y-5 p-4 md:p-8 pt-6 w-full">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

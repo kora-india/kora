@@ -39,7 +39,7 @@ export function FeesContent(props: Readonly<Props>) {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-6 space-y-6 w-full">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Fee Management</h1>

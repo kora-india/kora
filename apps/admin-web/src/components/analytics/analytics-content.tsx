@@ -88,12 +88,16 @@ export function AnalyticsContent({
   ];
 
   const hasRevenueData = revenueAreaData.some((d) => d.amount > 0);
-  const hasAttendanceData = attendanceData.some((d) => (d.totalRecords ?? 0) > 0 || d.rate > 0);
-  const hasFeeDistribution = feeDistribution.length > 0 && feeDistribution.some((d) => d.value > 0);
-  const hasPaymentMethods = paymentMethods.length > 0 && paymentMethods.some((d) => d.amount > 0);
+  const hasAttendanceData = attendanceData.some(
+    (d) => (d.totalRecords ?? 0) > 0 || d.rate > 0,
+  );
+  const hasFeeDistribution =
+    feeDistribution.length > 0 && feeDistribution.some((d) => d.value > 0);
+  const hasPaymentMethods =
+    paymentMethods.length > 0 && paymentMethods.some((d) => d.amount > 0);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-6 space-y-6 w-full">
       <div>
         <h1 className="text-2xl font-bold">Analytics & Reports</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -114,9 +118,15 @@ export function AnalyticsContent({
               className="rounded-xl border bg-card p-4 shadow-sm flex items-start justify-between"
             >
               <div>
-                <p className="text-xs font-medium text-muted-foreground">{m.label}</p>
-                <p className={`text-2xl font-black mt-1 ${m.color}`}>{m.value}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">{m.sub}</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {m.label}
+                </p>
+                <p className={`text-2xl font-black mt-1 ${m.color}`}>
+                  {m.value}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {m.sub}
+                </p>
               </div>
               <div className={`p-2.5 rounded-xl ${m.bg}`}>
                 <Icon className="w-5 h-5" />
@@ -137,18 +147,22 @@ export function AnalyticsContent({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-violet-600" /> Fee Collection & Dues Trend
+                <CreditCard className="w-4 h-4 text-violet-600" /> Fee
+                Collection & Dues Trend
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly revenue collected vs outstanding pending balance (AntV Area)
+                Monthly revenue collected vs outstanding pending balance (AntV
+                Area)
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
               <span className="flex items-center gap-1 text-violet-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" /> Collected
+                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />{" "}
+                Collected
               </span>
               <span className="flex items-center gap-1 text-amber-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Pending
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{" "}
+                Pending
               </span>
             </div>
           </div>
@@ -169,10 +183,12 @@ export function AnalyticsContent({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <CalendarCheck className="w-4 h-4 text-emerald-600" /> Attendance Rate Trend
+                <CalendarCheck className="w-4 h-4 text-emerald-600" />{" "}
+                Attendance Rate Trend
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly student presence rate progression across all classes (AntV Line)
+                Monthly student presence rate progression across all classes
+                (AntV Line)
               </p>
             </div>
             <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
@@ -199,7 +215,8 @@ export function AnalyticsContent({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <PieIcon className="w-4 h-4 text-violet-600" /> Fee Component Distribution
+                <PieIcon className="w-4 h-4 text-violet-600" /> Fee Component
+                Distribution
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Breakdown of fee structures by component type (AntV Donut)
@@ -223,7 +240,8 @@ export function AnalyticsContent({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-blue-600" /> Payment Methods Breakdown
+                <BarChart3 className="w-4 h-4 text-blue-600" /> Payment Methods
+                Breakdown
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Revenue collected by payment mode (Cash, UPI, Bank Transfer)

@@ -231,7 +231,7 @@ export function AttendanceContent({
   };
 
   return (
-    <div className="p-6 space-y-5 max-w-[1400px]">
+    <div className="p-6 space-y-5 w-full">
       <div>
         <h1 className="text-2xl font-bold">Attendance</h1>
         <p className="text-muted-foreground text-sm mt-1">

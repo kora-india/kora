@@ -12,7 +12,13 @@ import { Select } from "antd";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
-import { createClass, updateClass, deleteClass, createSection, deleteSection } from "@/lib/actions/classes";
+import {
+  createClass,
+  updateClass,
+  deleteClass,
+  createSection,
+  deleteSection,
+} from "@/lib/actions/classes";
 
 const ClassSchema = z.object({
   name: z.string().min(1, "Required"),
@@ -33,15 +39,21 @@ interface Props {
 
 export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   const router = useRouter();
-  const [classDialog, setClassDialog] = useState<"closed" | "create" | "edit">("closed");
+  const [classDialog, setClassDialog] = useState<"closed" | "create" | "edit">(
+    "closed",
+  );
   const [sectionDialog, setSectionDialog] = useState<string | null>(null);
   const [editClass, setEditClass] = useState<any>(null);
   const [deleteClassTarget, setDeleteClassTarget] = useState<any>(null);
   const [deleteSectionTarget, setDeleteSectionTarget] = useState<any>(null);
-  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<
+    string | null
+  >(null);
 
   const classForm = useForm<ClassForm>({ resolver: zodResolver(ClassSchema) });
-  const sectionForm = useForm<SectionForm>({ resolver: zodResolver(SectionSchema) });
+  const sectionForm = useForm<SectionForm>({
+    resolver: zodResolver(SectionSchema),
+  });
 
   const onSubmitClass = async (data: ClassForm) => {
     const payload = {
@@ -51,7 +63,10 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
     const result = editClass
       ? await updateClass(editClass.id, payload)
       : await createClass(payload);
-    if (result.error) { toast.error(result.error); return; }
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
     toast.success(editClass ? "Class updated" : "Class created");
     setClassDialog("closed");
     setEditClass(null);
@@ -62,8 +77,14 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
 
   const onSubmitSection = async (data: SectionForm) => {
     if (!sectionDialog) return;
-    const result = await createSection({ classId: sectionDialog, name: data.name });
-    if (result.error) { toast.error(result.error); return; }
+    const result = await createSection({
+      classId: sectionDialog,
+      name: data.name,
+    });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
     toast.success("Section added");
     setSectionDialog(null);
     sectionForm.reset();
@@ -73,19 +94,29 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   const handleDeleteClass = async () => {
     const result = await deleteClass(deleteClassTarget.id);
     if (result.error) toast.error(result.error);
-    else { toast.success("Class deleted"); router.refresh(); }
+    else {
+      toast.success("Class deleted");
+      router.refresh();
+    }
   };
 
   const handleDeleteSection = async () => {
     const result = await deleteSection(deleteSectionTarget.id);
     if (result.error) toast.error(result.error);
-    else { toast.success("Section deleted"); router.refresh(); }
+    else {
+      toast.success("Section deleted");
+      router.refresh();
+    }
   };
 
   const openEditClass = (cls: any) => {
     setEditClass(cls);
     setSelectedClassTeacherId(cls.classTeacherId ?? null);
-    classForm.reset({ name: cls.name, grade: cls.grade, classTeacherId: cls.classTeacherId ?? "" });
+    classForm.reset({
+      name: cls.name,
+      grade: cls.grade,
+      classTeacherId: cls.classTeacherId ?? "",
+    });
     setClassDialog("edit");
   };
 
@@ -97,11 +128,13 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   };
 
   return (
-    <div className="p-6 space-y-5 max-w-[1400px]">
+    <div className="p-6 space-y-5 w-full">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Classes & Sections</h1>
-          <p className="text-muted-foreground text-sm mt-1">{classes.length} classes configured</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            {classes.length} classes configured
+          </p>
         </div>
         <button
           type="button"
@@ -146,16 +179,22 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               </div>
 
               <p className="text-sm font-semibold">{cls.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{cls._count?.students ?? 0} students</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {cls._count?.students ?? 0} students
+              </p>
 
               <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Award className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                 <span>
                   Class Teacher:{" "}
                   {cls.classTeacher?.name ? (
-                    <strong className="text-foreground font-medium">{cls.classTeacher.name}</strong>
+                    <strong className="text-foreground font-medium">
+                      {cls.classTeacher.name}
+                    </strong>
                   ) : (
-                    <span className="italic text-muted-foreground/80">Unassigned</span>
+                    <span className="italic text-muted-foreground/80">
+                      Unassigned
+                    </span>
                   )}
                 </span>
               </div>
@@ -179,7 +218,10 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               ))}
               <button
                 type="button"
-                onClick={() => { sectionForm.reset({ name: "" }); setSectionDialog(cls.id); }}
+                onClick={() => {
+                  sectionForm.reset({ name: "" });
+                  setSectionDialog(cls.id);
+                }}
                 className="text-[10px] px-2 py-0.5 rounded-full border border-dashed text-muted-foreground hover:border-violet-400 hover:text-violet-600 transition-colors flex items-center gap-1"
               >
                 <Plus className="w-2.5 h-2.5" /> Section
@@ -211,16 +253,42 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
       {/* Class Dialog */}
       <Dialog
         open={classDialog !== "closed"}
-        onOpenChange={(open) => { if (!open) { setClassDialog("closed"); setEditClass(null); } }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setClassDialog("closed");
+            setEditClass(null);
+          }
+        }}
         title={editClass ? "Edit Class" : "Create New Class"}
         className="max-w-md"
       >
-        <form onSubmit={classForm.handleSubmit(onSubmitClass)} className="space-y-4">
-          <FormField label="Class Name" error={classForm.formState.errors.name?.message} required>
-            <input {...classForm.register("name")} className={inputCls} placeholder="e.g. Grade 8" />
+        <form
+          onSubmit={classForm.handleSubmit(onSubmitClass)}
+          className="space-y-4"
+        >
+          <FormField
+            label="Class Name"
+            error={classForm.formState.errors.name?.message}
+            required
+          >
+            <input
+              {...classForm.register("name")}
+              className={inputCls}
+              placeholder="e.g. Grade 8"
+            />
           </FormField>
-          <FormField label="Grade (1–13)" error={classForm.formState.errors.grade?.message} required>
-            <input {...classForm.register("grade")} type="number" min={1} max={13} className={inputCls} />
+          <FormField
+            label="Grade (1–13)"
+            error={classForm.formState.errors.grade?.message}
+            required
+          >
+            <input
+              {...classForm.register("grade")}
+              type="number"
+              min={1}
+              max={13}
+              className={inputCls}
+            />
           </FormField>
           <FormField label="Class Teacher (Optional)">
             <Select
@@ -235,7 +303,9 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
                 label: `${t.name} (${t.email})`,
                 value: t.id,
               }))}
-              getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+              getPopupContainer={(triggerNode) =>
+                triggerNode.parentElement || document.body
+              }
               dropdownStyle={{ maxHeight: 260, overflowY: "auto" }}
               virtual={false}
               className="w-full"
@@ -252,13 +322,21 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
             />
           </FormField>
           <div className="flex gap-2 justify-end pt-1">
-            <button type="button" onClick={() => setClassDialog("closed")} className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors">Cancel</button>
+            <button
+              type="button"
+              onClick={() => setClassDialog("closed")}
+              className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={classForm.formState.isSubmitting}
               className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
             >
-              {classForm.formState.isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {classForm.formState.isSubmitting && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
               {editClass ? "Save Changes" : "Create Class"}
             </button>
           </div>
@@ -268,23 +346,44 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
       {/* Section Dialog */}
       <Dialog
         open={!!sectionDialog}
-        onOpenChange={(open) => { if (!open) setSectionDialog(null); }}
+        onOpenChange={(open) => {
+          if (!open) setSectionDialog(null);
+        }}
         title="Add Section"
         description="Add a new section to this class"
         className="max-w-sm"
       >
-        <form onSubmit={sectionForm.handleSubmit(onSubmitSection)} className="space-y-4">
-          <FormField label="Section Name" error={sectionForm.formState.errors.name?.message} required>
-            <input {...sectionForm.register("name")} className={inputCls} placeholder="e.g. A" />
+        <form
+          onSubmit={sectionForm.handleSubmit(onSubmitSection)}
+          className="space-y-4"
+        >
+          <FormField
+            label="Section Name"
+            error={sectionForm.formState.errors.name?.message}
+            required
+          >
+            <input
+              {...sectionForm.register("name")}
+              className={inputCls}
+              placeholder="e.g. A"
+            />
           </FormField>
           <div className="flex gap-2 justify-end">
-            <button type="button" onClick={() => setSectionDialog(null)} className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors">Cancel</button>
+            <button
+              type="button"
+              onClick={() => setSectionDialog(null)}
+              className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={sectionForm.formState.isSubmitting}
               className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
             >
-              {sectionForm.formState.isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {sectionForm.formState.isSubmitting && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
               Add Section
             </button>
           </div>
@@ -293,7 +392,9 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
 
       <ConfirmDialog
         open={!!deleteClassTarget}
-        onOpenChange={(open) => { if (!open) setDeleteClassTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteClassTarget(null);
+        }}
         title="Delete Class"
         description={`Delete "${deleteClassTarget?.name}"? This will also remove all its sections. Students must be moved first.`}
         confirmLabel="Delete"
@@ -302,7 +403,9 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
 
       <ConfirmDialog
         open={!!deleteSectionTarget}
-        onOpenChange={(open) => { if (!open) setDeleteSectionTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteSectionTarget(null);
+        }}
         title="Delete Section"
         description={`Delete section "${deleteSectionTarget?.name}"? Students in this section must be reassigned first.`}
         confirmLabel="Delete"

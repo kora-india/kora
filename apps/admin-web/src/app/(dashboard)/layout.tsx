@@ -73,7 +73,7 @@ export default async function DashboardRootLayout({
           subscription={subscriptionEvaluation}
           schoolPlan={schoolPlan}
         />
-        <main className="flex-1 overflow-y-auto print:h-auto print:overflow-visible print:block print:p-0">
+        <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
           <PageTransition>{children}</PageTransition>
         </main>
       </div>

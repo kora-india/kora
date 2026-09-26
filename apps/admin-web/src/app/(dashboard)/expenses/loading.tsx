@@ -1,10 +1,12 @@
 function Sk({ className }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-muted ${className ?? ""}`} />;
+  return (
+    <div className={`animate-pulse rounded-md bg-muted ${className ?? ""}`} />
+  );
 }
 
 export default function ExpensesLoading() {
   return (
-    <div className="p-6 space-y-6 max-w-[1400px]">
+    <div className="p-6 space-y-6 w-full">
       <div className="flex items-start justify-between">
         <div className="space-y-2">
           <Sk className="h-8 w-44" />

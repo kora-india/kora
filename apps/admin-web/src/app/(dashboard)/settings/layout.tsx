@@ -2,13 +2,15 @@ import { auth } from "@schoolos/auth";
 import { UserRole } from "@schoolos/types";
 import { SettingsNav } from "@/components/settings/settings-nav";
 
-export default async function SettingsLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function SettingsLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
   const userRole = session?.user?.role ?? UserRole.SCHOOL_ADMIN;
   const isSuperAdmin = userRole === UserRole.SUPER_ADMIN;
 
   return (
-    <div className="p-6 max-w-6xl">
+    <div className="p-6 w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">
           {isSuperAdmin ? "Platform Settings" : "Settings"}
@@ -26,4 +28,3 @@ export default async function SettingsLayout({ children }: Readonly<{ children: 
     </div>
   );
 }
-
