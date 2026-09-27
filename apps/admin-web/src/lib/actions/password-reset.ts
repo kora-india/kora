@@ -24,16 +24,24 @@ const ResetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
-// Always returns a generic success message so an attacker can't use this
-// to discover which emails have accounts.
-const GENERIC_SUCCESS_MESSAGE = "If an account exists for that email, we've sent a password reset link.";
-
 export async function requestPasswordReset(data: unknown) {
   const parsed = RequestResetSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
-  if (!user || !user.isActive) return { success: true, message: GENERIC_SUCCESS_MESSAGE };
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email },
+  });
+  if (!user) {
+    return {
+      error:
+        "No account found with this email address. Please check for typos or create an account.",
+    };
+  }
+  if (!user.isActive) {
+    return {
+      error: "This account has been deactivated. Please contact support.",
+    };
+  }
 
   const token = crypto.randomBytes(32).toString("hex");
   const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_TTL_MS);
@@ -43,24 +51,42 @@ export async function requestPasswordReset(data: unknown) {
     data: { resetToken: token, resetTokenExpiry },
   });
 
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl =
+    process.env.NEXTAUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
   const emailResult = await sendPasswordResetEmail(user.email, resetUrl);
   if (!emailResult.success) {
-    logger.error("Password reset email failed to send", { userId: user.id });
+    logger.error("Password reset email failed to send", {
+      userId: user.id,
+      error: emailResult.error,
+    });
+    return {
+      error:
+        "Failed to dispatch reset email. Please check SMTP settings or try again.",
+    };
   }
 
-  return { success: true, message: GENERIC_SUCCESS_MESSAGE };
+  return {
+    success: true,
+    message: "A password reset link has been sent to your email.",
+  };
 }
 
 export async function resetPassword(data: unknown) {
   const parsed = ResetPasswordSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const user = await prisma.user.findUnique({ where: { resetToken: parsed.data.token } });
+  const user = await prisma.user.findUnique({
+    where: { resetToken: parsed.data.token },
+  });
   if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-    return { error: "This reset link is invalid or has expired. Please request a new one." };
+    return {
+      error:
+        "This reset link is invalid or has expired. Please request a new one.",
+    };
   }
 
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
