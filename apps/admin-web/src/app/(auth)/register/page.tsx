@@ -12,7 +12,11 @@ import { z } from "zod";
 import { Eye, EyeOff, ArrowLeft, MailCheck, RotateCw } from "lucide-react";
 
 const RegisterSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  name: z
+    .string()
+    .trim()
+    .min(3, "Name must be at least 3 characters")
+    .max(20, "Name cannot exceed 20 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -197,6 +201,7 @@ export default function RegisterPage() {
                 <input
                   {...register("name")}
                   type="text"
+                  maxLength={20}
                   placeholder="John Doe"
                   className="w-full h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
                 />

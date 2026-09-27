@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import { formatCurrency } from "@schoolos/utils";
 import {
   allocatePayment,
@@ -95,6 +101,7 @@ export function CollectionTab({
   const handleSelectStudent = async (student: any) => {
     setSelectedStudent(student);
     setSearch("");
+    lastPrefilledKeyRef.current = "";
     setSelectedMonths({});
     setMonthPayments({});
     setItemPayments({});
@@ -199,10 +206,58 @@ export function CollectionTab({
     return { monthList: activeMonths, totalOutstanding: overallOutstanding };
   }, [studentCharges, components]);
 
+  // Track last prefilled key to avoid clobbering manual month deselects while ensuring strict full dues pre-fill
+  const lastPrefilledKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const prefillKey = `${currentStudent?.id || ""}_${studentCharges.length}_${feePaymentMode}_${totalOutstanding}`;
+    if (
+      feePaymentMode === "FULL_ONLY" &&
+      monthList.length > 0 &&
+      lastPrefilledKeyRef.current !== prefillKey
+    ) {
+      lastPrefilledKeyRef.current = prefillKey;
+      const newSelected: Record<string, boolean> = {};
+      const newMonthPayments: Record<string, string> = {};
+      const newItemPayments: Record<string, string> = {};
+
+      monthList.forEach((m: any) => {
+        newSelected[m.id] = true;
+        newMonthPayments[m.id] = m.totalDue.toString();
+        m.items.forEach((item: any) => {
+          if (item.due > 0) {
+            newItemPayments[item.id] = item.due.toString();
+          }
+        });
+      });
+
+      setSelectedMonths(newSelected);
+      setMonthPayments(newMonthPayments);
+      setItemPayments(newItemPayments);
+      setQuickPayAmount(totalOutstanding.toString());
+    } else if (feePaymentMode !== "FULL_ONLY") {
+      lastPrefilledKeyRef.current = "";
+    }
+  }, [
+    currentStudent?.id,
+    studentCharges.length,
+    feePaymentMode,
+    totalOutstanding,
+    monthList,
+  ]);
+
   // Handle Month Amount Change with Pro-Rata Auto-Distribution across items
   const updateMonthPayment = (chargeId: string, amountStr: string) => {
     const charge = monthList.find((m: any) => m.id === chargeId);
     if (!charge) return;
+
+    if (feePaymentMode === "FULL_ONLY") {
+      const enteredAmount = Number(amountStr) || 0;
+      // In strict mode, only full due or 0/cleared is allowed
+      if (enteredAmount > 0 && enteredAmount !== charge.totalDue) {
+        return;
+      }
+    }
 
     setMonthPayments((prev) => ({ ...prev, [chargeId]: amountStr }));
 
@@ -293,6 +348,9 @@ export function CollectionTab({
       setSelectedMonths({});
       setMonthPayments({});
       setItemPayments({});
+      if (feePaymentMode === "FULL_ONLY") {
+        setQuickPayAmount("");
+      }
     } else {
       const newSelected: Record<string, boolean> = {};
       const newMonthPayments: Record<string, string> = {};
@@ -311,6 +369,9 @@ export function CollectionTab({
       setSelectedMonths(newSelected);
       setMonthPayments(newMonthPayments);
       setItemPayments(newItemPayments);
+      if (feePaymentMode === "FULL_ONLY") {
+        setQuickPayAmount(totalOutstanding.toString());
+      }
     }
   };
 
@@ -331,6 +392,21 @@ export function CollectionTab({
         charge.items.forEach((it: any) => {
           newItemPayments[it.id] = "";
         });
+      } else if (feePaymentMode === "FULL_ONLY") {
+        if (remaining >= charge.totalDue) {
+          newSelected[charge.id] = true;
+          newMonthPayments[charge.id] = charge.totalDue.toString();
+          remaining -= charge.totalDue;
+          charge.items.forEach((it: any) => {
+            if (it.due > 0) newItemPayments[it.id] = it.due.toString();
+          });
+        } else {
+          newSelected[charge.id] = false;
+          newMonthPayments[charge.id] = "";
+          charge.items.forEach((it: any) => {
+            newItemPayments[it.id] = "";
+          });
+        }
       } else {
         const payForMonth = Math.min(charge.totalDue, remaining);
         newSelected[charge.id] = true;
@@ -795,28 +871,53 @@ export function CollectionTab({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
                     <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
-                    Quick Pay / Lump Sum:
+                    {feePaymentMode === "FULL_ONLY"
+                      ? "Full Due (Strict Policy):"
+                      : "Quick Pay / Lump Sum:"}
                   </span>
                   <div className="relative">
                     <input
                       type="number"
-                      placeholder="e.g. 6000"
-                      value={quickPayAmount}
-                      onChange={(e) => setQuickPayAmount(e.target.value)}
-                      className="w-36 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
+                      placeholder={
+                        feePaymentMode === "FULL_ONLY"
+                          ? "Full Due Only"
+                          : "e.g. 6000"
+                      }
+                      value={
+                        feePaymentMode === "FULL_ONLY"
+                          ? totalOutstanding
+                          : quickPayAmount
+                      }
+                      readOnly={feePaymentMode === "FULL_ONLY"}
+                      onChange={(e) => {
+                        if (feePaymentMode !== "FULL_ONLY") {
+                          setQuickPayAmount(e.target.value);
+                        }
+                      }}
+                      className={`w-36 h-8 text-xs px-2.5 border rounded-lg font-mono outline-none ${
+                        feePaymentMode === "FULL_ONLY"
+                          ? "bg-muted/60 text-foreground font-bold cursor-not-allowed select-none"
+                          : "bg-background focus:ring-2 focus:ring-violet-500"
+                      }`}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const amt = Number(quickPayAmount);
-                      if (amt > 0) handleQuickPay(amt);
-                    }}
-                    disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
-                    className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
-                  >
-                    Allocate Oldest First
-                  </button>
+                  {feePaymentMode === "FULL_ONLY" ? (
+                    <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800">
+                      Strict Policy: Pre-filled Full Amount
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const amt = Number(quickPayAmount);
+                        if (amt > 0) handleQuickPay(amt);
+                      }}
+                      disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
+                      className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                    >
+                      Allocate Oldest First
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -833,11 +934,31 @@ export function CollectionTab({
                   <button
                     type="button"
                     onClick={() => {
-                      setQuickPayAmount("");
-                      setSelectedMonths({});
-                      setMonthPayments({});
-                      setItemPayments({});
-                      setGeneralAdvance("");
+                      if (feePaymentMode === "FULL_ONLY") {
+                        const newSelected: Record<string, boolean> = {};
+                        const newMonthPayments: Record<string, string> = {};
+                        const newItemPayments: Record<string, string> = {};
+                        monthList.forEach((m: any) => {
+                          newSelected[m.id] = true;
+                          newMonthPayments[m.id] = m.totalDue.toString();
+                          m.items.forEach((item: any) => {
+                            if (item.due > 0) {
+                              newItemPayments[item.id] = item.due.toString();
+                            }
+                          });
+                        });
+                        setSelectedMonths(newSelected);
+                        setMonthPayments(newMonthPayments);
+                        setItemPayments(newItemPayments);
+                        setQuickPayAmount(totalOutstanding.toString());
+                        setGeneralAdvance("");
+                      } else {
+                        setQuickPayAmount("");
+                        setSelectedMonths({});
+                        setMonthPayments({});
+                        setItemPayments({});
+                        setGeneralAdvance("");
+                      }
                     }}
                     className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                   >
@@ -923,7 +1044,11 @@ export function CollectionTab({
                   <tbody className="divide-y">
                     {monthList.map((charge: any) => {
                       const isExpanded = expandedMonths[charge.id];
-                      const enteredVal = monthPayments[charge.id] || "";
+                      const enteredVal =
+                        feePaymentMode === "FULL_ONLY" &&
+                        selectedMonths[charge.id]
+                          ? charge.totalDue.toString()
+                          : monthPayments[charge.id] || "";
                       const enteredNum = Number(enteredVal) || 0;
                       const balanceAfterPayment = Math.max(
                         0,
@@ -1030,8 +1155,8 @@ export function CollectionTab({
                                   }
                                 />
                                 {feePaymentMode === "FULL_ONLY" && (
-                                  <span className="block text-[10px] text-muted-foreground mt-0.5">
-                                    Full due only
+                                  <span className="block text-[10px] text-purple-700 dark:text-purple-300 font-medium mt-0.5">
+                                    Full due only (Strict Policy)
                                   </span>
                                 )}
                                 {feePaymentMode === "ALLOW_PARTIAL" &&

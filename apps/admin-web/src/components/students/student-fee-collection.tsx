@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { formatCurrency } from "@schoolos/utils";
 import {
   allocatePayment,
@@ -143,10 +143,57 @@ export function StudentFeeCollection({
     student?.school?.minPartialPaymentAmount || 0,
   );
 
+  // Track last prefilled key to avoid clobbering user interactions while ensuring strict full dues pre-fill
+  const lastPrefilledKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const prefillKey = `${student?.id || ""}_${studentCharges.length}_${feePaymentMode}_${totalOutstanding}`;
+    if (
+      feePaymentMode === "FULL_ONLY" &&
+      monthList.length > 0 &&
+      lastPrefilledKeyRef.current !== prefillKey
+    ) {
+      lastPrefilledKeyRef.current = prefillKey;
+      const newSelected: Record<string, boolean> = {};
+      const newMonthPayments: Record<string, string> = {};
+      const newItemPayments: Record<string, string> = {};
+
+      monthList.forEach((m: any) => {
+        newSelected[m.id] = true;
+        newMonthPayments[m.id] = m.totalDue.toString();
+        m.items.forEach((item: any) => {
+          if (item.due > 0) {
+            newItemPayments[item.id] = item.due.toString();
+          }
+        });
+      });
+
+      setSelectedMonths(newSelected);
+      setMonthPayments(newMonthPayments);
+      setItemPayments(newItemPayments);
+      setQuickPayAmount(totalOutstanding.toString());
+    } else if (feePaymentMode !== "FULL_ONLY") {
+      lastPrefilledKeyRef.current = "";
+    }
+  }, [
+    student?.id,
+    studentCharges.length,
+    feePaymentMode,
+    totalOutstanding,
+    monthList,
+  ]);
+
   // Handle Month Amount Change with Pro-Rata (Percentage) Auto-Distribution
   const updateMonthPayment = (chargeId: string, amountStr: string) => {
     const charge = monthList.find((m: any) => m.id === chargeId);
     if (!charge) return;
+
+    if (feePaymentMode === "FULL_ONLY") {
+      const enteredAmount = Number(amountStr) || 0;
+      if (enteredAmount > 0 && enteredAmount !== charge.totalDue) {
+        return;
+      }
+    }
 
     setMonthPayments((prev) => ({ ...prev, [chargeId]: amountStr }));
 
@@ -228,6 +275,7 @@ export function StudentFeeCollection({
     itemId: string,
     itemAmountStr: string,
   ) => {
+    if (feePaymentMode === "FULL_ONLY") return;
     const charge = monthList.find((m: any) => m.id === chargeId);
     if (!charge) return;
 
@@ -273,6 +321,9 @@ export function StudentFeeCollection({
       setSelectedMonths({});
       setMonthPayments({});
       setItemPayments({});
+      if (feePaymentMode === "FULL_ONLY") {
+        setQuickPayAmount("");
+      }
     } else {
       const newSelected: Record<string, boolean> = {};
       const newMonthPayments: Record<string, string> = {};
@@ -292,6 +343,9 @@ export function StudentFeeCollection({
       setSelectedMonths(newSelected);
       setMonthPayments(newMonthPayments);
       setItemPayments(newItemPayments);
+      if (feePaymentMode === "FULL_ONLY") {
+        setQuickPayAmount(totalOutstanding.toString());
+      }
     }
   };
 
@@ -311,6 +365,21 @@ export function StudentFeeCollection({
         charge.items.forEach((it: any) => {
           newItemPayments[it.id] = "";
         });
+      } else if (feePaymentMode === "FULL_ONLY") {
+        if (remaining >= charge.totalDue) {
+          newSelected[charge.id] = true;
+          newMonthPayments[charge.id] = charge.totalDue.toString();
+          remaining -= charge.totalDue;
+          charge.items.forEach((it: any) => {
+            if (it.due > 0) newItemPayments[it.id] = it.due.toString();
+          });
+        } else {
+          newSelected[charge.id] = false;
+          newMonthPayments[charge.id] = "";
+          charge.items.forEach((it: any) => {
+            newItemPayments[it.id] = "";
+          });
+        }
       } else {
         const payForMonth = Math.min(charge.totalDue, remaining);
         newSelected[charge.id] = true;
@@ -630,27 +699,52 @@ export function StudentFeeCollection({
         <div className="bg-card border rounded-xl p-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap">
-              <Zap className="w-3.5 h-3.5 text-violet-600" /> Quick Allocate
-              (FIFO):
+              <Zap className="w-3.5 h-3.5 text-violet-600" />{" "}
+              {feePaymentMode === "FULL_ONLY"
+                ? "Full Due (Strict Policy):"
+                : "Quick Allocate (FIFO):"}
             </span>
             <input
               type="number"
-              placeholder="Enter amount (₹)"
-              value={quickPayAmount}
-              onChange={(e) => setQuickPayAmount(e.target.value)}
-              className="w-36 h-8 text-xs px-2.5 border rounded-lg bg-background font-mono outline-none focus:ring-2 focus:ring-violet-500"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const amt = Number(quickPayAmount);
-                if (amt > 0) handleQuickPay(amt);
+              placeholder={
+                feePaymentMode === "FULL_ONLY"
+                  ? "Full Due Only"
+                  : "Enter amount (₹)"
+              }
+              value={
+                feePaymentMode === "FULL_ONLY"
+                  ? totalOutstanding
+                  : quickPayAmount
+              }
+              readOnly={feePaymentMode === "FULL_ONLY"}
+              onChange={(e) => {
+                if (feePaymentMode !== "FULL_ONLY") {
+                  setQuickPayAmount(e.target.value);
+                }
               }}
-              disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
-              className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-xs whitespace-nowrap"
-            >
-              Auto-Allocate
-            </button>
+              className={`w-36 h-8 text-xs px-2.5 border rounded-lg font-mono outline-none ${
+                feePaymentMode === "FULL_ONLY"
+                  ? "bg-muted/60 text-foreground font-bold cursor-not-allowed select-none"
+                  : "bg-background focus:ring-2 focus:ring-violet-500"
+              }`}
+            />
+            {feePaymentMode === "FULL_ONLY" ? (
+              <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800">
+                Strict Policy: Pre-filled Full Amount
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const amt = Number(quickPayAmount);
+                  if (amt > 0) handleQuickPay(amt);
+                }}
+                disabled={!quickPayAmount || Number(quickPayAmount) <= 0}
+                className="h-8 px-3 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-xs whitespace-nowrap"
+              >
+                Auto-Allocate
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -668,11 +762,31 @@ export function StudentFeeCollection({
             <button
               type="button"
               onClick={() => {
-                setQuickPayAmount("");
-                setSelectedMonths({});
-                setMonthPayments({});
-                setItemPayments({});
-                setGeneralAdvance("");
+                if (feePaymentMode === "FULL_ONLY") {
+                  const newSelected: Record<string, boolean> = {};
+                  const newMonthPayments: Record<string, string> = {};
+                  const newItemPayments: Record<string, string> = {};
+                  monthList.forEach((m: any) => {
+                    newSelected[m.id] = true;
+                    newMonthPayments[m.id] = m.totalDue.toString();
+                    m.items.forEach((item: any) => {
+                      if (item.due > 0) {
+                        newItemPayments[item.id] = item.due.toString();
+                      }
+                    });
+                  });
+                  setSelectedMonths(newSelected);
+                  setMonthPayments(newMonthPayments);
+                  setItemPayments(newItemPayments);
+                  setQuickPayAmount(totalOutstanding.toString());
+                  setGeneralAdvance("");
+                } else {
+                  setQuickPayAmount("");
+                  setSelectedMonths({});
+                  setMonthPayments({});
+                  setItemPayments({});
+                  setGeneralAdvance("");
+                }
               }}
               className="h-8 px-2.5 rounded-lg border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer whitespace-nowrap"
             >
@@ -809,6 +923,19 @@ export function StudentFeeCollection({
                   (totalPaidForMonth / (month.netCharge || 1)) * 100,
                 );
 
+                const minRequiredForMonth =
+                  minPartialPaymentPercentage > 0
+                    ? Math.ceil(
+                        (month.netCharge * minPartialPaymentPercentage) / 100,
+                      )
+                    : minPartialPaymentAmount;
+
+                const isRemainingBelowThreshold =
+                  minRequiredForMonth > 0 &&
+                  month.totalDue <= minRequiredForMonth;
+                const isFullDueOnlyForMonth =
+                  feePaymentMode === "FULL_ONLY" || isRemainingBelowThreshold;
+
                 return (
                   <React.Fragment key={month.id}>
                     {/* Month Parent Row */}
@@ -866,74 +993,56 @@ export function StudentFeeCollection({
                         {formatCurrency(month.paidAmount)}
                       </td>
                       <td className="py-3 px-3 text-right">
-                        {(() => {
-                          const minRequiredForMonth =
-                            minPartialPaymentPercentage > 0
-                              ? Math.ceil(
-                                  (month.netCharge *
-                                    minPartialPaymentPercentage) /
-                                    100,
-                                )
-                              : minPartialPaymentAmount;
-
-                          const isRemainingBelowThreshold =
-                            minRequiredForMonth > 0 &&
-                            month.totalDue <= minRequiredForMonth;
-                          const isFullDueOnlyForMonth =
-                            feePaymentMode === "FULL_ONLY" ||
-                            isRemainingBelowThreshold;
-
-                          return (
-                            <>
-                              <input
-                                type="number"
-                                placeholder="0"
-                                value={monthPayments[month.id] || ""}
-                                readOnly={isFullDueOnlyForMonth}
-                                onChange={(e) =>
-                                  !isFullDueOnlyForMonth &&
-                                  updateMonthPayment(month.id, e.target.value)
-                                }
-                                disabled={!canEdit}
-                                className={`w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none ${
-                                  isFullDueOnlyForMonth
-                                    ? "bg-muted/30 cursor-not-allowed text-muted-foreground"
-                                    : ""
-                                }`}
-                              />
-                              {feePaymentMode === "FULL_ONLY" && (
-                                <span className="block text-[9px] text-muted-foreground mt-0.5 font-medium">
-                                  Full Due Only
-                                </span>
-                              )}
-                              {feePaymentMode === "ALLOW_PARTIAL" &&
-                                isRemainingBelowThreshold && (
-                                  <span className="block text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
-                                    Must Pay Remainder (≤{" "}
-                                    {minPartialPaymentPercentage > 0
-                                      ? `${minPartialPaymentPercentage}%`
-                                      : `₹${minRequiredForMonth}`}
-                                    )
-                                  </span>
-                                )}
-                              {feePaymentMode === "ALLOW_PARTIAL" &&
-                                !isRemainingBelowThreshold &&
-                                minRequiredForMonth > 0 &&
-                                Number(monthPayments[month.id]) > 0 &&
-                                Number(monthPayments[month.id]) <
-                                  minRequiredForMonth &&
-                                Number(monthPayments[month.id]) <
-                                  month.totalDue && (
-                                  <span className="block text-[9px] text-rose-600 font-semibold mt-0.5">
-                                    Min{" "}
-                                    {minPartialPaymentPercentage > 0
-                                      ? `${minPartialPaymentPercentage}% (₹${minRequiredForMonth})`
-                                      : `₹${minRequiredForMonth}`}
-                                  </span>
-                                )}
-                            </>
-                          );
-                        })()}
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={
+                            feePaymentMode === "FULL_ONLY" &&
+                            selectedMonths[month.id]
+                              ? month.totalDue.toString()
+                              : monthPayments[month.id] || ""
+                          }
+                          readOnly={isFullDueOnlyForMonth}
+                          onChange={(e) =>
+                            !isFullDueOnlyForMonth &&
+                            updateMonthPayment(month.id, e.target.value)
+                          }
+                          disabled={!canEdit}
+                          className={`w-32 h-8 px-2.5 text-right text-xs font-bold rounded-lg border ${
+                            isFullDueOnlyForMonth
+                              ? "bg-muted/40 cursor-not-allowed text-violet-700 dark:text-violet-300 font-bold"
+                              : "bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                          }`}
+                        />
+                        {feePaymentMode === "FULL_ONLY" && (
+                          <span className="block text-[9px] text-purple-700 dark:text-purple-300 mt-0.5 font-semibold">
+                            Full Due Only (Strict Policy)
+                          </span>
+                        )}
+                        {feePaymentMode === "ALLOW_PARTIAL" &&
+                          isRemainingBelowThreshold && (
+                            <span className="block text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                              Must Pay Remainder (≤{" "}
+                              {minPartialPaymentPercentage > 0
+                                ? `${minPartialPaymentPercentage}%`
+                                : `₹${minRequiredForMonth}`}
+                              )
+                            </span>
+                          )}
+                        {feePaymentMode === "ALLOW_PARTIAL" &&
+                          !isRemainingBelowThreshold &&
+                          minRequiredForMonth > 0 &&
+                          Number(monthPayments[month.id]) > 0 &&
+                          Number(monthPayments[month.id]) <
+                            minRequiredForMonth &&
+                          Number(monthPayments[month.id]) < month.totalDue && (
+                            <span className="block text-[9px] text-rose-600 font-semibold mt-0.5">
+                              Min{" "}
+                              {minPartialPaymentPercentage > 0
+                                ? `${minPartialPaymentPercentage}% (₹${minRequiredForMonth})`
+                                : `₹${minRequiredForMonth}`}
+                            </span>
+                          )}
                       </td>
                       <td className="py-3 px-3 text-right font-bold">
                         <span
@@ -1024,16 +1133,30 @@ export function StudentFeeCollection({
                                       <input
                                         type="number"
                                         placeholder="0"
-                                        value={itemPayments[item.id] || ""}
+                                        value={
+                                          feePaymentMode === "FULL_ONLY" &&
+                                          selectedMonths[month.id] &&
+                                          item.due > 0
+                                            ? item.due.toString()
+                                            : itemPayments[item.id] || ""
+                                        }
                                         onChange={(e) =>
+                                          !isFullDueOnlyForMonth &&
                                           updateItemPayment(
                                             month.id,
                                             item.id,
                                             e.target.value,
                                           )
                                         }
-                                        disabled={!canEdit}
-                                        className="w-28 h-7 px-2 text-right text-[11px] font-semibold rounded-md border bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        readOnly={isFullDueOnlyForMonth}
+                                        disabled={
+                                          !canEdit || isFullDueOnlyForMonth
+                                        }
+                                        className={`w-28 h-7 px-2 text-right text-[11px] font-semibold rounded-md border ${
+                                          isFullDueOnlyForMonth
+                                            ? "bg-muted/40 cursor-not-allowed text-muted-foreground"
+                                            : "bg-background focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                        }`}
                                       />
                                     </td>
                                     <td className="py-1.5 text-right">

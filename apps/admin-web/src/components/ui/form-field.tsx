@@ -3,20 +3,31 @@
 import { cn } from "@schoolos/utils";
 
 interface FormFieldProps {
-  label: string;
+  label: React.ReactNode;
+  description?: React.ReactNode;
   error?: string;
   required?: boolean;
   className?: string;
   children: React.ReactNode;
 }
 
-export function FormField({ label, error, required, className, children }: FormFieldProps) {
+export function FormField({
+  label,
+  description,
+  error,
+  required,
+  className,
+  children,
+}: FormFieldProps) {
   return (
     <div className={cn("space-y-1.5", className)}>
       <label className="text-xs font-medium block">
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
+      {description && (
+        <p className="text-xs text-muted-foreground">{description}</p>
+      )}
       {children}
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>

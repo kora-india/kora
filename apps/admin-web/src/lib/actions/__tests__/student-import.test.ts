@@ -1,17 +1,25 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest';
-import { bulkImportStudents } from '../student-import';
-import { prisma } from '@schoolos/db';
-import { auth } from '@schoolos/auth';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterAll,
+  beforeAll,
+  vi,
+} from "vitest";
+import { bulkImportStudents } from "../student-import";
+import { prisma } from "@schoolos/db";
+import { auth } from "@schoolos/auth";
 
-const schoolId = 'import-school-' + Math.random().toString(36).substring(7);
+const schoolId = "import-school-" + Math.random().toString(36).substring(7);
 
-describe('Bulk Student Import', () => {
+describe("Bulk Student Import", () => {
   let classId: string;
   let sectionId: string;
 
   beforeAll(async () => {
     vi.mocked(auth).mockResolvedValue({
-      user: { id: 'test-user', schoolId, role: 'SUPER_ADMIN' }
+      user: { id: "test-user", schoolId, role: "SUPER_ADMIN" },
     } as any);
 
     // Clean DB
@@ -21,17 +29,17 @@ describe('Bulk Student Import', () => {
     await prisma.school.create({
       data: {
         id: schoolId,
-        name: 'Test School',
-        subdomain: 'testschool-' + Math.random().toString(36).substring(7),
-      }
+        name: "Test School",
+        subdomain: "testschool-" + Math.random().toString(36).substring(7),
+      },
     });
 
     const c = await prisma.class.create({
       data: {
         schoolId,
-        name: 'Grade 10',
+        name: "Grade 10",
         grade: 10,
-      }
+      },
     });
     classId = c.id;
 
@@ -39,8 +47,8 @@ describe('Bulk Student Import', () => {
       data: {
         schoolId,
         classId,
-        name: 'A',
-      }
+        name: "A",
+      },
     });
     sectionId = s.id;
   });
@@ -53,27 +61,27 @@ describe('Bulk Student Import', () => {
     await prisma.school.deleteMany({ where: { id: schoolId } });
   });
 
-  it('should successfully bulk import students', async () => {
+  it("should successfully bulk import students", async () => {
     const runKey = Math.random().toString(36).substring(7);
     const data = [
       {
-        name: 'John Doe',
+        name: "John Doe",
         classId,
         sectionId,
-        parentName: 'Mr. Doe',
-        parentPhone: '1234567890',
-        admissionNumber: 'ADM-001-' + runKey,
-        rollNumber: '1',
+        parentName: "Mr. Doe",
+        parentPhone: "1234567890",
+        admissionNumber: "ADM-001-" + runKey,
+        rollNumber: "1",
       },
       {
-        name: 'Jane Doe',
+        name: "Jane Doe",
         classId,
         sectionId,
-        parentName: 'Mrs. Doe',
-        parentPhone: '0987654321',
-        admissionNumber: 'ADM-002-' + runKey,
-        rollNumber: '2',
-      }
+        parentName: "Mrs. Doe",
+        parentPhone: "0987654321",
+        admissionNumber: "ADM-002-" + runKey,
+        rollNumber: "2",
+      },
     ];
 
     const result = await bulkImportStudents(data);
@@ -86,65 +94,65 @@ describe('Bulk Student Import', () => {
     expect(students.length).toBe(2);
   });
 
-  it('should auto-generate roll number and admission number if missing', async () => {
+  it("should auto-generate roll number and admission number if missing", async () => {
     const data = [
       {
-        name: 'No Roll',
+        name: "No Roll",
         classId,
         sectionId,
-        parentName: 'Parent',
-        parentPhone: '1234567890',
+        parentName: "Parent",
+        parentPhone: "1234567890",
         // Missing admissionNumber and rollNumber
-      }
+      },
     ];
 
     const result = await bulkImportStudents(data);
     expect(result.imported).toBe(1);
 
     const student = await prisma.student.findFirst({ where: { schoolId } });
-    expect(student?.rollNumber).toBe('1');
-    expect(student?.admissionNumber).toContain('ADM-');
+    expect(student?.rollNumber).toBe("1");
+    expect(student?.admissionNumber).toMatch(/^SCH-\d{4}-\d{4}$/);
   });
 
-  it('should skip duplicate admission numbers', async () => {
-    const dupeAdm = 'ADM-DUPE-' + Math.random().toString(36).substring(7);
+  it("should skip duplicate admission numbers", async () => {
+    const dupeAdm = "ADM-DUPE-" + Math.random().toString(36).substring(7);
     // Insert an existing student
     await prisma.student.create({
       data: {
         schoolId,
         classId,
         sectionId,
-        name: 'Existing',
-        parentName: 'Parent',
-        parentPhone: '123',
+        name: "Existing",
+        parentName: "Parent",
+        parentPhone: "123",
         admissionNumber: dupeAdm,
-        rollNumber: '99',
-      }
+        rollNumber: "99",
+      },
     });
 
     const data = [
       {
-        name: 'Duplicate',
+        name: "Duplicate",
         classId,
         sectionId,
-        parentName: 'Parent',
-        parentPhone: '123',
+        parentName: "Parent",
+        parentPhone: "123",
         admissionNumber: dupeAdm, // duplicate
-        rollNumber: '100',
+        rollNumber: "100",
       },
       {
-        name: 'New Student',
+        name: "New Student",
         classId,
         sectionId,
-        parentName: 'Parent',
-        parentPhone: '123',
-        admissionNumber: 'ADM-NEW-' + Math.random().toString(36).substring(7),
-        rollNumber: '101',
-      }
+        parentName: "Parent",
+        parentPhone: "123",
+        admissionNumber: "ADM-NEW-" + Math.random().toString(36).substring(7),
+        rollNumber: "101",
+      },
     ];
 
     const result = await bulkImportStudents(data);
-    
+
     // One imported, one skipped
     expect(result.imported).toBe(1);
     expect(result.skipped).toBe(1);

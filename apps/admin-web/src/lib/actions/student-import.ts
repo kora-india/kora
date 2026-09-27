@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 import { revalidatePath } from "next/cache";
 import { invalidateCache } from "@/lib/redis";
+import { formatAdmissionNumber } from "@/lib/admission-number";
 
 const importStudentSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -23,7 +24,7 @@ export async function bulkImportStudents(data: any[]) {
   if (!session?.user?.schoolId) {
     throw new Error("Unauthorized");
   }
-  
+
   const schoolId = session.user.schoolId;
 
   // 1. Validation
@@ -35,19 +36,31 @@ export async function bulkImportStudents(data: any[]) {
       const parsed = importStudentSchema.parse(row);
       validRecords.push(parsed);
     } catch (e: any) {
-      const errMsgs = e.errors ? e.errors.map((err: any) => `${err.path.length > 0 ? err.path.join('.') + ': ' : ''}${err.message}`).join(' | ') : 'Invalid data';
+      const errMsgs = e.errors
+        ? e.errors
+            .map(
+              (err: any) =>
+                `${err.path.length > 0 ? err.path.join(".") + ": " : ""}${err.message}`,
+            )
+            .join(" | ")
+        : "Invalid data";
       errors.push(`Row ${index + 1} [v2]: ${errMsgs}`);
     }
   });
 
   if (validRecords.length === 0) {
-    return { imported: 0, skipped: 0, failed: data.length, errors: [...errors, "No valid records to import"] };
+    return {
+      imported: 0,
+      skipped: 0,
+      failed: data.length,
+      errors: [...errors, "No valid records to import"],
+    };
   }
 
   // 2. Resolve or Create Classes and Sections
   const existingClasses = await prisma.class.findMany({
     where: { schoolId },
-    include: { sections: true }
+    include: { sections: true },
   });
 
   const classMap = new Map<string, any>();
@@ -60,26 +73,32 @@ export async function bulkImportStudents(data: any[]) {
 
   // Pre-process validRecords to resolve classId and sectionId
   for (const record of validRecords) {
-    let classObj = classMap.get(record.classId) || classMap.get(record.classId.toLowerCase());
+    let classObj =
+      classMap.get(record.classId) ||
+      classMap.get(record.classId.toLowerCase());
     if (!classObj) {
       // Auto-create class
       const newClass = await prisma.class.create({
         data: {
           schoolId,
           name: record.classId,
-          grade: parseInt(record.classId.replace(/\D/g, '')) || 1, // best effort grade extraction
+          grade: parseInt(record.classId.replace(/\D/g, "")) || 1, // best effort grade extraction
         },
-        include: { sections: true }
+        include: { sections: true },
       });
       classObj = newClass;
       classMap.set(newClass.id, newClass);
       classMap.set(newClass.name.toLowerCase(), newClass);
     }
-    
+
     // Update record with actual ID
     record.classId = classObj.id;
 
-    let sectionObj = classObj.sections.find((s: any) => s.id === record.sectionId || s.name.toLowerCase() === record.sectionId.toLowerCase());
+    let sectionObj = classObj.sections.find(
+      (s: any) =>
+        s.id === record.sectionId ||
+        s.name.toLowerCase() === record.sectionId.toLowerCase(),
+    );
     if (!sectionObj) {
       // Auto-create section
       sectionObj = await prisma.section.create({
@@ -87,7 +106,7 @@ export async function bulkImportStudents(data: any[]) {
           schoolId,
           classId: classObj.id,
           name: record.sectionId,
-        }
+        },
       });
       classObj.sections.push(sectionObj);
     }
@@ -97,27 +116,53 @@ export async function bulkImportStudents(data: any[]) {
   }
 
   // 3. Duplicate Check for Admission Numbers
-  const providedAdmissionNumbers = validRecords.map(r => r.admissionNumber).filter(Boolean) as string[];
+  const providedAdmissionNumbers = validRecords
+    .map((r) => r.admissionNumber)
+    .filter(Boolean) as string[];
   const existingStudents = await prisma.student.findMany({
-    where: { 
+    where: {
       schoolId,
-      admissionNumber: { in: providedAdmissionNumbers }
+      admissionNumber: { in: providedAdmissionNumbers },
     },
-    select: { admissionNumber: true }
+    select: { admissionNumber: true },
   });
-  const existingSet = new Set(existingStudents.map(s => s.admissionNumber));
+  const existingSet = new Set(existingStudents.map((s) => s.admissionNumber));
+
+  // Fetch school's admission format configuration
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      admissionNumberPrefix: true,
+      admissionNumberFormat: true,
+      nextAdmissionNumber: true,
+      name: true,
+    },
+  });
+
+  const prefix =
+    school?.admissionNumberPrefix ||
+    (school?.name
+      ? school.name
+          .replace(/[^A-Za-z0-9]/g, "")
+          .slice(0, 4)
+          .toUpperCase()
+      : "SCH") ||
+    "SCH";
+  const format = school?.admissionNumberFormat || "{PREFIX}-{YYYY}-{SEQ:4}";
+  let nextSeq = school?.nextAdmissionNumber || 1;
+  let autoGenCount = 0;
 
   // 4. Process records
   const toImport: any[] = [];
   let skippedCount = 0;
-  
+
   // Track roll numbers per section to auto-generate if missing
   const maxRollPerSection: Record<string, number> = {};
   const currentStudents = await prisma.student.findMany({
     where: { schoolId },
-    select: { sectionId: true, rollNumber: true }
+    select: { sectionId: true, rollNumber: true },
   });
-  
+
   for (const s of currentStudents) {
     if (!maxRollPerSection[s.sectionId]) maxRollPerSection[s.sectionId] = 0;
     const rNum = parseInt(s.rollNumber, 10);
@@ -130,28 +175,44 @@ export async function bulkImportStudents(data: any[]) {
     // Skip if admission number exists
     if (record.admissionNumber && existingSet.has(record.admissionNumber)) {
       skippedCount++;
-      errors.push(`Skipped: Admission No ${record.admissionNumber} already exists.`);
+      errors.push(
+        `Skipped: Admission No ${record.admissionNumber} already exists.`,
+      );
       continue;
     }
 
-    // Auto-generate admission number if missing
+    // Auto-generate admission number if missing using school's configured format
     let admNo = record.admissionNumber;
     if (!admNo) {
-      // Generate a simple unique string: ADM-timestamp-random
-      admNo = `ADM-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 1000)}`;
+      while (true) {
+        const candidate = formatAdmissionNumber(format, prefix, nextSeq);
+        nextSeq++;
+        autoGenCount++;
+        if (
+          !existingSet.has(candidate) &&
+          !toImport.some((r) => r.admissionNumber === candidate)
+        ) {
+          admNo = candidate;
+          break;
+        }
+      }
     }
 
     // Auto-generate roll number if missing
     let rollNo = record.rollNumber;
     if (!rollNo) {
-      if (!maxRollPerSection[record.sectionId]) maxRollPerSection[record.sectionId] = 0;
+      if (!maxRollPerSection[record.sectionId])
+        maxRollPerSection[record.sectionId] = 0;
       maxRollPerSection[record.sectionId]++;
       rollNo = maxRollPerSection[record.sectionId].toString();
     } else {
       // If provided, parse it to update the max roll tracker
       const rNum = parseInt(rollNo, 10);
       if (!isNaN(rNum)) {
-        if (!maxRollPerSection[record.sectionId] || rNum > maxRollPerSection[record.sectionId]) {
+        if (
+          !maxRollPerSection[record.sectionId] ||
+          rNum > maxRollPerSection[record.sectionId]
+        ) {
           maxRollPerSection[record.sectionId] = rNum;
         }
       }
@@ -180,7 +241,12 @@ export async function bulkImportStudents(data: any[]) {
   }
 
   if (toImport.length === 0) {
-    return { imported: 0, skipped: skippedCount, failed: data.length - skippedCount, errors };
+    return {
+      imported: 0,
+      skipped: skippedCount,
+      failed: data.length - skippedCount,
+      errors,
+    };
   }
 
   // 5. Bulk Insert
@@ -188,8 +254,15 @@ export async function bulkImportStudents(data: any[]) {
   try {
     const result = await prisma.student.createMany({
       data: toImport,
-      skipDuplicates: true, 
+      skipDuplicates: true,
     });
+
+    if (autoGenCount > 0) {
+      await prisma.school.update({
+        where: { id: schoolId },
+        data: { nextAdmissionNumber: nextSeq },
+      });
+    }
 
     // Invalidate Redis caches
     await Promise.all([
@@ -203,12 +276,12 @@ export async function bulkImportStudents(data: any[]) {
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
-    
+
     return {
       imported: result.count,
       skipped: skippedCount,
       failed: data.length - result.count - skippedCount,
-      errors
+      errors,
     };
   } catch (error: any) {
     throw new Error(`Database error during import: ${error.message}`);

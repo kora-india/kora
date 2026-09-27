@@ -10,7 +10,11 @@ import { z } from "zod";
 const registerLogger = createLogger("auth-register");
 
 const RegisterSchema = z.object({
-  name: z.string().min(2),
+  name: z
+    .string()
+    .trim()
+    .min(3, "Name must be at least 3 characters")
+    .max(20, "Name cannot exceed 20 characters"),
   email: z.string().email(),
   password: z.string().min(6),
   otp: z.string().length(6),
@@ -24,13 +28,12 @@ export async function POST(req: Request) {
       registerLogger.warn({ ip }, "Registration rate limit exceeded for IP");
       return createRateLimitResponse(
         rateLimitResult,
-        "Too many registration attempts. Please wait 15 minutes before trying again."
+        "Too many registration attempts. Please wait 15 minutes before trying again.",
       );
     }
 
     const body = await req.json();
     const { name, email, password, otp } = RegisterSchema.parse(body);
-
 
     // 1. Verify OTP
     const otpRecord = await prisma.otp.findFirst({
@@ -39,20 +42,32 @@ export async function POST(req: Request) {
     });
 
     if (!otpRecord) {
-      registerLogger.warn({ email }, "Registration failed: Invalid OTP provided");
+      registerLogger.warn(
+        { email },
+        "Registration failed: Invalid OTP provided",
+      );
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
     if (otpRecord.expiresAt < new Date()) {
-      registerLogger.warn({ email }, "Registration failed: Expired OTP provided");
+      registerLogger.warn(
+        { email },
+        "Registration failed: Expired OTP provided",
+      );
       return NextResponse.json({ error: "OTP has expired" }, { status: 400 });
     }
 
     // 2. Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      registerLogger.warn({ email }, "Registration failed: Email already registered");
-      return NextResponse.json({ error: "Email is already registered" }, { status: 400 });
+      registerLogger.warn(
+        { email },
+        "Registration failed: Email already registered",
+      );
+      return NextResponse.json(
+        { error: "Email is already registered" },
+        { status: 400 },
+      );
     }
 
     // 3. Create user
@@ -72,18 +87,27 @@ export async function POST(req: Request) {
 
     registerLogger.info(
       { userId: user.id, email: user.email, role: user.role },
-      `[User Registered] New school admin registered successfully: ${user.email}`
+      `[User Registered] New school admin registered successfully: ${user.email}`,
     );
 
-    return NextResponse.json({ success: true, user: { id: user.id, email: user.email } });
+    return NextResponse.json({
+      success: true,
+      user: { id: user.id, email: user.email },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid input data" }, { status: 400 });
+      return NextResponse.json(
+        { error: error.issues[0]?.message || "Invalid input data" },
+        { status: 400 },
+      );
     }
     registerLogger.error({ err: error }, "Error in user registration");
     Sentry.captureException(error, {
       tags: { action: "register-user" },
     });
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
   }
 }

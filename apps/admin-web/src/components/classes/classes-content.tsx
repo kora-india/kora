@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Pencil, Trash2, BookOpen, Loader2, Award } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  BookOpen,
+  Loader2,
+  Award,
+  X,
+  Check,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,7 +25,7 @@ import {
   createClass,
   updateClass,
   deleteClass,
-  createSection,
+  createSections,
   deleteSection,
 } from "@/lib/actions/classes";
 
@@ -24,13 +33,10 @@ const ClassSchema = z.object({
   name: z.string().min(1, "Required"),
   grade: z.coerce.number().min(1).max(13),
   classTeacherId: z.string().optional().nullable(),
-});
-const SectionSchema = z.object({
-  name: z.string().min(1, "Required"),
+  initialSections: z.string().optional(),
 });
 
 type ClassForm = z.infer<typeof ClassSchema>;
-type SectionForm = z.infer<typeof SectionSchema>;
 
 interface Props {
   classes: any[];
@@ -50,15 +56,20 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
     string | null
   >(null);
 
+  // Multiple sections state
+  const [pendingSections, setPendingSections] = useState<string[]>([]);
+  const [sectionInput, setSectionInput] = useState("");
+  const [isSubmittingSections, setIsSubmittingSections] = useState(false);
+
+  const targetClass = classes.find((c) => c.id === sectionDialog);
+
   const classForm = useForm<ClassForm>({ resolver: zodResolver(ClassSchema) });
-  const sectionForm = useForm<SectionForm>({
-    resolver: zodResolver(SectionSchema),
-  });
 
   const onSubmitClass = async (data: ClassForm) => {
     const payload = {
       ...data,
       classTeacherId: selectedClassTeacherId || null,
+      initialSections: data.initialSections?.trim() || undefined,
     };
     const result = editClass
       ? await updateClass(editClass.id, payload)
@@ -75,20 +86,116 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
     router.refresh();
   };
 
-  const onSubmitSection = async (data: SectionForm) => {
+  const openAddSections = (cls: any) => {
+    setSectionDialog(cls.id);
+    setPendingSections([]);
+    setSectionInput("");
+  };
+
+  const addSectionNames = (names: string[]) => {
+    const newNames: string[] = [];
+    const existingNames = new Set(
+      (targetClass?.sections || []).map((s: any) => s.name.toUpperCase()),
+    );
+    const pendingSet = new Set(pendingSections.map((s) => s.toUpperCase()));
+
+    for (const n of names) {
+      const trimmed = n.trim();
+      if (!trimmed) continue;
+      const upper = trimmed.toUpperCase();
+      if (existingNames.has(upper)) {
+        toast.info(
+          `Section "${trimmed}" already exists in ${targetClass?.name}`,
+        );
+        continue;
+      }
+      if (pendingSet.has(upper)) continue;
+      pendingSet.add(upper);
+      newNames.push(trimmed);
+    }
+
+    if (newNames.length > 0) {
+      setPendingSections((prev) => [...prev, ...newNames]);
+    }
+  };
+
+  const handleAddFromInput = () => {
+    if (!sectionInput.trim()) return;
+    const parts = sectionInput
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    addSectionNames(parts);
+    setSectionInput("");
+  };
+
+  const removePendingSection = (name: string) => {
+    setPendingSections((prev) =>
+      prev.filter((s) => s.toUpperCase() !== name.toUpperCase()),
+    );
+  };
+
+  const onSubmitSections = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!sectionDialog) return;
-    const result = await createSection({
-      classId: sectionDialog,
-      name: data.name,
-    });
-    if (result.error) {
-      toast.error(result.error);
+
+    let allToAdd = [...pendingSections];
+    if (sectionInput.trim()) {
+      const inputParts = sectionInput
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const existingNames = new Set(
+        (targetClass?.sections || []).map((s: any) => s.name.toUpperCase()),
+      );
+      const currentSet = new Set(allToAdd.map((s) => s.toUpperCase()));
+      for (const p of inputParts) {
+        if (
+          !existingNames.has(p.toUpperCase()) &&
+          !currentSet.has(p.toUpperCase())
+        ) {
+          currentSet.add(p.toUpperCase());
+          allToAdd.push(p);
+        }
+      }
+    }
+
+    if (allToAdd.length === 0) {
+      toast.error("Please add at least one section name");
       return;
     }
-    toast.success("Section added");
-    setSectionDialog(null);
-    sectionForm.reset();
-    router.refresh();
+
+    setIsSubmittingSections(true);
+    try {
+      const result = await createSections({
+        classId: sectionDialog,
+        names: allToAdd,
+      });
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      if (result.skipped && result.skipped.length > 0) {
+        toast.success(
+          `Added ${result.count} section(s). ${result.skipped.join(", ")} already existed.`,
+        );
+      } else {
+        toast.success(
+          `Added ${result.count} section(s): ${result.created?.join(", ") ?? ""}`,
+        );
+      }
+
+      setSectionDialog(null);
+      setPendingSections([]);
+      setSectionInput("");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add sections");
+    } finally {
+      setIsSubmittingSections(false);
+    }
   };
 
   const handleDeleteClass = async () => {
@@ -116,6 +223,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
       name: cls.name,
       grade: cls.grade,
       classTeacherId: cls.classTeacherId ?? "",
+      initialSections: "",
     });
     setClassDialog("edit");
   };
@@ -123,7 +231,12 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   const openCreateClass = () => {
     setEditClass(null);
     setSelectedClassTeacherId(null);
-    classForm.reset({ name: "", grade: 1, classTeacherId: "" });
+    classForm.reset({
+      name: "",
+      grade: 1,
+      classTeacherId: "",
+      initialSections: "",
+    });
     setClassDialog("create");
   };
 
@@ -225,10 +338,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               ))}
               <button
                 type="button"
-                onClick={() => {
-                  sectionForm.reset({ name: "" });
-                  setSectionDialog(cls.id);
-                }}
+                onClick={() => openAddSections(cls)}
                 className="text-[10px] px-2 py-0.5 rounded-full border border-dashed text-muted-foreground hover:border-violet-400 hover:text-violet-600 transition-colors flex items-center gap-1"
               >
                 <Plus className="w-2.5 h-2.5" /> Section
@@ -297,6 +407,33 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               className={inputCls}
             />
           </FormField>
+          {!editClass && (
+            <FormField label="Initial Sections (Optional)">
+              <input
+                {...classForm.register("initialSections")}
+                className={inputCls}
+                placeholder="e.g. A, B, C"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Add one or more sections right away (e.g. A, B or A, B, C)
+              </p>
+              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                <span>Presets:</span>
+                {["A", "A, B", "A, B, C", "A, B, C, D"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() =>
+                      classForm.setValue("initialSections", preset)
+                    }
+                    className="h-5 px-1.5 rounded bg-muted hover:bg-muted/80 text-[10px] font-medium transition-colors"
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+          )}
           <FormField label="Class Teacher (Optional)">
             <Select
               allowClear
@@ -350,51 +487,209 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
         </form>
       </Dialog>
 
-      {/* Section Dialog */}
+      {/* Add Multiple Sections Dialog */}
       <Dialog
         open={!!sectionDialog}
         onOpenChange={(open) => {
-          if (!open) setSectionDialog(null);
+          if (!open) {
+            setSectionDialog(null);
+            setPendingSections([]);
+            setSectionInput("");
+          }
         }}
-        title="Add Section"
-        description="Add a new section to this class"
-        className="max-w-sm"
+        title={`Add Sections - ${targetClass?.name ?? "Class"}`}
+        description="Add one or multiple sections at once for this class"
+        className="max-w-md"
       >
-        <form
-          onSubmit={sectionForm.handleSubmit(onSubmitSection)}
-          className="space-y-4"
-        >
-          <FormField
-            label="Section Name"
-            error={sectionForm.formState.errors.name?.message}
-            required
-          >
-            <input
-              {...sectionForm.register("name")}
-              className={inputCls}
-              placeholder="e.g. A"
-            />
-          </FormField>
-          <div className="flex gap-2 justify-end">
+        <div className="space-y-4">
+          {/* Current existing sections */}
+          {targetClass?.sections && targetClass.sections.length > 0 && (
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/60">
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                Existing sections in {targetClass.name} (
+                {targetClass.sections.length}):
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {targetClass.sections.map((s: any) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center text-[11px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-md border"
+                  >
+                    Section {s.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick presets */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Quick Select / Presets
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {["A", "B", "C", "D", "E", "F"].map((letter) => {
+                const alreadyExists = targetClass?.sections?.some(
+                  (s: any) => s.name.toUpperCase() === letter,
+                );
+                const isSelected = pendingSections.some(
+                  (s) => s.toUpperCase() === letter,
+                );
+
+                return (
+                  <button
+                    key={letter}
+                    type="button"
+                    disabled={alreadyExists}
+                    onClick={() => {
+                      if (alreadyExists) return;
+                      if (isSelected) {
+                        removePendingSection(letter);
+                      } else {
+                        addSectionNames([letter]);
+                      }
+                    }}
+                    className={`h-7 px-2.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${
+                      alreadyExists
+                        ? "opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-transparent"
+                        : isSelected
+                          ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                          : "bg-background hover:bg-violet-50 dark:hover:bg-violet-950/30 text-foreground hover:border-violet-300"
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3" />}
+                    Section {letter}
+                    {alreadyExists && (
+                      <span className="text-[9px] opacity-75">(added)</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+              <span>Bundles:</span>
+              {[
+                ["A", "B"],
+                ["A", "B", "C"],
+                ["A", "B", "C", "D"],
+              ].map((bundle) => {
+                const label = bundle.join(", ");
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => addSectionNames(bundle)}
+                    className="h-6 px-2 rounded-md bg-muted hover:bg-muted/80 text-[11px] font-medium transition-colors"
+                  >
+                    + {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Input for custom section name / comma separated names */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Type Section Name(s) (press Enter or comma to add)
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={sectionInput}
+                onChange={(e) => setSectionInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    handleAddFromInput();
+                  }
+                }}
+                className={inputCls}
+                placeholder="e.g. A, B, C or Rose, Lily"
+              />
+              <button
+                type="button"
+                onClick={handleAddFromInput}
+                className="h-10 px-3 bg-muted hover:bg-muted/80 text-foreground rounded-lg text-xs font-medium transition-colors flex-shrink-0"
+              >
+                Add
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Tip: You can type or paste multiple comma-separated sections like
+              &quot;A, B, C&quot;.
+            </p>
+          </div>
+
+          {/* Pending Sections Queue */}
+          {pendingSections.length > 0 && (
+            <div className="p-3 bg-violet-50/60 dark:bg-violet-950/20 rounded-xl border border-violet-100 dark:border-violet-900/50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-violet-900 dark:text-violet-200">
+                  Sections to create ({pendingSections.length}):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPendingSections([])}
+                  className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {pendingSections.map((sec) => (
+                  <span
+                    key={sec}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white dark:bg-violet-900/40 text-violet-800 dark:text-violet-200 border border-violet-200 dark:border-violet-700 shadow-sm"
+                  >
+                    <span>{sec}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove section ${sec}`}
+                      onClick={() => removePendingSection(sec)}
+                      className="p-0.5 rounded-full hover:bg-violet-100 dark:hover:bg-violet-800 text-violet-600 dark:text-violet-300"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 justify-end pt-2 border-t">
             <button
               type="button"
-              onClick={() => setSectionDialog(null)}
+              onClick={() => {
+                setSectionDialog(null);
+                setPendingSections([]);
+                setSectionInput("");
+              }}
               className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
             >
               Cancel
             </button>
             <button
-              type="submit"
-              disabled={sectionForm.formState.isSubmitting}
-              className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+              type="button"
+              disabled={
+                isSubmittingSections ||
+                (pendingSections.length === 0 && !sectionInput.trim())
+              }
+              onClick={() => onSubmitSections()}
+              className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
-              {sectionForm.formState.isSubmitting && (
+              {isSubmittingSections && (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               )}
-              Add Section
+              {pendingSections.length > 0
+                ? `Add ${pendingSections.length} Section${
+                    pendingSections.length > 1 ? "s" : ""
+                  }`
+                : "Add Sections"}
             </button>
           </div>
-        </form>
+        </div>
       </Dialog>
 
       <ConfirmDialog

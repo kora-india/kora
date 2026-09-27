@@ -11,11 +11,28 @@ const ClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
   grade: z.coerce.number().min(1).max(13),
   classTeacherId: z.string().optional().nullable(),
+  initialSections: z.union([z.array(z.string()), z.string()]).optional(),
 });
 
 const SectionSchema = z.object({
   classId: z.string().min(1, "Class is required"),
   name: z.string().min(1, "Section name is required"),
+});
+
+const CreateSectionsSchema = z.object({
+  classId: z.string().min(1, "Class is required"),
+  names: z
+    .union([z.array(z.string()), z.string()])
+    .transform((val) => {
+      if (Array.isArray(val)) {
+        return val.map((s) => s.trim()).filter((s) => s.length > 0);
+      }
+      return val
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    })
+    .refine((arr) => arr.length > 0, "At least one section name is required"),
 });
 
 async function getAdminSession() {
@@ -36,7 +53,9 @@ export async function createClass(data: unknown) {
 
   const limit = await checkClassLimit(user.schoolId);
   if (!limit.allowed) {
-    return { error: planLimitMessage("classes", limit.current, limit.max, limit.plan) };
+    return {
+      error: planLimitMessage("classes", limit.current, limit.max, limit.plan),
+    };
   }
 
   try {
@@ -48,6 +67,36 @@ export async function createClass(data: unknown) {
         schoolId: user.schoolId,
       },
     });
+
+    if (parsed.data.initialSections) {
+      const raw = parsed.data.initialSections;
+      const rawNames = Array.isArray(raw) ? raw : raw.split(",");
+      const sectionNames = rawNames
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && s.length <= 20);
+
+      const uniqueNames: string[] = [];
+      const seen = new Set<string>();
+      for (const name of sectionNames) {
+        const lower = name.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          uniqueNames.push(name);
+        }
+      }
+
+      if (uniqueNames.length > 0) {
+        await prisma.section.createMany({
+          data: uniqueNames.map((name) => ({
+            name,
+            classId: cls.id,
+            schoolId: user.schoolId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/classes");
@@ -57,7 +106,8 @@ export async function createClass(data: unknown) {
     revalidatePath("/dashboard");
     return { success: true, id: cls.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "A class with this name already exists" };
+    if (e.code === "P2002")
+      return { error: "A class with this name already exists" };
     return { error: e.message };
   }
 }
@@ -85,7 +135,8 @@ export async function updateClass(id: string, data: unknown) {
     revalidatePath("/teachers");
     return { success: true };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "A class with this name already exists" };
+    if (e.code === "P2002")
+      return { error: "A class with this name already exists" };
     return { error: e.message };
   }
 }
@@ -130,8 +181,83 @@ export async function createSection(data: unknown) {
     revalidatePath("/students");
     return { success: true, id: section.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "Section already exists in this class" };
+    if (e.code === "P2002")
+      return { error: "Section already exists in this class" };
     return { error: e.message };
+  }
+}
+
+export async function createSections(data: unknown) {
+  const user = await getAdminSession();
+  if (!user) return { error: "Unauthorized" };
+
+  const parsed = CreateSectionsSchema.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  try {
+    const cls = await prisma.class.findFirst({
+      where: { id: parsed.data.classId, schoolId: user.schoolId },
+      include: { sections: { select: { name: true } } },
+    });
+    if (!cls) return { error: "Class not found" };
+
+    const uniqueNames: string[] = [];
+    const seen = new Set<string>();
+    for (const name of parsed.data.names) {
+      if (name.length > 20) {
+        return { error: `Section name "${name}" exceeds 20 characters` };
+      }
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        uniqueNames.push(name);
+      }
+    }
+
+    const existingNames = new Set(
+      cls.sections.map((s) => s.name.toLowerCase()),
+    );
+    const toCreate = uniqueNames.filter(
+      (name) => !existingNames.has(name.toLowerCase()),
+    );
+    const skipped = uniqueNames.filter((name) =>
+      existingNames.has(name.toLowerCase()),
+    );
+
+    if (toCreate.length === 0) {
+      return {
+        error:
+          uniqueNames.length === 1
+            ? `Section "${uniqueNames[0]}" already exists in this class`
+            : "All specified sections already exist in this class",
+      };
+    }
+
+    await prisma.section.createMany({
+      data: toCreate.map((name) => ({
+        name,
+        classId: parsed.data.classId,
+        schoolId: user.schoolId,
+      })),
+      skipDuplicates: true,
+    });
+
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
+    revalidatePath("/classes");
+    revalidatePath("/students");
+    revalidatePath("/teachers");
+    revalidatePath("/timetable");
+
+    return {
+      success: true,
+      count: toCreate.length,
+      created: toCreate,
+      skipped,
+    };
+  } catch (e: any) {
+    if (e.code === "P2002")
+      return { error: "Section already exists in this class" };
+    return { error: e.message || "Failed to create sections" };
   }
 }
 

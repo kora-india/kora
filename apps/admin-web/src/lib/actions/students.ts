@@ -128,6 +128,16 @@ export async function createStudent(data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
+    // Advance school's next admission number sequence
+    await prisma.school
+      .update({
+        where: { id: user.schoolId },
+        data: {
+          nextAdmissionNumber: { increment: 1 },
+        },
+      })
+      .catch(() => {});
+
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),

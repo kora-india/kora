@@ -31,6 +31,9 @@ model School {
   feePaymentMode              String               @default("ALLOW_PARTIAL")
   minPartialPaymentAmount     Decimal?             @default(0) @db.Decimal(10, 2)
   minPartialPaymentPercentage Decimal?             @default(0) @db.Decimal(5, 2)
+  admissionNumberPrefix       String?              @default("SCH")
+  admissionNumberFormat       String?              @default("{PREFIX}-{YYYY}-{SEQ:4}")
+  nextAdmissionNumber         Int                  @default(1)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   academicSessions AcademicSession[]
