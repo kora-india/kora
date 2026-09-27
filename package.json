@@ -27,7 +27,7 @@
     "desktop:package:mac:arm": "pnpm --filter @schoolos/desktop package:mac:arm",
     "desktop:package:win": "pnpm --filter @schoolos/desktop package:win",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "prepare": "husky"
+    "prepare": "node -e \"if (!process.env.CI && process.env.NODE_ENV !== 'production') { import('husky').then(h => (h.default || h)()).catch(() => {}) }\""
   },
   "devDependencies": {
     "husky": "^9.1.7",
