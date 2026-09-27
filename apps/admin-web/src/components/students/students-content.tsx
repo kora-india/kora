@@ -475,7 +475,7 @@ export function StudentsContent({
             </p>
           </div>
           {canEdit && (
-            <div className="flex items-center gap-3">
+            <div id="tour-students-actions" className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setDialog("import")}
@@ -497,7 +497,10 @@ export function StudentsContent({
         </div>
 
         {/* Filter Bar */}
-        <div className="flex gap-2.5 flex-wrap items-center bg-card p-3 rounded-xl border">
+        <div
+          id="tour-students-filters"
+          className="flex gap-2.5 flex-wrap items-center bg-card p-3 rounded-xl border"
+        >
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -624,6 +627,7 @@ export function StudentsContent({
 
         {/* Table */}
         <motion.div
+          id="tour-students-table"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border bg-card overflow-hidden shadow-sm"
@@ -726,6 +730,11 @@ export function StudentsContent({
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
+                              id={
+                                i === 0
+                                  ? "tour-students-row-actions"
+                                  : undefined
+                              }
                               type="button"
                               aria-label="Student actions"
                               className="p-1.5 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"

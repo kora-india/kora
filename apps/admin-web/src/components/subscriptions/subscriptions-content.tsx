@@ -182,7 +182,10 @@ export function SubscriptionsContent({
       </div>
 
       {/* Plan Tiers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div
+        id="tour-subscriptions-stats"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5"
+      >
         {PLANS_CONFIG.map((plan) => {
           const count = planCounts[plan.id] ?? 0;
           return (
@@ -279,7 +282,10 @@ export function SubscriptionsContent({
       </div>
 
       {/* Schools Subscription Table */}
-      <div className="rounded-xl border bg-card overflow-hidden space-y-0">
+      <div
+        id="tour-subscriptions-table"
+        className="rounded-xl border bg-card overflow-hidden space-y-0"
+      >
         <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold flex items-center gap-2">

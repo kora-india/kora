@@ -15,12 +15,14 @@ import {
   Zap,
   Crown,
   Shield,
+  Compass,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
 import { cn } from "@schoolos/utils";
 import type { SessionUser } from "@schoolos/types";
 import type { SubscriptionEvaluation } from "@/lib/subscription";
+import { useTour } from "@/components/tour/tour-provider";
 
 interface TopbarProps {
   user: SessionUser;
@@ -36,6 +38,7 @@ export function Topbar({
   schoolPlan,
 }: TopbarProps) {
   const { theme, setTheme } = useTheme();
+  const { startTour, pageTitle } = useTour();
   const [menuOpen, setMenuOpen] = useState(false);
   const activePlan = subscription?.plan || schoolPlan;
 
@@ -97,7 +100,10 @@ export function Topbar({
           </>
         )}
 
-        <button className="h-8 px-3 flex items-center gap-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors">
+        <button
+          id="tour-topbar-search"
+          className="h-8 px-3 flex items-center gap-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors"
+        >
           <Search className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Search...</span>
           <kbd className="hidden sm:inline text-[10px] bg-muted px-1.5 py-0.5 rounded">
@@ -105,14 +111,32 @@ export function Topbar({
           </kbd>
         </button>
 
-        <button className="relative h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors">
+        <button
+          id="tour-topbar-notifications"
+          className="relative h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors"
+        >
           <Bell className="w-4 h-4" />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
         </button>
 
+        {/* Start Page Tour Button */}
         <button
+          type="button"
+          onClick={() => startTour()}
+          title={`Start tour for ${pageTitle}`}
+          aria-label="Start Page Tour"
+          id="tour-topbar-tour-btn"
+          className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground group"
+        >
+          <Compass className="w-4 h-4 text-violet-600 dark:text-violet-400 group-hover:rotate-45 transition-transform duration-300" />
+        </button>
+
+        {/* Theme Toggle Button */}
+        <button
+          id="tour-topbar-theme-btn"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors"
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
         >
           {theme === "dark" ? (
             <Sun className="w-4 h-4" />
@@ -123,6 +147,7 @@ export function Topbar({
 
         <div className="relative flex items-center gap-2 pl-2 border-l">
           <button
+            id="tour-topbar-user-menu"
             type="button"
             onClick={() => setMenuOpen((open) => !open)}
             className="flex items-center gap-2 rounded-lg hover:bg-muted transition-colors px-1 py-0.5 -ml-1"

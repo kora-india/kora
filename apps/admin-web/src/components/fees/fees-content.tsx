@@ -50,12 +50,24 @@ export function FeesContent(props: Readonly<Props>) {
         </div>
       </div>
 
-      <div className="flex space-x-1 p-1 bg-muted/50 rounded-xl w-fit border shadow-sm">
+      <div
+        id="tour-fees-tabs"
+        className="flex space-x-1 p-1 bg-muted/50 rounded-xl w-fit border shadow-sm"
+      >
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              id={
+                tab.id === "generator"
+                  ? "tour-fees-generator-tab"
+                  : tab.id === "settings"
+                    ? "tour-fees-settings-tab"
+                    : tab.id === "logs"
+                      ? "tour-fees-logs-tab"
+                      : undefined
+              }
               onClick={() => setActiveTab(tab.id)}
               className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors z-10 ${
                 isActive

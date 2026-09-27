@@ -2,7 +2,6 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
-import { DashboardTour } from "@/components/layout/dashboard-tour";
 import { UserRole } from "@schoolos/types";
 import { getCache } from "@/lib/redis";
 
@@ -242,9 +241,6 @@ export default async function DashboardPage() {
   );
 
   return (
-    <>
-      <DashboardTour />
-      <DashboardContent data={data} userRole={user.role} userName={user.name} />
-    </>
+    <DashboardContent data={data} userRole={user.role} userName={user.name} />
   );
 }

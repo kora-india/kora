@@ -248,7 +248,10 @@ export function Sidebar({
       )}
 
       {/* Nav */}
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+      <nav
+        id="tour-sidebar-nav"
+        className="flex-1 p-2 space-y-0.5 overflow-y-auto"
+      >
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");

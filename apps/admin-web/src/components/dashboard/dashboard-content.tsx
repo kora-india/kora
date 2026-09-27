@@ -145,6 +145,7 @@ export function DashboardContent({
         </div>
 
         <motion.div
+          id="tour-dashboard-actions"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="flex items-center gap-2.5 flex-wrap"
@@ -175,6 +176,7 @@ export function DashboardContent({
 
       {/* Stats Grid */}
       <motion.div
+        id="tour-dashboard-stats"
         variants={stagger.container}
         initial="hidden"
         animate="visible"
@@ -240,6 +242,7 @@ export function DashboardContent({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* AntV Area Chart: Fee Collection vs Pending Dues */}
         <motion.div
+          id="tour-dashboard-revenue-chart"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
           className="xl:col-span-2 rounded-xl border bg-card p-5 shadow-sm space-y-3"
@@ -282,6 +285,7 @@ export function DashboardContent({
 
         {/* Attendance Overview Progress Card */}
         <motion.div
+          id="tour-dashboard-attendance"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.25 } }}
           className="rounded-xl border bg-card p-5 shadow-sm flex flex-col justify-between"
@@ -378,6 +382,7 @@ export function DashboardContent({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Recent Students Table */}
         <motion.div
+          id="tour-dashboard-recent-activity"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.3 } }}
           className="xl:col-span-2 rounded-xl border bg-card shadow-sm overflow-hidden"
@@ -481,6 +486,7 @@ export function DashboardContent({
 
         {/* Recent Notices */}
         <motion.div
+          id="tour-dashboard-notices"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.35 } }}
           className="rounded-xl border bg-card shadow-sm flex flex-col justify-between overflow-hidden"

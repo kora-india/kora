@@ -508,6 +508,7 @@ export function ExpensesContent({
               Categories ({categories.length})
             </Button>
             <Button
+              id="tour-expenses-add-btn"
               type="primary"
               icon={<Plus className="w-4 h-4" />}
               onClick={() => setIsAddExpenseOpen(true)}
@@ -519,7 +520,10 @@ export function ExpensesContent({
         </div>
 
         {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div
+          id="tour-expenses-stats"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+        >
           <div className="rounded-xl border bg-card p-4 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-muted-foreground">
@@ -573,7 +577,10 @@ export function ExpensesContent({
         </div>
 
         {/* Filters and Sorting Toolbar in native Tailwind Card */}
-        <div className="rounded-2xl border border-border bg-card text-card-foreground shadow-sm p-5 space-y-4">
+        <div
+          id="tour-expenses-filters"
+          className="rounded-2xl border border-border bg-card text-card-foreground shadow-sm p-5 space-y-4"
+        >
           <div className="space-y-4">
             {/* Row 1: Search & Core Dropdowns */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -736,7 +743,10 @@ export function ExpensesContent({
           </div>
 
           {/* Table */}
-          <div className="rounded-xl border border-border overflow-hidden mt-5 bg-card">
+          <div
+            id="tour-expenses-table"
+            className="rounded-xl border border-border overflow-hidden mt-5 bg-card"
+          >
             <Table
               dataSource={paginatedExpenses}
               columns={columns}

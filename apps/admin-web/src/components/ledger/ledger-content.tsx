@@ -869,7 +869,10 @@ export function LedgerContent({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div
+            id="tour-ledger-export"
+            className="flex items-center gap-2.5 flex-wrap"
+          >
             <Button
               icon={<Download className="w-4 h-4" />}
               onClick={handleExportSummary}
@@ -888,27 +891,33 @@ export function LedgerContent({
         </div>
 
         {/* Filters Deck */}
-        <LedgerFilterBar
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onResetFilters={handleResetFilters}
-          sessions={academicSessions}
-          classes={classes}
-          feeComponents={feeComponents}
-          expenseCategories={expenseCategories}
-          availablePaymentMethods={availablePaymentMethods}
-        />
+        <div id="tour-ledger-filters">
+          <LedgerFilterBar
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onResetFilters={handleResetFilters}
+            sessions={academicSessions}
+            classes={classes}
+            feeComponents={feeComponents}
+            expenseCategories={expenseCategories}
+            availablePaymentMethods={availablePaymentMethods}
+          />
+        </div>
 
         {/* Statistics Cards */}
-        <LedgerStatCards metrics={calculatedMetrics} />
+        <div id="tour-ledger-summary">
+          <LedgerStatCards metrics={calculatedMetrics} />
+        </div>
 
         {/* Transaction & Expense Audit Logs Table */}
-        <LedgerTable
-          transactions={filteredTransactions}
-          expenses={filteredExpenses}
-          advances={filteredAdvances}
-          onViewReceipt={handleOpenReceipt}
-        />
+        <div id="tour-ledger-table">
+          <LedgerTable
+            transactions={filteredTransactions}
+            expenses={filteredExpenses}
+            advances={filteredAdvances}
+            onViewReceipt={handleOpenReceipt}
+          />
+        </div>
 
         {/* Fee Receipt & Invoice Modal */}
         <FeeReceiptModal

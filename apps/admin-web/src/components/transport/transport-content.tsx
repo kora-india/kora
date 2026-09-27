@@ -342,7 +342,10 @@ export function TransportContent({
               allocations
             </p>
           </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div
+            id="tour-transport-actions"
+            className="flex items-center gap-2.5 flex-wrap"
+          >
             <Button
               icon={<Download className="w-4 h-4" />}
               onClick={handleExportAllCSV}
@@ -461,7 +464,10 @@ export function TransportContent({
         <div className="rounded-2xl border border-border bg-card text-card-foreground shadow-sm p-5 space-y-4">
           {/* Navigation Pill Buttons */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              id="tour-transport-tabs"
+              className="flex flex-wrap items-center gap-2"
+            >
               {[
                 {
                   key: "routes",
@@ -657,7 +663,7 @@ export function TransportContent({
 
           {/* ─── TAB 1: ROUTES & STOPS ────────────────────────────────────────── */}
           {activeTab === "routes" && (
-            <div className="pt-2">
+            <div id="tour-transport-routes" className="pt-2">
               {processedRoutes.length === 0 ? (
                 <div className="text-center py-16 bg-muted/20 border border-border rounded-xl p-8">
                   <RouteIcon className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
@@ -888,7 +894,7 @@ export function TransportContent({
 
           {/* ─── TAB 2: STUDENT TRANSPORT ROSTER ──────────────────────────────── */}
           {activeTab === "students" && (
-            <div className="pt-2 space-y-4">
+            <div id="tour-transport-students" className="pt-2 space-y-4">
               {processedEnrollments.length === 0 ? (
                 <div className="text-center py-16 bg-muted/20 border border-border rounded-xl p-8">
                   <Users className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />

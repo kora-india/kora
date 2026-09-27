@@ -232,6 +232,7 @@ export function NoticesContent({
           </p>
         </div>
         <button
+          id="tour-notices-create-btn"
           type="button"
           onClick={openCreate}
           className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
@@ -240,7 +241,7 @@ export function NoticesContent({
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div id="tour-notices-list" className="space-y-3">
         <AnimatePresence initial={false}>
           {localNotices.map((n, i) => {
             const cfg = PRIORITY_CONFIG[n.priority] ?? PRIORITY_CONFIG.MEDIUM;

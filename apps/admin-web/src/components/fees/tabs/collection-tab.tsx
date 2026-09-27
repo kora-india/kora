@@ -584,7 +584,10 @@ export function CollectionTab({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div
+      id="tour-fees-collection-table"
+      className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+    >
       {/* Left Pane: Student Search & Component Ledger */}
       <div className="lg:col-span-2 space-y-6">
         {/* Search */}
@@ -1608,6 +1611,7 @@ export function CollectionTab({
                     </button>
                   </div>
                   <button
+                    id="tour-fees-collect-btn"
                     disabled={isSubmitting}
                     onClick={() => handlePayment(true)}
                     className="w-full py-3 text-white rounded-xl font-bold text-sm transition-transform active:scale-95 shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:active:scale-100 cursor-pointer bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"

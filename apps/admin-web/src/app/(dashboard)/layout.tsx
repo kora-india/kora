@@ -4,6 +4,7 @@ import { prisma } from "@schoolos/db";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { PageTransition } from "@/components/layout/page-transition";
+import { TourProvider } from "@/components/tour/tour-provider";
 
 export default async function DashboardRootLayout({
   children,
@@ -61,22 +62,24 @@ export default async function DashboardRootLayout({
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
-      <Sidebar
-        userRole={user.role}
-        schoolName={schoolName}
-        schoolPlan={schoolPlan}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
-        <Topbar
-          user={user}
-          subscription={subscriptionEvaluation}
+    <TourProvider>
+      <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
+        <Sidebar
+          userRole={user.role}
+          schoolName={schoolName}
           schoolPlan={schoolPlan}
         />
-        <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
-          <PageTransition>{children}</PageTransition>
-        </main>
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
+          <Topbar
+            user={user}
+            subscription={subscriptionEvaluation}
+            schoolPlan={schoolPlan}
+          />
+          <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
+            <PageTransition>{children}</PageTransition>
+          </main>
+        </div>
       </div>
-    </div>
+    </TourProvider>
   );
 }

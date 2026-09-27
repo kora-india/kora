@@ -290,7 +290,10 @@ export function AttendanceContent({
       <div className="rounded-xl border bg-card overflow-hidden">
         <div className="p-4 border-b flex items-center justify-between flex-wrap gap-3">
           <h3 className="text-sm font-semibold">Mark Attendance</h3>
-          <div className="flex gap-2 flex-wrap items-center">
+          <div
+            id="tour-attendance-filters"
+            className="flex gap-2 flex-wrap items-center"
+          >
             <input
               aria-label="Attendance date"
               type="date"
@@ -352,7 +355,10 @@ export function AttendanceContent({
 
         {students.length > 0 && (
           <>
-            <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/20">
+            <div
+              id="tour-attendance-bulk-actions"
+              className="flex items-center gap-2 px-4 py-2 border-b bg-muted/20"
+            >
               <span className="text-xs text-muted-foreground mr-1">
                 Mark all:
               </span>
@@ -371,7 +377,10 @@ export function AttendanceContent({
               </span>
             </div>
 
-            <div className="divide-y max-h-96 overflow-y-auto">
+            <div
+              id="tour-attendance-roster"
+              className="divide-y max-h-96 overflow-y-auto"
+            >
               {students.map((student) => {
                 const status = attendance[student.id] ?? "PRESENT";
                 return (
@@ -425,6 +434,7 @@ export function AttendanceContent({
 
             <div className="p-4 border-t flex justify-end">
               <button
+                id="tour-attendance-submit-btn"
                 type="button"
                 onClick={saveAttendance}
                 disabled={saving}

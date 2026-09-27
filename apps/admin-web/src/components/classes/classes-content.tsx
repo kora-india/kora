@@ -137,6 +137,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
           </p>
         </div>
         <button
+          id="tour-classes-add-btn"
           type="button"
           onClick={openCreateClass}
           className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
@@ -145,7 +146,10 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div
+        id="tour-classes-grid"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+      >
         {classes.map((cls, i) => (
           <motion.div
             key={cls.id}
@@ -200,7 +204,10 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               </div>
             </div>
 
-            <div className="flex gap-1.5 mt-4 flex-wrap pt-3 border-t">
+            <div
+              id={i === 0 ? "tour-classes-sections" : undefined}
+              className="flex gap-1.5 mt-4 flex-wrap pt-3 border-t"
+            >
               {cls.sections.map((s: any) => (
                 <div key={s.id} className="group flex items-center gap-1">
                   <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-800 px-2 py-0.5 rounded-full font-medium">

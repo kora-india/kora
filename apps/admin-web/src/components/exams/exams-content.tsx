@@ -120,6 +120,7 @@ export function ExamsContent({
           </div>
 
           <button
+            id="tour-exams-create-btn"
             type="button"
             onClick={() => handleOpenCreate()}
             className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm self-start sm:self-auto"
@@ -201,7 +202,10 @@ export function ExamsContent({
         </div>
 
         {/* Tabs Navigation */}
-        <div className="flex border-b border-border/80 gap-6">
+        <div
+          id="tour-exams-tabs"
+          className="flex border-b border-border/80 gap-6"
+        >
           <button
             onClick={() => setActiveTab("schedule")}
             className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition relative ${
@@ -224,6 +228,7 @@ export function ExamsContent({
           </button>
 
           <button
+            id="tour-exams-marksheet"
             onClick={() => setActiveTab("marks")}
             className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition relative ${
               activeTab === "marks"
@@ -236,6 +241,7 @@ export function ExamsContent({
           </button>
 
           <button
+            id="tour-exams-report-cards"
             onClick={() => setActiveTab("results")}
             className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition relative ${
               activeTab === "results"

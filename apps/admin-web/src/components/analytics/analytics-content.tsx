@@ -98,7 +98,7 @@ export function AnalyticsContent({
 
   return (
     <div className="p-6 space-y-6 w-full">
-      <div>
+      <div id="tour-analytics-header">
         <h1 className="text-2xl font-bold">Analytics & Reports</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Real-time institutional performance metrics and financial intelligence
@@ -140,6 +140,7 @@ export function AnalyticsContent({
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {/* AntV Area Chart: Fee Collection vs Pending Trend */}
         <motion.div
+          id="tour-analytics-fees"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border bg-card p-5 shadow-sm space-y-3"
@@ -176,6 +177,7 @@ export function AnalyticsContent({
 
         {/* AntV Line Chart: Attendance Rate Trend */}
         <motion.div
+          id="tour-analytics-attendance"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.1 } }}
           className="rounded-xl border bg-card p-5 shadow-sm space-y-3"

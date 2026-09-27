@@ -138,6 +138,7 @@ export function AssignmentsContent({
           </p>
         </div>
         <button
+          id="tour-assignments-create-btn"
           type="button"
           onClick={openCreate}
           className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
@@ -146,7 +147,10 @@ export function AssignmentsContent({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div
+        id="tour-assignments-list"
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+      >
         <AnimatePresence initial={false}>
           {assignments.map((a, i) => {
             const overdue = isOverdue(a.dueDate);

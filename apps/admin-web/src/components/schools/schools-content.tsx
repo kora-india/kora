@@ -164,6 +164,7 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
           </p>
         </div>
         <button
+          id="tour-schools-add-btn"
           type="button"
           onClick={() => setCreateOpen(true)}
           className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm"
@@ -225,6 +226,7 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
 
       {/* Table */}
       <motion.div
+        id="tour-schools-table"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         className="rounded-xl border bg-card overflow-hidden"

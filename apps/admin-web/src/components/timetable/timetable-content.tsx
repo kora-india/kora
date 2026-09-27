@@ -280,7 +280,10 @@ export function TimetableContent({
 
           {/* Quick Actions */}
           {!isTeacherRole && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div
+              id="tour-timetable-actions"
+              className="flex items-center gap-2 flex-wrap"
+            >
               <Tooltip title="Audit School Conflicts">
                 <Button
                   icon={<ShieldAlert className="w-4 h-4" />}
@@ -438,7 +441,10 @@ export function TimetableContent({
         </div>
 
         {/* View Mode & Selection Controls */}
-        <div className="bg-card border rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 print:hidden">
+        <div
+          id="tour-timetable-class-select"
+          className="bg-card border rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 print:hidden"
+        >
           <div className="flex items-center gap-3 flex-wrap">
             <Segmented
               value={viewMode}
@@ -565,7 +571,7 @@ export function TimetableContent({
         </div>
 
         {/* Timetable Grid Matrix */}
-        <div className="print:m-0 print:w-full">
+        <div id="tour-timetable-grid" className="print:m-0 print:w-full">
           {loading ? (
             <TimetableSkeleton
               periods={periods}

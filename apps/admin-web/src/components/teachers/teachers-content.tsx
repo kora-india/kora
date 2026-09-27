@@ -180,7 +180,7 @@ export function TeachersContent({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div id="tour-teachers-actions" className="flex items-center gap-2.5">
           {activeTab === "teachers" ? (
             <button
               type="button"
@@ -202,7 +202,7 @@ export function TeachersContent({
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex items-center gap-2 border-b">
+      <div id="tour-teachers-tabs" className="flex items-center gap-2 border-b">
         <button
           type="button"
           onClick={() => {
@@ -255,7 +255,10 @@ export function TeachersContent({
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div
+        id="tour-teachers-search"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
@@ -308,7 +311,10 @@ export function TeachersContent({
 
       {/* Content for TAB 1: TEACHERS */}
       {activeTab === "teachers" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          id="tour-teachers-list"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
           {filteredTeachers.map((t, i) => (
             <motion.div
               key={t.id}
