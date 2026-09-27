@@ -59,6 +59,9 @@ importers:
       '@schoolos/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@schoolos/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@schoolos/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -86,6 +89,9 @@ importers:
       antd:
         specifier: ^6.6.1
         version: 6.6.1(date-fns@3.6.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      autoprefixer:
+        specifier: ^10.4.19
+        version: 10.5.0(postcss@8.5.14)
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -125,6 +131,9 @@ importers:
       nodemailer:
         specifier: ^7.0.7
         version: 7.0.13
+      postcss:
+        specifier: ^8.4.38
+        version: 8.5.14
       razorpay:
         specifier: ^2.9.8
         version: 2.9.8
@@ -152,6 +161,12 @@ importers:
       tailwind-merge:
         specifier: ^2.3.0
         version: 2.6.1
+      tailwindcss:
+        specifier: ^3.4.3
+        version: 3.4.19(tsx@4.21.0)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
       xlsx:
         specifier: ^0.18.5
         version: 0.18.5
@@ -159,9 +174,6 @@ importers:
         specifier: ^3.22.0
         version: 3.25.76
     devDependencies:
-      '@schoolos/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@types/bcryptjs':
         specifier: ^2.4.6
         version: 2.4.6
@@ -180,9 +192,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(vitest@4.1.11)
-      autoprefixer:
-        specifier: ^10.4.19
-        version: 10.5.0(postcss@8.5.14)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -192,15 +201,6 @@ importers:
       eslint-config-next:
         specifier: ^15.0.0
         version: 15.5.18(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      postcss:
-        specifier: ^8.4.38
-        version: 8.5.14
-      tailwindcss:
-        specifier: ^3.4.3
-        version: 3.4.19(tsx@4.21.0)(yaml@2.9.0)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
       vite-tsconfig-paths:
         specifier: ^6.1.1
         version: 6.1.1(typescript@5.9.3)(vite@8.2.2(@types/node@20.19.41)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.50.0)(tsx@4.21.0)(yaml@2.9.0))
@@ -231,6 +231,9 @@ importers:
       '@schoolos/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@schoolos/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@schoolos/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -243,6 +246,9 @@ importers:
       '@schoolos/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      autoprefixer:
+        specifier: ^10.4.19
+        version: 10.5.0(postcss@8.5.14)
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -261,6 +267,9 @@ importers:
       next-themes:
         specifier: ^0.3.0
         version: 0.3.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      postcss:
+        specifier: ^8.4.38
+        version: 8.5.14
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -276,13 +285,16 @@ importers:
       tailwind-merge:
         specifier: ^2.3.0
         version: 2.6.1
+      tailwindcss:
+        specifier: ^3.4.3
+        version: 3.4.19(tsx@4.21.0)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
       zod:
         specifier: ^3.22.0
         version: 3.25.76
     devDependencies:
-      '@schoolos/config':
-        specifier: workspace:*
-        version: link:../../packages/config
       '@types/node':
         specifier: ^20.12.0
         version: 20.19.41
@@ -292,24 +304,12 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.0
         version: 18.3.7(@types/react@18.3.28)
-      autoprefixer:
-        specifier: ^10.4.19
-        version: 10.5.0(postcss@8.5.14)
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@1.21.7)
       eslint-config-next:
         specifier: ^15.0.0
         version: 15.5.18(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
-      postcss:
-        specifier: ^8.4.38
-        version: 8.5.14
-      tailwindcss:
-        specifier: ^3.4.3
-        version: 3.4.19(tsx@4.21.0)(yaml@2.9.0)
-      typescript:
-        specifier: ^5.4.0
-        version: 5.9.3
 
   packages/auth:
     dependencies:
