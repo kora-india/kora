@@ -51,10 +51,7 @@ export async function requestPasswordReset(data: unknown) {
     data: { resetToken: token, resetTokenExpiry },
   });
 
-  const baseUrl =
-    process.env.NEXTAUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
+  const baseUrl = process.env.NEXTAUTH_URL;
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
   const emailResult = await sendPasswordResetEmail(user.email, resetUrl);

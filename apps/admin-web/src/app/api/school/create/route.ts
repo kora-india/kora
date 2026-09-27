@@ -10,6 +10,7 @@ import {
 import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 import crypto from "crypto";
+import { seedInitialSchoolData } from "@/lib/onboarding";
 
 const schoolLogger = createLogger("school-create");
 
@@ -111,48 +112,65 @@ export async function POST(req: Request) {
     }
 
     // 3. Create School & Initial Subscription Transaction
-    const school = await prisma.$transaction(async (tx) => {
-      const newSchool = await tx.school.create({
-        data: {
-          name,
-          subdomain,
-          address,
-          pincode,
-          city,
-          state,
-          country,
-          expectedStudents,
-          expectedStaff,
-          phone,
-          email,
-          plan: plan as any,
-        },
-      });
+    const school = await prisma.$transaction(
+      async (tx) => {
+        const newSchool = await tx.school.create({
+          data: {
+            name,
+            subdomain,
+            address,
+            pincode,
+            city,
+            state,
+            country,
+            expectedStudents,
+            expectedStaff,
+            phone,
+            email,
+            plan: plan as any,
+          },
+        });
 
-      const isPaid = Boolean(razorpay_payment_id && razorpay_order_id);
-      const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-      const oneMonthLater = new Date(
-        new Date().setMonth(new Date().getMonth() + 1),
+        const isPaid = Boolean(razorpay_payment_id && razorpay_order_id);
+        const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+        const oneMonthLater = new Date(
+          new Date().setMonth(new Date().getMonth() + 1),
+        );
+
+        await tx.subscription.create({
+          data: {
+            schoolId: newSchool.id,
+            plan: plan as any,
+            status: isPaid ? "ACTIVE" : "TRIAL",
+            trialEndsAt: isPaid ? null : trialEndsAt,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: isPaid ? oneMonthLater : trialEndsAt,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: session.user.id },
+          data: { schoolId: newSchool.id },
+        });
+
+        return newSchool;
+      },
+      { maxWait: 10000, timeout: 20000 },
+    );
+
+    // 4. Prepopulate starter data (1 class, 1 student, generic fee components & structure, 1 teacher)
+    try {
+      await seedInitialSchoolData(prisma, {
+        schoolId: school.id,
+        subdomain,
+        schoolName: name,
+      });
+    } catch (seedError) {
+      schoolLogger.error(
+        { err: seedError, schoolId: school.id },
+        "Error seeding starter data for new school",
       );
-
-      await tx.subscription.create({
-        data: {
-          schoolId: newSchool.id,
-          plan: plan as any,
-          status: isPaid ? "ACTIVE" : "TRIAL",
-          trialEndsAt: isPaid ? null : trialEndsAt,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: isPaid ? oneMonthLater : trialEndsAt,
-        },
-      });
-
-      await tx.user.update({
-        where: { id: session.user.id },
-        data: { schoolId: newSchool.id },
-      });
-
-      return newSchool;
-    });
+    }
 
     schoolLogger.info(
       { schoolId: school.id, subdomain, plan, userId: session.user.id },
