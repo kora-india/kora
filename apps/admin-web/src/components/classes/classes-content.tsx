@@ -139,7 +139,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
     if (e) e.preventDefault();
     if (!sectionDialog) return;
 
-    let allToAdd = [...pendingSections];
+    const allToAdd = [...pendingSections];
     if (sectionInput.trim()) {
       const inputParts = sectionInput
         .split(",")

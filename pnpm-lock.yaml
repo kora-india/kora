@@ -347,13 +347,13 @@ importers:
       '@schoolos/logger':
         specifier: workspace:*
         version: link:../logger
+      prisma:
+        specifier: ^5.13.0
+        version: 5.22.0
     devDependencies:
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
-      prisma:
-        specifier: ^5.13.0
-        version: 5.22.0
       tsx:
         specifier: ^4.7.0
         version: 4.21.0
