@@ -9,6 +9,7 @@ interface DialogProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  icon?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
   zIndex?: number;
@@ -19,6 +20,7 @@ export function Dialog({
   onOpenChange,
   title,
   description,
+  icon,
   children,
   className,
   zIndex,
@@ -51,18 +53,28 @@ export function Dialog({
             className,
           )}
         >
-          <div className="flex items-center justify-between p-5 border-b">
-            <div>
-              <RadixDialog.Title className="text-base font-semibold">
-                {title}
-              </RadixDialog.Title>
-              {description && (
-                <RadixDialog.Description className="text-xs text-muted-foreground mt-0.5">
-                  {description}
-                </RadixDialog.Description>
+          <div className="flex items-center justify-between gap-3 p-5 border-b">
+            <div className="flex items-center gap-3 min-w-0">
+              {icon && (
+                <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300 flex items-center justify-center flex-shrink-0">
+                  {icon}
+                </div>
               )}
+              <div className="min-w-0">
+                <RadixDialog.Title className="text-base font-semibold">
+                  {title}
+                </RadixDialog.Title>
+                {description && (
+                  <RadixDialog.Description className="text-xs text-muted-foreground mt-0.5">
+                    {description}
+                  </RadixDialog.Description>
+                )}
+              </div>
             </div>
-            <RadixDialog.Close className="rounded-lg p-1.5 hover:bg-muted transition-colors">
+            <RadixDialog.Close
+              aria-label="Close"
+              className="rounded-lg p-1.5 hover:bg-muted transition-colors flex-shrink-0"
+            >
               <X className="w-4 h-4" />
             </RadixDialog.Close>
           </div>

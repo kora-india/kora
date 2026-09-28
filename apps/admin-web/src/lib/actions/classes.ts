@@ -6,10 +6,32 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkClassLimit, planLimitMessage } from "@/lib/plan-limits";
 import { invalidateCache } from "@/lib/redis";
+import {
+  CLASS_NAME_MAX,
+  DISPLAY_ORDER_MAX,
+  DISPLAY_ORDER_MIN,
+  normalizeName,
+} from "@/lib/class-catalog";
 
+// `grade` is the class's display order: Nursery -2, LKG -1, UKG 0, Grade N = N.
 const ClassSchema = z.object({
-  name: z.string().min(1, "Class name is required"),
-  grade: z.coerce.number().min(1).max(13),
+  name: z
+    .string()
+    .transform(normalizeName)
+    .pipe(
+      z
+        .string()
+        .min(1, "Class name is required")
+        .max(
+          CLASS_NAME_MAX,
+          `Class name must be at most ${CLASS_NAME_MAX} characters`,
+        ),
+    ),
+  grade: z.coerce
+    .number()
+    .int("Display order must be a whole number")
+    .min(DISPLAY_ORDER_MIN)
+    .max(DISPLAY_ORDER_MAX),
   classTeacherId: z.string().optional().nullable(),
   initialSections: z.union([z.array(z.string()), z.string()]).optional(),
 });
@@ -59,6 +81,19 @@ export async function createClass(data: unknown) {
   }
 
   try {
+    const existing = await prisma.class.findFirst({
+      where: {
+        schoolId: user.schoolId,
+        name: { equals: parsed.data.name, mode: "insensitive" },
+      },
+      select: { name: true },
+    });
+    if (existing) {
+      return {
+        error: `${existing.name} already exists. You can add or manage sections from the existing class.`,
+      };
+    }
+
     const cls = await prisma.class.create({
       data: {
         name: parsed.data.name,
@@ -107,7 +142,9 @@ export async function createClass(data: unknown) {
     return { success: true, id: cls.id };
   } catch (e: any) {
     if (e.code === "P2002")
-      return { error: "A class with this name already exists" };
+      return {
+        error: `${parsed.data.name} already exists. You can add or manage sections from the existing class.`,
+      };
     return { error: e.message };
   }
 }
@@ -120,6 +157,16 @@ export async function updateClass(id: string, data: unknown) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   try {
+    const clash = await prisma.class.findFirst({
+      where: {
+        schoolId: user.schoolId,
+        id: { not: id },
+        name: { equals: parsed.data.name, mode: "insensitive" },
+      },
+      select: { name: true },
+    });
+    if (clash) return { error: `${clash.name} already exists` };
+
     await prisma.class.update({
       where: { id, schoolId: user.schoolId },
       data: {

@@ -11,9 +11,10 @@ export default async function ClassesPage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) redirect("/dashboard");
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role))
+    redirect("/dashboard");
 
-  const [classes, teachers] = await Promise.all([
+  const [classes, teachers, currentSession] = await Promise.all([
     prisma.class.findMany({
       where: { schoolId: schoolId },
       include: {
@@ -34,7 +35,17 @@ export default async function ClassesPage() {
       orderBy: { name: "asc" },
       take: 500,
     }),
+    prisma.academicSession.findFirst({
+      where: { schoolId, isCurrent: true },
+      select: { name: true },
+    }),
   ]);
 
-  return <ClassesContent classes={classes} teachers={teachers} />;
+  return (
+    <ClassesContent
+      classes={classes}
+      teachers={teachers}
+      academicYear={currentSession?.name ?? null}
+    />
+  );
 }

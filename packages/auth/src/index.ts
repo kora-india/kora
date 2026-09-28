@@ -14,6 +14,7 @@ declare module "next-auth" {
 }
 
 export const authConfig: NextAuthConfig = {
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
     Credentials({
       name: "credentials",
@@ -34,7 +35,7 @@ export const authConfig: NextAuthConfig = {
 
         const isValid = await bcrypt.compare(
           credentials.password as string,
-          user.password
+          user.password,
         );
 
         if (!isValid) return null;
@@ -63,7 +64,7 @@ export const authConfig: NextAuthConfig = {
         const { prisma } = await import("@schoolos/db");
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { role: true, schoolId: true }
+          select: { role: true, schoolId: true },
         });
         if (dbUser) {
           token.role = dbUser.role;

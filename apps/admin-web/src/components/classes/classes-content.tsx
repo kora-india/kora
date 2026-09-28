@@ -22,18 +22,28 @@ import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import {
-  createClass,
   updateClass,
   deleteClass,
   createSections,
   deleteSection,
 } from "@/lib/actions/classes";
+import {
+  CLASS_NAME_MAX,
+  DISPLAY_ORDER_MAX,
+  DISPLAY_ORDER_MIN,
+  classShortLabel,
+} from "@/lib/class-catalog";
+import { CreateClassDialog } from "@/components/classes/create-class/create-class-dialog";
 
+// Edit form. Creation goes through <CreateClassDialog />.
 const ClassSchema = z.object({
-  name: z.string().min(1, "Required"),
-  grade: z.coerce.number().min(1).max(13),
+  name: z.string().trim().min(1, "Required").max(CLASS_NAME_MAX),
+  grade: z.coerce
+    .number()
+    .int("Use a whole number")
+    .min(DISPLAY_ORDER_MIN)
+    .max(DISPLAY_ORDER_MAX),
   classTeacherId: z.string().optional().nullable(),
-  initialSections: z.string().optional(),
 });
 
 type ClassForm = z.infer<typeof ClassSchema>;
@@ -41,9 +51,14 @@ type ClassForm = z.infer<typeof ClassSchema>;
 interface Props {
   classes: any[];
   teachers?: any[];
+  academicYear?: string | null;
 }
 
-export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
+export function ClassesContent({
+  classes,
+  teachers = [],
+  academicYear,
+}: Readonly<Props>) {
   const router = useRouter();
   const [classDialog, setClassDialog] = useState<"closed" | "create" | "edit">(
     "closed",
@@ -66,19 +81,16 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
   const classForm = useForm<ClassForm>({ resolver: zodResolver(ClassSchema) });
 
   const onSubmitClass = async (data: ClassForm) => {
-    const payload = {
+    if (!editClass) return;
+    const result = await updateClass(editClass.id, {
       ...data,
       classTeacherId: selectedClassTeacherId || null,
-      initialSections: data.initialSections?.trim() || undefined,
-    };
-    const result = editClass
-      ? await updateClass(editClass.id, payload)
-      : await createClass(payload);
+    });
     if (result.error) {
       toast.error(result.error);
       return;
     }
-    toast.success(editClass ? "Class updated" : "Class created");
+    toast.success("Class updated");
     setClassDialog("closed");
     setEditClass(null);
     setSelectedClassTeacherId(null);
@@ -223,20 +235,12 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
       name: cls.name,
       grade: cls.grade,
       classTeacherId: cls.classTeacherId ?? "",
-      initialSections: "",
     });
     setClassDialog("edit");
   };
 
   const openCreateClass = () => {
     setEditClass(null);
-    setSelectedClassTeacherId(null);
-    classForm.reset({
-      name: "",
-      grade: 1,
-      classTeacherId: "",
-      initialSections: "",
-    });
     setClassDialog("create");
   };
 
@@ -273,7 +277,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
             <div>
               <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-bold text-violet-700 dark:text-violet-300 text-sm flex-shrink-0">
-                  {cls.grade}
+                  {classShortLabel(cls.name)}
                 </div>
                 <div className="flex gap-1">
                   <button
@@ -295,7 +299,9 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
                 </div>
               </div>
 
-              <p className="text-sm font-semibold">{cls.name}</p>
+              <p className="text-sm font-semibold truncate" title={cls.name}>
+                {cls.name}
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {cls._count?.students ?? 0} students
               </p>
@@ -367,16 +373,35 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
         )}
       </div>
 
-      {/* Class Dialog */}
+      <CreateClassDialog
+        open={classDialog === "create"}
+        onOpenChange={(open) => {
+          if (!open) setClassDialog("closed");
+        }}
+        classes={classes}
+        teachers={teachers}
+        academicYear={academicYear}
+        onManageSections={(classId) => {
+          const cls = classes.find((c) => c.id === classId);
+          setClassDialog("closed");
+          if (cls) openAddSections(cls);
+        }}
+        onCreated={() => {
+          setClassDialog("closed");
+          router.refresh();
+        }}
+      />
+
+      {/* Edit Class Dialog */}
       <Dialog
-        open={classDialog !== "closed"}
+        open={classDialog === "edit"}
         onOpenChange={(open) => {
           if (!open) {
             setClassDialog("closed");
             setEditClass(null);
           }
         }}
-        title={editClass ? "Edit Class" : "Create New Class"}
+        title="Edit Class"
         className="max-w-md"
       >
         <form
@@ -395,45 +420,22 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
             />
           </FormField>
           <FormField
-            label="Grade (1–13)"
+            label="Display Order"
             error={classForm.formState.errors.grade?.message}
             required
           >
             <input
               {...classForm.register("grade")}
               type="number"
-              min={1}
-              max={13}
+              step={1}
+              min={DISPLAY_ORDER_MIN}
+              max={DISPLAY_ORDER_MAX}
               className={inputCls}
             />
+            <p className="text-[11px] text-muted-foreground">
+              Controls sort order. Nursery −2, LKG −1, UKG 0, Grade N = N.
+            </p>
           </FormField>
-          {!editClass && (
-            <FormField label="Initial Sections (Optional)">
-              <input
-                {...classForm.register("initialSections")}
-                className={inputCls}
-                placeholder="e.g. A, B, C"
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Add one or more sections right away (e.g. A, B or A, B, C)
-              </p>
-              <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground flex-wrap">
-                <span>Presets:</span>
-                {["A", "A, B", "A, B, C", "A, B, C, D"].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() =>
-                      classForm.setValue("initialSections", preset)
-                    }
-                    className="h-5 px-1.5 rounded bg-muted hover:bg-muted/80 text-[10px] font-medium transition-colors"
-                  >
-                    + {preset}
-                  </button>
-                ))}
-              </div>
-            </FormField>
-          )}
           <FormField label="Class Teacher (Optional)">
             <Select
               allowClear
@@ -481,7 +483,7 @@ export function ClassesContent({ classes, teachers = [] }: Readonly<Props>) {
               {classForm.formState.isSubmitting && (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               )}
-              {editClass ? "Save Changes" : "Create Class"}
+              Save Changes
             </button>
           </div>
         </form>

@@ -24,6 +24,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
+import { categoryForOrder } from "@/lib/class-catalog";
 
 interface AssignmentsTabProps {
   classes?: any[];
@@ -377,7 +378,9 @@ export function AssignmentsTab({
                           {c.name}
                         </span>
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                          Grade {c.grade ?? "-"}
+                          {c.grade == null
+                            ? "-"
+                            : categoryForOrder(c.grade).groupLabel}
                         </span>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
