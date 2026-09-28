@@ -10,60 +10,71 @@ datasource db {
 }
 
 model School {
-  id               String               @id @default(cuid())
-  name             String
-  subdomain        String               @unique
-  address          String?
-  pincode          String?
-  city             String?
-  state            String?
-  country          String?
-  expectedStudents Int?
-  expectedStaff    Int?
-  phone            String?
-  email            String?
-  logoUrl          String?
-  plan             SubscriptionPlan     @default(FREE)
-  isActive         Boolean              @default(true)
-  lateFeeEnabled          Boolean              @default(false)
-  lateFeeAmount           Decimal?             @db.Decimal(10, 2)
-  lateFeeFrequency        String?              @default("MONTHLY")
+  id                          String               @id @default(cuid())
+  name                        String
+  subdomain                   String               @unique
+  address                     String?
+  pincode                     String?
+  city                        String?
+  state                       String?
+  country                     String?
+  expectedStudents            Int?
+  expectedStaff               Int?
+  phone                       String?
+  email                       String?
+  website                     String?
+  logoUrl                     String?
+  schoolType                  String?
+  board                       String?
+  mediumOfInstruction         String?
+  establishedYear             Int?
+  officeHoursStart            String?
+  officeHoursEnd              String?
+  timezone                    String?              @default("Asia/Kolkata")
+  schoolShift                 String?
+  workingDays                 String[]
+  gradingSystem               String?
+  plan                        SubscriptionPlan     @default(FREE)
+  isActive                    Boolean              @default(true)
+  lateFeeEnabled              Boolean              @default(false)
+  lateFeeAmount               Decimal?             @db.Decimal(10, 2)
+  lateFeeFrequency            String?              @default("MONTHLY")
   feePaymentMode              String               @default("ALLOW_PARTIAL")
   minPartialPaymentAmount     Decimal?             @default(0) @db.Decimal(10, 2)
   minPartialPaymentPercentage Decimal?             @default(0) @db.Decimal(5, 2)
   admissionNumberPrefix       String?              @default("SCH")
   admissionNumberFormat       String?              @default("{PREFIX}-{YYYY}-{SEQ:4}")
   nextAdmissionNumber         Int                  @default(1)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  academicSessions AcademicSession[]
-  assignments      Assignment[]
-  salarySlips      SalarySlip[]
-  payrollPayouts   PayrollPayout[]
-  attendances      Attendance[]
-  classes          Class[]
-  feeCharges       FeeCharge[]
-  feeComponents    FeeComponent[]
-  feeStructures    FeeStructure[]
-  fees             Fee[]
-  notices          Notice[]
-  paymentTxs       PaymentTransaction[]
-  payments         Payment[]
-  sections         Section[]
-  students         Student[]
-  subscription     Subscription?
-  teachers         Teacher[]
-  staff            Staff[]
-  users            User[]
-  expenseCategories ExpenseCategory[]
-  expenses         Expense[]
-  vehicles         Vehicle[]
-  transportRoutes  TransportRoute[]
-  studentTransports StudentTransport[]
-  teacherSections  TeacherSection[]
-  exams            Exam[]
-  timetablePeriods TimetablePeriod[]
-  timetableSlots   TimetableSlot[]
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  academicSessions            AcademicSession[]
+  assignments                 Assignment[]
+  salarySlips                 SalarySlip[]
+  payrollPayouts              PayrollPayout[]
+  attendances                 Attendance[]
+  classes                     Class[]
+  feeCharges                  FeeCharge[]
+  feeComponents               FeeComponent[]
+  feeStructures               FeeStructure[]
+  fees                        Fee[]
+  notices                     Notice[]
+  paymentTxs                  PaymentTransaction[]
+  payments                    Payment[]
+  sections                    Section[]
+  students                    Student[]
+  subscription                Subscription?
+  teachers                    Teacher[]
+  staff                       Staff[]
+  users                       User[]
+  expenseCategories           ExpenseCategory[]
+  expenses                    Expense[]
+  vehicles                    Vehicle[]
+  transportRoutes             TransportRoute[]
+  studentTransports           StudentTransport[]
+  teacherSections             TeacherSection[]
+  exams                       Exam[]
+  timetablePeriods            TimetablePeriod[]
+  timetableSlots              TimetableSlot[]
 
   @@map("schools")
 }
@@ -252,10 +263,10 @@ model TeacherSection {
   sectionId String
   createdAt DateTime @default(now())
 
-  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  school  School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@unique([teacherId, classId, sectionId])
   @@index([schoolId])
@@ -697,7 +708,7 @@ model ExpenseCategory {
   id          String    @id @default(cuid())
   schoolId    String
   school      School    @relation(fields: [schoolId], references: [id])
-  name        String    
+  name        String
   description String?
   expenses    Expense[]
   createdAt   DateTime  @default(now())
@@ -708,22 +719,22 @@ model ExpenseCategory {
 }
 
 model Expense {
-  id              String          @id @default(cuid())
-  schoolId        String
-  school          School          @relation(fields: [schoolId], references: [id])
-  categoryId      String
-  category        ExpenseCategory @relation(fields: [categoryId], references: [id])
-  amount          Decimal         @db.Decimal(10, 2)
-  date            DateTime        @default(now())
-  title           String          
-  description     String?         
-  paymentMethod   PaymentMethod   
-  referenceNo     String?         
-  receiptUrl      String?         
-  recordedById    String?
-  recordedBy      User?           @relation(fields: [recordedById], references: [id])
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  schoolId      String
+  school        School          @relation(fields: [schoolId], references: [id])
+  categoryId    String
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount        Decimal         @db.Decimal(10, 2)
+  date          DateTime        @default(now())
+  title         String
+  description   String?
+  paymentMethod PaymentMethod
+  referenceNo   String?
+  receiptUrl    String?
+  recordedById  String?
+  recordedBy    User?           @relation(fields: [recordedById], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([schoolId])
   @@index([categoryId])
@@ -764,24 +775,24 @@ enum TransportTripType {
 }
 
 model Vehicle {
-  id             String          @id @default(cuid())
+  id             String        @id @default(cuid())
   schoolId       String
   registrationNo String
-  type           VehicleType     @default(BUS)
+  type           VehicleType   @default(BUS)
   model          String?
   capacity       Int
   driverName     String
   driverPhone    String
   helperName     String?
   helperPhone    String?
-  status         VehicleStatus   @default(ACTIVE)
+  status         VehicleStatus @default(ACTIVE)
   notes          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  
-  routes         TransportRoute[]
-  enrollments    StudentTransport[]
-  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  routes      TransportRoute[]
+  enrollments StudentTransport[]
+  school      School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@unique([schoolId, registrationNo])
   @@index([schoolId])
@@ -789,23 +800,23 @@ model Vehicle {
 }
 
 model TransportRoute {
-  id               String             @id @default(cuid())
+  id               String      @id @default(cuid())
   schoolId         String
   name             String
   code             String?
   vehicleId        String?
   startPoint       String
   endPoint         String
-  defaultRatePerKm Decimal            @default(100.00) @db.Decimal(10, 2)
-  flatRate         Decimal?           @db.Decimal(10, 2)
-  status           RouteStatus        @default(ACTIVE)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  defaultRatePerKm Decimal     @default(100.00) @db.Decimal(10, 2)
+  flatRate         Decimal?    @db.Decimal(10, 2)
+  status           RouteStatus @default(ACTIVE)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
-  vehicle          Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  school           School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  stops            RouteStop[]
-  enrollments      StudentTransport[]
+  vehicle     Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  school      School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  stops       RouteStop[]
+  enrollments StudentTransport[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -813,7 +824,7 @@ model TransportRoute {
 }
 
 model RouteStop {
-  id                   String             @id @default(cuid())
+  id                   String   @id @default(cuid())
   routeId              String
   stopName             String
   sequenceOrder        Int
@@ -821,41 +832,41 @@ model RouteStop {
   dropTime             String?
   latitude             Float?
   longitude            Float?
-  distanceFromSchoolKm Decimal            @default(0.0) @db.Decimal(6, 2)
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  distanceFromSchoolKm Decimal  @default(0.0) @db.Decimal(6, 2)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  route                TransportRoute     @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  enrollments          StudentTransport[]
+  route       TransportRoute     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  enrollments StudentTransport[]
 
   @@index([routeId])
   @@map("route_stops")
 }
 
 model StudentTransport {
-  id              String                    @id @default(cuid())
-  schoolId        String
-  studentId       String
-  sessionId       String
-  routeId         String
-  stopId          String
-  vehicleId       String?
-  tripType        TransportTripType         @default(TWO_WAY)
-  distanceKm      Decimal                   @db.Decimal(6, 2)
-  monthlyFee      Decimal                   @db.Decimal(10, 2)
-  status          TransportEnrollmentStatus @default(ACTIVE)
-  startDate       DateTime                  @default(now())
-  endDate         DateTime?
-  notes           String?
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
+  id         String                    @id @default(cuid())
+  schoolId   String
+  studentId  String
+  sessionId  String
+  routeId    String
+  stopId     String
+  vehicleId  String?
+  tripType   TransportTripType         @default(TWO_WAY)
+  distanceKm Decimal                   @db.Decimal(6, 2)
+  monthlyFee Decimal                   @db.Decimal(10, 2)
+  status     TransportEnrollmentStatus @default(ACTIVE)
+  startDate  DateTime                  @default(now())
+  endDate    DateTime?
+  notes      String?
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
 
-  school          School                    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student         Student                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  session         AcademicSession           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  route           TransportRoute            @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  stop            RouteStop                 @relation(fields: [stopId], references: [id], onDelete: Cascade)
-  vehicle         Vehicle?                  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  route   TransportRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stop    RouteStop       @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  vehicle Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
   @@unique([studentId, sessionId])
   @@index([schoolId])
@@ -883,19 +894,19 @@ enum GradingSystem {
 }
 
 model Exam {
-  id            String         @id @default(cuid())
+  id            String        @id @default(cuid())
   schoolId      String
   name          String
-  type          ExamType       @default(TERM_1)
+  type          ExamType      @default(TERM_1)
   academicYear  String
-  gradingSystem GradingSystem  @default(CBSE_9_POINT)
+  gradingSystem GradingSystem @default(CBSE_9_POINT)
   startDate     DateTime
   endDate       DateTime
-  isPublished   Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  isPublished   Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   subjects      ExamSubject[]
-  school        School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
   @@index([schoolId, academicYear])
@@ -960,26 +971,26 @@ model TimetablePeriod {
 }
 
 model TimetableSlot {
-  id           String           @id @default(cuid())
+  id           String   @id @default(cuid())
   schoolId     String
   classId      String
   sectionId    String
   teacherId    String?
   periodId     String?
-  dayOfWeek    Int              // 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
-  startTime    String           // "08:30"
-  endTime      String           // "09:15"
+  dayOfWeek    Int // 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+  startTime    String // "08:30"
+  endTime      String // "09:15"
   subjectName  String
   room         String?
   academicYear String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  school       School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  class        Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
-  section      Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  teacher      Teacher?         @relation(fields: [teacherId], references: [id], onDelete: SetNull)
-  period       TimetablePeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
+  school  School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  class   Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  section Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  teacher Teacher?         @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+  period  TimetablePeriod? @relation(fields: [periodId], references: [id], onDelete: SetNull)
 
   @@unique([schoolId, sectionId, dayOfWeek, startTime])
   @@index([schoolId, teacherId, dayOfWeek, startTime])
