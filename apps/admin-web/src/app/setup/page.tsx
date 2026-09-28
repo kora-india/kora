@@ -15,8 +15,9 @@ import {
   ChevronLeft,
   Check,
   CheckCircle2,
+  LogOut,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import * as Sentry from "@sentry/nextjs";
 
 const SetupSchema = z.object({
@@ -265,7 +266,14 @@ export default function SetupSchoolPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative">
+      <button
+        onClick={() => signOut({ callbackUrl: "/login" })}
+        className="absolute top-6 right-6 flex items-center px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-background border border-zinc-200 dark:border-zinc-800 hover:bg-muted rounded-md transition-colors shadow-sm"
+      >
+        <LogOut className="w-4 h-4 mr-2" />
+        Sign Out
+      </button>
       <div className="sm:mx-auto sm:w-full sm:max-w-3xl text-center mb-8">
         <div className="w-12 h-12 bg-violet-600 text-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-600/20">
           <Building2 className="w-6 h-6" />
