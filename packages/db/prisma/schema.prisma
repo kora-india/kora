@@ -38,6 +38,8 @@ model School {
   updatedAt        DateTime             @updatedAt
   academicSessions AcademicSession[]
   assignments      Assignment[]
+  salarySlips      SalarySlip[]
+  payrollPayouts   PayrollPayout[]
   attendances      Attendance[]
   classes          Class[]
   feeCharges       FeeCharge[]
@@ -233,6 +235,7 @@ model Teacher {
   classTeacherOf    Class[]          @relation("ClassTeacher")
   assignedSections  TeacherSection[]
   timetableSlots    TimetableSlot[]
+  salarySlips       SalarySlip[]
   school            School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -984,4 +987,75 @@ model TimetableSlot {
   @@map("timetable_slots")
 }
 
+// ─── Payroll ───────────────────────────────────────────────────────────────
+// A salary slip is the monthly statement of what a teacher is owed. A payout
+// is the record of actually paying it. Generating a slip never marks it paid;
+// only a successful PayrollPayout moves a slip to PAID.
 
+enum SalarySlipStatus {
+  DRAFT
+  GENERATED
+  APPROVED
+  PROCESSING
+  PAID
+  FAILED
+}
+
+enum PayrollPayoutStatus {
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model SalarySlip {
+  id              String           @id @default(cuid())
+  schoolId        String
+  teacherId       String
+  slipNumber      String
+  month           Int // 1-12
+  year            Int
+  basicSalary     Decimal          @db.Decimal(10, 2)
+  allowances      Decimal          @default(0) @db.Decimal(10, 2)
+  pfDeduction     Decimal          @default(0) @db.Decimal(10, 2)
+  otherDeductions Decimal          @default(0) @db.Decimal(10, 2)
+  grossSalary     Decimal          @db.Decimal(10, 2)
+  totalDeductions Decimal          @db.Decimal(10, 2)
+  netSalary       Decimal          @db.Decimal(10, 2)
+  status          SalarySlipStatus @default(GENERATED)
+  generatedById   String?
+  sentAt          DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher Teacher         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  payouts PayrollPayout[]
+
+  @@unique([teacherId, year, month])
+  @@unique([schoolId, slipNumber])
+  @@index([schoolId, year, month])
+  @@map("salary_slips")
+}
+
+model PayrollPayout {
+  id            String              @id @default(cuid())
+  schoolId      String
+  salarySlipId  String
+  amount        Decimal             @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PayrollPayoutStatus @default(PROCESSING)
+  transactionId String              @unique
+  reference     String?
+  failureReason String?
+  processedAt   DateTime?
+  processedById String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  school     School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  salarySlip SalarySlip @relation(fields: [salarySlipId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([salarySlipId])
+  @@map("payroll_payouts")
+}

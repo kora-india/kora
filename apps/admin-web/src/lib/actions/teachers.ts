@@ -33,7 +33,10 @@ async function getAdminSession() {
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return Array.from(
+    { length: 12 },
+    () => chars[Math.floor(Math.random() * chars.length)],
+  ).join("");
 }
 
 export async function createTeacher(data: unknown) {
@@ -45,66 +48,83 @@ export async function createTeacher(data: unknown) {
 
   const limit = await checkTeacherLimit(user.schoolId);
   if (!limit.allowed) {
-    return { error: planLimitMessage("teachers", limit.current, limit.max, limit.plan) };
+    return {
+      error: planLimitMessage("teachers", limit.current, limit.max, limit.plan),
+    };
   }
 
-  const { assignedClassId, assignedSectionId, assignedSectionIds, salary, joiningDate, ...rest } = parsed.data;
+  const {
+    assignedClassId,
+    assignedSectionId,
+    assignedSectionIds,
+    salary,
+    joiningDate,
+    ...rest
+  } = parsed.data;
 
   try {
     const tempPassword = generateTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const newUser = await tx.user.create({
-        data: {
-          email: rest.email,
-          name: rest.name,
-          password: hashedPassword,
-          role: "TEACHER",
-          phone: rest.phone || null,
-          schoolId: user.schoolId,
-        },
-      });
-
-      // Resolve sections
-      const sectionRecords = assignedSectionIds && assignedSectionIds.length > 0
-        ? await tx.section.findMany({
-            where: { id: { in: assignedSectionIds }, schoolId: user.schoolId },
-            select: { id: true, classId: true },
-          })
-        : [];
-
-      const primaryClassId = sectionRecords[0]?.classId || assignedClassId || null;
-      const primarySectionId = sectionRecords[0]?.id || assignedSectionId || null;
-
-      const teacher = await tx.teacher.create({
-        data: {
-          ...rest,
-          phone: rest.phone || null,
-          qualification: rest.qualification || null,
-          salary: salary ? salary : null,
-          joiningDate: joiningDate ? new Date(joiningDate) : null,
-          schoolId: user.schoolId,
-          userId: newUser.id,
-          assignedClassId: primaryClassId,
-          assignedSectionId: primarySectionId,
-        },
-      });
-
-      if (sectionRecords.length > 0) {
-        await tx.teacherSection.createMany({
-          data: sectionRecords.map((s) => ({
+    const result = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const newUser = await tx.user.create({
+          data: {
+            email: rest.email,
+            name: rest.name,
+            password: hashedPassword,
+            role: "TEACHER",
+            phone: rest.phone || null,
             schoolId: user.schoolId,
-            teacherId: teacher.id,
-            classId: s.classId,
-            sectionId: s.id,
-          })),
-          skipDuplicates: true,
+          },
         });
-      }
 
-      return teacher;
-    });
+        // Resolve sections
+        const sectionRecords =
+          assignedSectionIds && assignedSectionIds.length > 0
+            ? await tx.section.findMany({
+                where: {
+                  id: { in: assignedSectionIds },
+                  schoolId: user.schoolId,
+                },
+                select: { id: true, classId: true },
+              })
+            : [];
+
+        const primaryClassId =
+          sectionRecords[0]?.classId || assignedClassId || null;
+        const primarySectionId =
+          sectionRecords[0]?.id || assignedSectionId || null;
+
+        const teacher = await tx.teacher.create({
+          data: {
+            ...rest,
+            phone: rest.phone || null,
+            qualification: rest.qualification || null,
+            salary: salary ? salary : null,
+            joiningDate: joiningDate ? new Date(joiningDate) : null,
+            schoolId: user.schoolId,
+            userId: newUser.id,
+            assignedClassId: primaryClassId,
+            assignedSectionId: primarySectionId,
+          },
+        });
+
+        if (sectionRecords.length > 0) {
+          await tx.teacherSection.createMany({
+            data: sectionRecords.map((s) => ({
+              schoolId: user.schoolId,
+              teacherId: teacher.id,
+              classId: s.classId,
+              sectionId: s.id,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return teacher;
+      },
+    );
 
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/teachers");
@@ -112,7 +132,8 @@ export async function createTeacher(data: unknown) {
     revalidatePath("/dashboard");
     return { success: true, id: result.id, tempPassword };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "A user with this email already exists" };
+    if (e.code === "P2002")
+      return { error: "A user with this email already exists" };
     return { error: e.message };
   }
 }
@@ -124,7 +145,14 @@ export async function updateTeacher(id: string, data: unknown) {
   const parsed = TeacherSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { assignedClassId, assignedSectionId, assignedSectionIds, salary, joiningDate, ...rest } = parsed.data;
+  const {
+    assignedClassId,
+    assignedSectionId,
+    assignedSectionIds,
+    salary,
+    joiningDate,
+    ...rest
+  } = parsed.data;
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -139,15 +167,21 @@ export async function updateTeacher(id: string, data: unknown) {
       });
 
       // Resolve sections
-      const sectionRecords = assignedSectionIds && assignedSectionIds.length > 0
-        ? await tx.section.findMany({
-            where: { id: { in: assignedSectionIds }, schoolId: user.schoolId },
-            select: { id: true, classId: true },
-          })
-        : [];
+      const sectionRecords =
+        assignedSectionIds && assignedSectionIds.length > 0
+          ? await tx.section.findMany({
+              where: {
+                id: { in: assignedSectionIds },
+                schoolId: user.schoolId,
+              },
+              select: { id: true, classId: true },
+            })
+          : [];
 
-      const primaryClassId = sectionRecords[0]?.classId || assignedClassId || null;
-      const primarySectionId = sectionRecords[0]?.id || assignedSectionId || null;
+      const primaryClassId =
+        sectionRecords[0]?.classId || assignedClassId || null;
+      const primarySectionId =
+        sectionRecords[0]?.id || assignedSectionId || null;
 
       await tx.teacher.update({
         where: { id },
@@ -181,6 +215,7 @@ export async function updateTeacher(id: string, data: unknown) {
     });
 
     revalidatePath("/teachers");
+    revalidatePath(`/teachers/${id}`);
     revalidatePath("/attendance");
     return { success: true };
   } catch (e: any) {
@@ -200,11 +235,15 @@ export async function deleteTeacher(id: string) {
 
     await prisma.$transaction([
       prisma.teacher.update({ where: { id }, data: { isActive: false } }),
-      prisma.user.update({ where: { id: teacher.userId }, data: { isActive: false } }),
+      prisma.user.update({
+        where: { id: teacher.userId },
+        data: { isActive: false },
+      }),
     ]);
 
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/teachers");
+    revalidatePath(`/teachers/${id}`);
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {

@@ -17,7 +17,11 @@ import {
   Calendar,
   Filter,
   Award,
+  UserRound,
+  FileText,
+  UserX,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
@@ -153,7 +157,7 @@ export function TeachersContent({
     const result = await deleteTeacher(deleteTeacherTarget.id);
     if (result.error) toast.error(result.error);
     else {
-      toast.success("Teacher removed");
+      toast.success(`${deleteTeacherTarget.name} has been deactivated`);
       router.refresh();
     }
   };
@@ -320,11 +324,11 @@ export function TeachersContent({
               key={t.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0, transition: { delay: i * 0.03 } }}
-              className="rounded-xl border bg-card p-5 hover:shadow-md transition-shadow flex flex-col justify-between"
+              className="relative rounded-xl border bg-card p-5 hover:shadow-md hover:border-violet-200 dark:hover:border-violet-900 transition-all flex flex-col justify-between focus-within:ring-2 focus-within:ring-violet-500/40"
             >
               <div>
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-sm font-bold text-blue-700 dark:text-blue-300 flex-shrink-0">
                       {t.name
                         .split(" ")
@@ -333,25 +337,37 @@ export function TeachersContent({
                         .slice(0, 2)}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{t.name}</p>
-                      <p className="text-xs text-muted-foreground font-medium">
+                      {/* Stretched link: the whole card opens the profile. */}
+                      <Link
+                        href={`/teachers/${t.id}`}
+                        className="block text-sm font-semibold truncate hover:text-violet-700 dark:hover:text-violet-300 focus:outline-none after:absolute after:inset-0 after:rounded-xl"
+                      >
+                        {t.name}
+                      </Link>
+                      <p className="text-xs text-muted-foreground font-medium truncate">
                         {t.subject}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 relative z-10">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          aria-label="Teacher actions"
+                          aria-label={`Actions for ${t.name}`}
                           className="p-1 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
                         >
                           <MoreVertical className="w-3.5 h-3.5" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuContent align="end" className="w-52">
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/teachers/${t.id}`)}
+                        >
+                          <UserRound className="w-3.5 h-3.5" />
+                          <span>View Profile</span>
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => {
                             setEditTeacher(t);
@@ -359,15 +375,33 @@ export function TeachersContent({
                           }}
                         >
                           <Pencil className="w-3.5 h-3.5" />
-                          <span>Edit</span>
+                          <span>Edit Teacher</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(
+                              `/teachers/${t.id}?tab=payroll&action=generate`,
+                            )
+                          }
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Generate Salary Slip</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            router.push(`/teachers/${t.id}?tab=payroll`)
+                          }
+                        >
+                          <IndianRupee className="w-3.5 h-3.5" />
+                          <span>View Payroll</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => setDeleteTeacherTarget(t)}
                           className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Remove</span>
+                          <UserX className="w-3.5 h-3.5" />
+                          <span>Deactivate Teacher</span>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -412,15 +446,14 @@ export function TeachersContent({
                 {t.assignedSections && t.assignedSections.length > 0 ? (
                   <div className="flex flex-wrap gap-1 items-center">
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-0.5">
-                      <GraduationCap className="w-3 h-3" /> Classes:
+                      <GraduationCap className="w-3 h-3" /> Teaching:
                     </span>
                     {t.assignedSections.map((as: any) => (
                       <span
                         key={as.id || `${as.classId}-${as.sectionId}`}
                         className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800"
                       >
-                        {as.class?.name || "Class"} ·{" "}
-                        {as.section?.name || "Sec"}
+                        {as.class?.name || "Class"}-{as.section?.name || "Sec"}
                       </span>
                     ))}
                   </div>
@@ -428,8 +461,10 @@ export function TeachersContent({
                   <div>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800">
                       <GraduationCap className="w-2.5 h-2.5" />
-                      Class: {t.assignedClass.name} ·{" "}
-                      {t.assignedSection?.name ?? "—"}
+                      Teaching: {t.assignedClass.name}
+                      {t.assignedSection?.name
+                        ? `-${t.assignedSection.name}`
+                        : ""}
                     </span>
                   </div>
                 ) : null}
@@ -683,9 +718,9 @@ export function TeachersContent({
         onOpenChange={(open) => {
           if (!open) setDeleteTeacherTarget(null);
         }}
-        title="Remove Teacher"
-        description={`Remove ${deleteTeacherTarget?.name}? Their login will be deactivated. Existing records are preserved.`}
-        confirmLabel="Remove"
+        title="Deactivate Teacher"
+        description={`Deactivate ${deleteTeacherTarget?.name}? Their login will be disabled and they'll be removed from the active teacher list. Salary and class records are preserved.`}
+        confirmLabel="Deactivate"
         onConfirm={handleDeleteTeacher}
       />
 
