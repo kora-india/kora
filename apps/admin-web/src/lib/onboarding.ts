@@ -14,36 +14,56 @@ interface SeedParams {
   schoolId: string;
   subdomain: string;
   schoolName: string;
+  classes?: string[];
+  academicSession?: string;
 }
 
 /**
- * Prepopulates a newly registered school with essential starter data:
+ * Prepopulates a newly registered school with essential starter data based on user input:
  * - Active Academic Session
- * - 1 Class (Class 1) and Section (A)
- * - 1 Teacher (assigned as Class Teacher)
+ * - User-selected Classes and Sections (defaulting to Section A)
  * - Generic Fee Components (Tuition, Admission, Annual, Exam, Computer, Transport)
- * - Standard Fee Structure assigned to the class
- * - 1 Student assigned to Class 1-A with Fee Structure assignment
+ * - Standard Fee Structure assigned to the created classes
  */
 export async function seedInitialSchoolData(
   tx: Prisma.TransactionClient | PrismaClient | any,
-  { schoolId, subdomain, schoolName }: SeedParams,
+  {
+    schoolId,
+    subdomain,
+    schoolName,
+    classes = ["Class 1"],
+    academicSession,
+  }: SeedParams,
 ) {
   const cleanSub = subdomain.toLowerCase().replace(/[^a-z0-9]/g, "");
 
   // 1. Session dates calculation (Starts April 1)
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const startYear = now.getMonth() >= 3 ? currentYear : currentYear - 1;
-  const endYear = startYear + 1;
-  const sessionName = `${startYear}-${String(endYear).slice(-2)}`;
-  const startDate = new Date(`${startYear}-04-01`);
-  const endDate = new Date(`${endYear}-03-31`);
+  let sessionName = academicSession;
+  let startDate = new Date();
+  let endDate = new Date();
 
-  // Batch 1 (Parallel): Academic Session, Class with nested Section A, and 6 Fee Components
+  if (academicSession && academicSession.includes(" - ")) {
+    const [startYearStr, endYearStr] = academicSession.split(" - ");
+    const startYear = parseInt(startYearStr, 10);
+    const endYear = parseInt(endYearStr, 10);
+    startDate = new Date(`${startYear}-04-01`);
+    endDate = new Date(`${endYear}-03-31`);
+  } else {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const startYear = now.getMonth() >= 3 ? currentYear : currentYear - 1;
+    const endYear = startYear + 1;
+    sessionName = `${startYear}-${String(endYear).slice(-2)}`;
+    startDate = new Date(`${startYear}-04-01`);
+    endDate = new Date(`${endYear}-03-31`);
+  }
+
+  // Ensure we have at least one class
+  const classesToCreate = classes.length > 0 ? classes : ["Class 1"];
+
+  // Batch 1 (Parallel): Academic Session and 6 Fee Components
   const [
     session,
-    class1,
     tuitionFee,
     admissionFee,
     annualFee,
@@ -54,26 +74,10 @@ export async function seedInitialSchoolData(
     tx.academicSession.create({
       data: {
         schoolId,
-        name: sessionName,
+        name: sessionName!,
         startDate,
         endDate,
         isCurrent: true,
-      },
-    }),
-    tx.class.create({
-      data: {
-        schoolId,
-        name: "Class 1",
-        grade: 1,
-        sections: {
-          create: {
-            schoolId,
-            name: "A",
-          },
-        },
-      },
-      include: {
-        sections: true,
       },
     }),
     tx.feeComponent.create({
@@ -144,19 +148,42 @@ export async function seedInitialSchoolData(
     }),
   ]);
 
-  const sectionA = class1.sections[0];
-  const teacherEmail = `teacher.${cleanSub}.${Date.now().toString(36)}@schoolos.com`;
-  const teacherPassword = await bcrypt.hash("Teacher@123", 10);
+  // Create all selected classes
+  const createdClasses = await Promise.all(
+    classesToCreate.map((className, index) =>
+      tx.class.create({
+        data: {
+          schoolId,
+          name: className,
+          grade: index + 1, // Simple grade assignment
+          sections: {
+            create: {
+              schoolId,
+              name: "A",
+            },
+          },
+        },
+        include: {
+          sections: true,
+        },
+      }),
+    ),
+  );
 
-  // Batch 2 (Parallel): Teacher User & Fee Structure (with nested items and class assignment)
-  const [teacherUser, feeStructure] = await Promise.all([
+  const primaryClass = createdClasses[0];
+  const primarySection = primaryClass.sections[0];
+  const teacherEmail = `admin.${cleanSub}@schoolos.com`;
+  const teacherPassword = await bcrypt.hash("Admin@123", 10);
+
+  // Batch 2 (Parallel): Admin/Teacher User & Fee Structure (with nested items and class assignment)
+  const [adminUser, feeStructure] = await Promise.all([
     tx.user.create({
       data: {
         schoolId,
-        name: "Priya Sharma",
+        name: "School Admin",
         email: teacherEmail,
         password: teacherPassword,
-        role: UserRole.TEACHER,
+        role: UserRole.SCHOOL_ADMIN,
         phone: "9876543211",
         isActive: true,
       },
@@ -179,62 +206,9 @@ export async function seedInitialSchoolData(
           ],
         },
         classAssignments: {
-          create: {
-            classId: class1.id,
-          },
-        },
-      },
-    }),
-  ]);
-
-  // Batch 3 (Parallel): Teacher profile & Student with fee assignment
-  const [teacher, student] = await Promise.all([
-    tx.teacher.create({
-      data: {
-        schoolId,
-        userId: teacherUser.id,
-        name: "Priya Sharma",
-        email: teacherEmail,
-        phone: "9876543211",
-        subject: "Mathematics & Science",
-        qualification: "B.Ed, M.Sc",
-        assignedClassId: class1.id,
-        assignedSectionId: sectionA.id,
-        isActive: true,
-        classTeacherOf: {
-          connect: { id: class1.id },
-        },
-        assignedSections: {
-          create: {
-            schoolId,
-            classId: class1.id,
-            sectionId: sectionA.id,
-          },
-        },
-      },
-    }),
-    tx.student.create({
-      data: {
-        schoolId,
-        classId: class1.id,
-        sectionId: sectionA.id,
-        name: "Aarav Sharma",
-        rollNumber: "1",
-        admissionNumber: `${cleanSub.toUpperCase()}-${Date.now().toString(36).slice(-4)}001`,
-        gender: Gender.MALE,
-        parentName: "Rajesh Sharma",
-        parentPhone: "9876543210",
-        parentEmail: `parent.${cleanSub}@example.com`,
-        address: "12, Park Street",
-        city: "New Delhi",
-        state: "Delhi",
-        pincode: "110001",
-        isActive: true,
-        feeAssignments: {
-          create: {
-            sessionId: session.id,
-            structureId: feeStructure.id,
-          },
+          create: createdClasses.map((cls) => ({
+            classId: cls.id,
+          })),
         },
       },
     }),
@@ -243,19 +217,16 @@ export async function seedInitialSchoolData(
   logger.info(
     {
       schoolId,
-      classId: class1.id,
-      teacherId: teacher.id,
-      studentId: student.id,
+      classesCreated: createdClasses.length,
+      adminUserId: adminUser.id,
     },
-    `[School Prepopulated] Starter class, student, teacher, and fee components initialized for ${schoolName}`,
+    `[School Prepopulated] Started classes, fee components, and admin initialized for ${schoolName}`,
   );
 
   return {
     session,
-    class: class1,
-    section: sectionA,
-    teacher,
-    student,
+    classes: createdClasses,
+    adminUser,
     feeStructure,
   };
 }

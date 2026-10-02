@@ -40,6 +40,8 @@ const SetupSchema = z.object({
   timezone: z.string().optional(),
   schoolShift: z.string().optional(),
   workingDays: z.array(z.string()).optional(),
+  classes: z.array(z.string()).optional(),
+  academicSession: z.string().optional(),
   gradingSystem: z.string().optional(),
   plan: z.enum(["BASIC", "PRO", "ENTERPRISE"]),
   razorpay_payment_id: z.string(),
@@ -98,6 +100,8 @@ export async function POST(req: Request) {
       timezone,
       schoolShift,
       workingDays,
+      classes,
+      academicSession,
       gradingSystem,
       plan,
       razorpay_payment_id,
@@ -194,12 +198,14 @@ export async function POST(req: Request) {
       { maxWait: 10000, timeout: 20000 },
     );
 
-    // 4. Prepopulate starter data (1 class, 1 student, generic fee components & structure, 1 teacher)
+    // 4. Prepopulate starter data dynamically using user input
     try {
       await seedInitialSchoolData(prisma, {
         schoolId: school.id,
         subdomain,
         schoolName: name,
+        classes,
+        academicSession,
       });
     } catch (seedError) {
       schoolLogger.error(
