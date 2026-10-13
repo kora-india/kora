@@ -119,6 +119,22 @@ export async function createStudent(data: unknown) {
 
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 
+  // Validate class belongs to school
+  const classObj = await prisma.class.findFirst({
+    where: { id: parsed.data.classId, schoolId: user.schoolId },
+  });
+  if (!classObj) return { error: "Class not found in your school" };
+
+  // Validate section belongs to school and class
+  const sectionObj = await prisma.section.findFirst({
+    where: {
+      id: parsed.data.sectionId,
+      classId: parsed.data.classId,
+      schoolId: user.schoolId,
+    },
+  });
+  if (!sectionObj) return { error: "Section not found for this class" };
+
   try {
     const student = await prisma.student.create({
       data: {
@@ -164,11 +180,32 @@ export async function updateStudent(id: string, data: unknown) {
   const parsed = StudentSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
+  const existing = await prisma.student.findFirst({
+    where: { id, schoolId: user.schoolId },
+  });
+  if (!existing) return { error: "Student not found in your school" };
+
+  // Validate class belongs to school
+  const classObj = await prisma.class.findFirst({
+    where: { id: parsed.data.classId, schoolId: user.schoolId },
+  });
+  if (!classObj) return { error: "Class not found in your school" };
+
+  // Validate section belongs to school and class
+  const sectionObj = await prisma.section.findFirst({
+    where: {
+      id: parsed.data.sectionId,
+      classId: parsed.data.classId,
+      schoolId: user.schoolId,
+    },
+  });
+  if (!sectionObj) return { error: "Section not found for this class" };
+
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 
   try {
     const student = await prisma.student.update({
-      where: { id, schoolId: user.schoolId },
+      where: { id: existing.id },
       data: {
         ...rest,
         parentEmail: parentEmail || null,
@@ -199,8 +236,13 @@ export async function deleteStudent(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    await prisma.student.update({
+    const existing = await prisma.student.findFirst({
       where: { id, schoolId: user.schoolId },
+    });
+    if (!existing) return { error: "Student not found in your school" };
+
+    await prisma.student.update({
+      where: { id: existing.id },
       data: { isActive: false },
     });
     await Promise.all([
@@ -226,7 +268,7 @@ export async function getStudentDetails(id: string) {
     const student = await getCache(
       `cache:${user.schoolId}:students:details:v5:${id}`,
       async () => {
-        const s = await prisma.student.findUnique({
+        const s = await prisma.student.findFirst({
           where: { id, schoolId: user.schoolId },
           include: {
             school: {

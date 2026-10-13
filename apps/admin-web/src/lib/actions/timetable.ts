@@ -208,6 +208,48 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
   const schoolId = session.user.schoolId;
   const data = slotSchema.parse(rawData);
 
+  // Validate class belongs to school
+  const classObj = await prisma.class.findFirst({
+    where: { id: data.classId, schoolId },
+  });
+  if (!classObj) {
+    return { success: false, error: "Class not found in your school" };
+  }
+
+  // Validate section belongs to school and class
+  const sectionObj = await prisma.section.findFirst({
+    where: { id: data.sectionId, classId: data.classId, schoolId },
+  });
+  if (!sectionObj) {
+    return { success: false, error: "Section not found for this class" };
+  }
+
+  // Validate teacher belongs to school if provided
+  if (data.teacherId) {
+    const teacher = await prisma.teacher.findFirst({
+      where: { id: data.teacherId, schoolId },
+    });
+    if (!teacher) {
+      return { success: false, error: "Teacher not found in your school" };
+    }
+  }
+
+  // Validate period if provided
+  let periodId = data.periodId;
+  if (periodId) {
+    const period = await prisma.timetablePeriod.findFirst({
+      where: { id: periodId, schoolId },
+    });
+    if (!period) {
+      return { success: false, error: "Period not found in your school" };
+    }
+  } else {
+    const period = await prisma.timetablePeriod.findFirst({
+      where: { schoolId, startTime: data.startTime },
+    });
+    if (period) periodId = period.id;
+  }
+
   // Validate conflicts
   const conflictCheck = await checkSlotConflict({
     classId: data.classId,
@@ -226,15 +268,6 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
       error: conflictCheck.message,
       conflictType: conflictCheck.conflictType,
     };
-  }
-
-  // Find matching period if not provided
-  let periodId = data.periodId;
-  if (!periodId) {
-    const period = await prisma.timetablePeriod.findFirst({
-      where: { schoolId, startTime: data.startTime },
-    });
-    if (period) periodId = period.id;
   }
 
   const slot = await prisma.timetableSlot.upsert({
@@ -317,6 +350,17 @@ export async function generateAutomatedTimetableAction(params: {
     throw new Error("Unauthorized");
   }
   const schoolId = session.user.schoolId;
+
+  const classObj = await prisma.class.findFirst({
+    where: { id: params.classId, schoolId },
+  });
+  if (!classObj) throw new Error("Class not found in your school");
+
+  const sectionObj = await prisma.section.findFirst({
+    where: { id: params.sectionId, classId: params.classId, schoolId },
+  });
+  if (!sectionObj) throw new Error("Section not found for this class");
+
   const daysOfWeek = params.daysOfWeek || [1, 2, 3, 4, 5, 6];
 
   const [periods, allSchoolSlots, sectionSlots, schoolTeachers] =

@@ -94,12 +94,25 @@ export async function createExam(data: {
     throw new Error("Unauthorized");
   }
 
+  const schoolId = session.user.schoolId;
+
   const validated = examSchema.parse(data);
+
+  if (data.subjects && data.subjects.length > 0) {
+    const classIds = Array.from(new Set(data.subjects.map((s) => s.classId)));
+    const matchingClasses = await prisma.class.findMany({
+      where: { id: { in: classIds }, schoolId },
+      select: { id: true },
+    });
+    if (matchingClasses.length !== classIds.length) {
+      throw new Error("One or more classes not found in your school");
+    }
+  }
 
   const exam = await prisma.$transaction(async (tx) => {
     const created = await tx.exam.create({
       data: {
-        schoolId: session.user.schoolId!,
+        schoolId,
         name: validated.name,
         type: validated.type,
         academicYear: validated.academicYear,
@@ -220,6 +233,12 @@ export async function addExamSubject(data: {
     where: { id: data.examId, schoolId: session.user.schoolId },
   });
   if (!exam) throw new Error("Exam not found");
+
+  // Ensure class belongs to school
+  const classObj = await prisma.class.findFirst({
+    where: { id: data.classId, schoolId: session.user.schoolId },
+  });
+  if (!classObj) throw new Error("Class not found in your school");
 
   const subject = await prisma.examSubject.upsert({
     where: {
@@ -401,10 +420,27 @@ export async function saveBatchMarks(
       id: examSubjectId,
       exam: { schoolId: session.user.schoolId },
     },
-    select: { id: true, maxMarks: true },
+    select: { id: true, maxMarks: true, classId: true },
   });
 
   if (!examSubject) throw new Error("Exam subject not found");
+
+  if (entries.length > 0) {
+    const studentIds = Array.from(new Set(entries.map((e) => e.studentId)));
+    const matchingStudents = await prisma.student.findMany({
+      where: {
+        id: { in: studentIds },
+        schoolId: session.user.schoolId,
+        classId: examSubject.classId,
+      },
+      select: { id: true },
+    });
+    if (matchingStudents.length !== studentIds.length) {
+      throw new Error(
+        "One or more students do not belong to this school and class",
+      );
+    }
+  }
 
   const maxMarks = Number(examSubject.maxMarks);
 

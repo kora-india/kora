@@ -18,7 +18,8 @@ async function getTeacherSession() {
   if (!session?.user) return null;
   const user = session.user;
   if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) return null;
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role))
+    return null;
   return { ...user, schoolId: user.schoolId };
 }
 
@@ -37,6 +38,21 @@ export async function createAssignment(data: unknown) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   try {
+    const classObj = await prisma.class.findFirst({
+      where: { id: parsed.data.classId, schoolId: user.schoolId },
+      select: { id: true, classTeacherId: true },
+    });
+    if (!classObj) return { error: "Class not found in your school" };
+
+    const sectionObj = await prisma.section.findFirst({
+      where: {
+        id: parsed.data.sectionId,
+        classId: parsed.data.classId,
+        schoolId: user.schoolId,
+      },
+    });
+    if (!sectionObj) return { error: "Section not found for this class" };
+
     let teacherId: string | null = null;
 
     if (user.role === "TEACHER") {
@@ -50,31 +66,45 @@ export async function createAssignment(data: unknown) {
         },
       });
       const isDirectMatch = teacher?.assignedClassId === parsed.data.classId;
-      const isSectionMatch = teacher?.assignedSections.some((as) => as.classId === parsed.data.classId && (!parsed.data.sectionId || as.sectionId === parsed.data.sectionId));
-      const isClassTeacher = teacher?.classTeacherOf.some((ct) => ct.id === parsed.data.classId);
+      const isSectionMatch = teacher?.assignedSections.some(
+        (as) =>
+          as.classId === parsed.data.classId &&
+          (!parsed.data.sectionId || as.sectionId === parsed.data.sectionId),
+      );
+      const isClassTeacher = teacher?.classTeacherOf.some(
+        (ct) => ct.id === parsed.data.classId,
+      );
 
       if (!isDirectMatch && !isSectionMatch && !isClassTeacher) {
-        return { error: "You can only create assignments for your assigned classes" };
+        return {
+          error: "You can only create assignments for your assigned classes",
+        };
       }
     } else {
-      const cls = await prisma.class.findUnique({
-        where: { id: parsed.data.classId },
-        select: { classTeacherId: true },
-      });
-      if (cls?.classTeacherId) {
-        teacherId = cls.classTeacherId;
+      if (classObj.classTeacherId) {
+        teacherId = classObj.classTeacherId;
       } else {
         const assignedTeacher = await prisma.teacher.findFirst({
           where: {
             schoolId: user.schoolId,
             OR: [
-              { assignedSections: { some: { classId: parsed.data.classId, sectionId: parsed.data.sectionId } } },
+              {
+                assignedSections: {
+                  some: {
+                    classId: parsed.data.classId,
+                    sectionId: parsed.data.sectionId,
+                  },
+                },
+              },
               { assignedClassId: parsed.data.classId },
             ],
           },
         });
         if (!assignedTeacher) {
-          return { error: "No teacher is assigned to this class and section yet. Assign one first." };
+          return {
+            error:
+              "No teacher is assigned to this class and section yet. Assign one first.",
+          };
         }
         teacherId = assignedTeacher.id;
       }
@@ -113,8 +143,22 @@ export async function updateAssignment(id: string, data: unknown) {
       return { error: "You can only edit your own assignments" };
     }
 
+    const classObj = await prisma.class.findFirst({
+      where: { id: parsed.data.classId, schoolId: user.schoolId },
+    });
+    if (!classObj) return { error: "Class not found in your school" };
+
+    const sectionObj = await prisma.section.findFirst({
+      where: {
+        id: parsed.data.sectionId,
+        classId: parsed.data.classId,
+        schoolId: user.schoolId,
+      },
+    });
+    if (!sectionObj) return { error: "Section not found for this class" };
+
     await prisma.assignment.update({
-      where: { id },
+      where: { id: existing.id },
       data: { ...parsed.data, dueDate: new Date(parsed.data.dueDate) },
     });
     revalidatePath("/assignments");
@@ -139,7 +183,7 @@ export async function deleteAssignment(id: string) {
       return { error: "You can only delete your own assignments" };
     }
 
-    await prisma.assignment.delete({ where: { id } });
+    await prisma.assignment.delete({ where: { id: existing.id } });
     revalidatePath("/assignments");
     return { success: true };
   } catch (e: any) {

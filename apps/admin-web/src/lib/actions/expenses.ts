@@ -26,7 +26,8 @@ async function getFinanceSession() {
   if (!session?.user) return null;
   const user = session.user;
   if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role)) return null;
+  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role))
+    return null;
   return { ...user, schoolId: user.schoolId };
 }
 
@@ -44,13 +45,14 @@ export async function createExpenseCategory(data: unknown) {
         schoolId: user.schoolId,
       },
     });
-    
+
     await invalidateCache(`cache:${user.schoolId}:expenses:categories`);
     revalidatePath("/expenses");
-    
+
     return { success: true, id: category.id };
   } catch (e: any) {
-    if (e.code === "P2002") return { error: "Category with this name already exists" };
+    if (e.code === "P2002")
+      return { error: "Category with this name already exists" };
     return { error: e.message };
   }
 }
@@ -62,6 +64,11 @@ export async function createExpense(data: unknown) {
   const parsed = ExpenseSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
+  const category = await prisma.expenseCategory.findFirst({
+    where: { id: parsed.data.categoryId, schoolId: user.schoolId },
+  });
+  if (!category) return { error: "Expense category not found in your school" };
+
   try {
     const expense = await prisma.expense.create({
       data: {
@@ -71,7 +78,7 @@ export async function createExpense(data: unknown) {
         recordedById: user.id,
       },
     });
-    
+
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
@@ -80,7 +87,7 @@ export async function createExpense(data: unknown) {
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
-    
+
     return { success: true, id: expense.id };
   } catch (e: any) {
     return { error: e.message };
@@ -92,10 +99,15 @@ export async function deleteExpense(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    await prisma.expense.delete({
+    const existing = await prisma.expense.findFirst({
       where: { id, schoolId: user.schoolId },
     });
-    
+    if (!existing) return { error: "Expense not found in your school" };
+
+    await prisma.expense.delete({
+      where: { id: existing.id },
+    });
+
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
@@ -104,7 +116,7 @@ export async function deleteExpense(id: string) {
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
-    
+
     return { success: true };
   } catch (e: any) {
     return { error: e.message };

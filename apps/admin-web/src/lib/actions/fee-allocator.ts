@@ -125,6 +125,14 @@ export async function allocatePayment(data: {
 
     const result = await prisma.$transaction(
       async (tx) => {
+        // Verify student belongs to this school
+        const student = await tx.student.findFirst({
+          where: { id: data.studentId, schoolId: user.schoolId },
+        });
+        if (!student) {
+          throw new Error("Student not found in your school");
+        }
+
         // 1. Create Payment Transaction
         const payment = await tx.paymentTransaction.create({
           data: {
@@ -145,7 +153,11 @@ export async function allocatePayment(data: {
         // 2. Allocate Month-wise payments if provided (FIFO: oldest due date first)
         if (data.monthPayments && data.monthPayments.length > 0) {
           const chargeDates = await tx.feeCharge.findMany({
-            where: { id: { in: data.monthPayments.map((m) => m.chargeId) } },
+            where: {
+              id: { in: data.monthPayments.map((m) => m.chargeId) },
+              schoolId: user.schoolId,
+              studentId: data.studentId,
+            },
             select: { id: true, dueDate: true },
           });
           const chargeDateMap = new Map<string, number>();
@@ -164,8 +176,12 @@ export async function allocatePayment(data: {
             const enteredAmount = Number(mp.amount) || 0;
             if (enteredAmount <= 0) continue;
 
-            const charge = await tx.feeCharge.findUnique({
-              where: { id: mp.chargeId },
+            const charge = await tx.feeCharge.findFirst({
+              where: {
+                id: mp.chargeId,
+                schoolId: user.schoolId,
+                studentId: data.studentId,
+              },
               include: {
                 items: {
                   include: { component: true },
@@ -275,12 +291,18 @@ export async function allocatePayment(data: {
             const itemAmount = Number(ip.amount) || 0;
             if (itemAmount <= 0) continue;
 
-            const item = await tx.feeChargeItem.findUnique({
-              where: { id: ip.chargeItemId },
+            const item = await tx.feeChargeItem.findFirst({
+              where: {
+                id: ip.chargeItemId,
+                charge: {
+                  schoolId: user.schoolId,
+                  studentId: data.studentId,
+                },
+              },
               include: { charge: true },
             });
 
-            if (!item || item.charge.studentId !== data.studentId) continue;
+            if (!item) continue;
 
             const due = Number(item.amount) - Number(item.paidAmount);
             const allocAmount = Math.min(due, itemAmount);
@@ -334,7 +356,10 @@ export async function allocatePayment(data: {
                 status: {
                   in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE],
                 },
-                charge: { studentId: data.studentId },
+                charge: {
+                  schoolId: user.schoolId,
+                  studentId: data.studentId,
+                },
               },
               include: { charge: true },
               orderBy: { charge: { dueDate: "asc" } },
@@ -789,8 +814,20 @@ export async function waiveFeeChargeItem(itemId: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
+    const item = await prisma.feeChargeItem.findFirst({
+      where: {
+        id: itemId,
+        charge: { schoolId: user.schoolId },
+      },
+      select: { id: true },
+    });
+
+    if (!item) {
+      return { error: "Fee charge item not found in your school" };
+    }
+
     await prisma.feeChargeItem.update({
-      where: { id: itemId },
+      where: { id: item.id },
       data: { status: "WAIVED" },
     });
     revalidatePath("/fees");

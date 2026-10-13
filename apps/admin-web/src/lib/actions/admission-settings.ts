@@ -175,6 +175,7 @@ export async function getNextAdmissionNumber(
     for (let attempts = 0; attempts < 100; attempts++) {
       const existing = await prisma.student.findFirst({
         where: {
+          schoolId: user.schoolId,
           admissionNumber: candidate,
         },
         select: { id: true },

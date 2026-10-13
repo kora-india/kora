@@ -403,6 +403,19 @@ export async function generateMonthlyFees(
     return { error: "Please select at least one target class" };
   }
 
+  const session = await prisma.academicSession.findFirst({
+    where: { id: sessionId, schoolId: user.schoolId },
+  });
+  if (!session) return { error: "Academic session not found in your school" };
+
+  const matchingClasses = await prisma.class.findMany({
+    where: { id: { in: uniqueIds }, schoolId: user.schoolId },
+    select: { id: true },
+  });
+  if (matchingClasses.length !== uniqueIds.length) {
+    return { error: "One or more selected classes not found in your school" };
+  }
+
   let totalGenerated = 0;
   const errors: { classId: string; error: string }[] = [];
   const dueDate = new Date(dueDateStr);

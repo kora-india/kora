@@ -94,6 +94,20 @@ export async function createFeeStructure(data: {
   if (!user) return { error: "Unauthorized" };
 
   try {
+    const session = await prisma.academicSession.findFirst({
+      where: { id: data.sessionId, schoolId: user.schoolId },
+    });
+    if (!session) return { error: "Academic session not found in your school" };
+
+    const compIds = [...new Set(data.components.map((c) => c.componentId))];
+    const validComps = await prisma.feeComponent.findMany({
+      where: { id: { in: compIds }, schoolId: user.schoolId },
+      select: { id: true },
+    });
+    if (validComps.length !== compIds.length) {
+      return { error: "One or more fee components not found in your school" };
+    }
+
     await prisma.feeStructure.create({
       data: {
         schoolId: user.schoolId,
@@ -125,6 +139,16 @@ export async function assignFeeStructureToClass(
   if (!user) return { error: "Unauthorized" };
 
   try {
+    const cls = await prisma.class.findFirst({
+      where: { id: classId, schoolId: user.schoolId },
+    });
+    if (!cls) return { error: "Class not found in your school" };
+
+    const structure = await prisma.feeStructure.findFirst({
+      where: { id: structureId, schoolId: user.schoolId },
+    });
+    if (!structure) return { error: "Fee structure not found in your school" };
+
     // Upsert assignment for class
     const existing = await prisma.classFeeStructure.findFirst({
       where: { classId },
@@ -162,6 +186,21 @@ export async function setStudentFeeOverride(
   if (!user) return { error: "Unauthorized" };
 
   try {
+    const student = await prisma.student.findFirst({
+      where: { id: studentId, schoolId: user.schoolId },
+    });
+    if (!student) return { error: "Student not found in your school" };
+
+    const session = await prisma.academicSession.findFirst({
+      where: { id: sessionId, schoolId: user.schoolId },
+    });
+    if (!session) return { error: "Academic session not found in your school" };
+
+    const component = await prisma.feeComponent.findFirst({
+      where: { id: componentId, schoolId: user.schoolId },
+    });
+    if (!component) return { error: "Fee component not found in your school" };
+
     const existing = await prisma.studentFeeOverride.findUnique({
       where: {
         studentId_sessionId_componentId: {
@@ -290,6 +329,25 @@ export async function updateFeeStructure(
   if (!user) return { error: "Unauthorized" };
 
   try {
+    const existing = await prisma.feeStructure.findFirst({
+      where: { id, schoolId: user.schoolId },
+    });
+    if (!existing) return { error: "Fee structure not found in your school" };
+
+    const session = await prisma.academicSession.findFirst({
+      where: { id: data.sessionId, schoolId: user.schoolId },
+    });
+    if (!session) return { error: "Academic session not found in your school" };
+
+    const compIds = [...new Set(data.components.map((c) => c.componentId))];
+    const validComps = await prisma.feeComponent.findMany({
+      where: { id: { in: compIds }, schoolId: user.schoolId },
+      select: { id: true },
+    });
+    if (validComps.length !== compIds.length) {
+      return { error: "One or more fee components not found in your school" };
+    }
+
     // We need to recreate the items relation
     await prisma.feeStructure.update({
       where: { id, schoolId: user.schoolId },

@@ -94,6 +94,13 @@ export async function createClass(data: unknown) {
       };
     }
 
+    if (parsed.data.classTeacherId) {
+      const teacher = await prisma.teacher.findFirst({
+        where: { id: parsed.data.classTeacherId, schoolId: user.schoolId },
+      });
+      if (!teacher) return { error: "Class teacher not found in your school" };
+    }
+
     const cls = await prisma.class.create({
       data: {
         name: parsed.data.name,
@@ -157,6 +164,18 @@ export async function updateClass(id: string, data: unknown) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   try {
+    const existingClass = await prisma.class.findFirst({
+      where: { id, schoolId: user.schoolId },
+    });
+    if (!existingClass) return { error: "Class not found in your school" };
+
+    if (parsed.data.classTeacherId) {
+      const teacher = await prisma.teacher.findFirst({
+        where: { id: parsed.data.classTeacherId, schoolId: user.schoolId },
+      });
+      if (!teacher) return { error: "Class teacher not found in your school" };
+    }
+
     const clash = await prisma.class.findFirst({
       where: {
         schoolId: user.schoolId,
@@ -168,7 +187,7 @@ export async function updateClass(id: string, data: unknown) {
     if (clash) return { error: `${clash.name} already exists` };
 
     await prisma.class.update({
-      where: { id, schoolId: user.schoolId },
+      where: { id: existingClass.id },
       data: {
         name: parsed.data.name,
         grade: parsed.data.grade,
@@ -193,7 +212,12 @@ export async function deleteClass(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    await prisma.class.delete({ where: { id, schoolId: user.schoolId } });
+    const existingClass = await prisma.class.findFirst({
+      where: { id, schoolId: user.schoolId },
+    });
+    if (!existingClass) return { error: "Class not found in your school" };
+
+    await prisma.class.delete({ where: { id: existingClass.id } });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
@@ -313,7 +337,12 @@ export async function deleteSection(id: string) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    await prisma.section.delete({ where: { id, schoolId: user.schoolId } });
+    const existingSection = await prisma.section.findFirst({
+      where: { id, schoolId: user.schoolId },
+    });
+    if (!existingSection) return { error: "Section not found in your school" };
+
+    await prisma.section.delete({ where: { id: existingSection.id } });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
     revalidatePath("/students");
