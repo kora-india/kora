@@ -4,6 +4,7 @@ import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { processClassFeeGeneration } from "@/lib/actions/fee-generator";
 import { invalidateFeesCache } from "@/lib/redis";
+import crypto from "crypto";
 
 const cronLogger = createLogger("cron-generate-fees");
 
@@ -13,16 +14,24 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const start = performance.now();
   try {
-    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      cronLogger.error("CRON_SECRET is not configured. Failing closed.");
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
-    // Verify the secret if configured
-    if (process.env.CRON_SECRET) {
-      if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        cronLogger.warn({ authHeader }, "Unauthorized cron access attempt");
-        return new NextResponse("Unauthorized", { status: 401 });
-      }
-    } else {
-      cronLogger.warn("CRON_SECRET is not set in environment variables. This route is unprotected.");
+    const authHeader = request.headers.get("authorization");
+    const expectedHeader = `Bearer ${cronSecret}`;
+    if (
+      !authHeader ||
+      authHeader.length !== expectedHeader.length ||
+      !crypto.timingSafeEqual(
+        Buffer.from(authHeader),
+        Buffer.from(expectedHeader),
+      )
+    ) {
+      cronLogger.warn({ authHeader }, "Unauthorized cron access attempt");
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     // Get all active schools
@@ -79,7 +88,7 @@ export async function GET(request: Request) {
           currentSession.id,
           cls.id,
           monthTitle,
-          dueDate
+          dueDate,
         );
 
         if (res.success && res.generatedCount) {
@@ -103,7 +112,7 @@ export async function GET(request: Request) {
         totalChargesGenerated: totalGenerated,
         durationMs,
       },
-      `[Cron Fee Generation Completed] Generated ${totalGenerated} charges across ${schools.length} schools in ${durationMs}ms`
+      `[Cron Fee Generation Completed] Generated ${totalGenerated} charges across ${schools.length} schools in ${durationMs}ms`,
     );
 
     return NextResponse.json({
@@ -117,13 +126,16 @@ export async function GET(request: Request) {
     const durationMs = Math.round(performance.now() - start);
     cronLogger.error(
       { err: error, durationMs },
-      `[Cron Fee Generation Failed]: ${error?.message || error}`
+      `[Cron Fee Generation Failed]: ${error?.message || error}`,
     );
 
     Sentry.captureException(error, {
       tags: { job: "cron-generate-fees" },
     });
 
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 },
+    );
   }
 }

@@ -4,6 +4,7 @@ import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { differenceInMonths } from "date-fns";
 import { invalidateFeesCache } from "@/lib/redis";
+import crypto from "crypto";
 
 const cronLogger = createLogger("cron-apply-late-fees");
 
@@ -11,10 +12,27 @@ const cronLogger = createLogger("cron-apply-late-fees");
 // URL: /api/cron/apply-late-fees
 export async function GET(req: Request) {
   const start = performance.now();
-  // 1. Verify cron secret to prevent unauthorized execution (Vercel best practice)
+  // 1. Verify cron secret to prevent unauthorized execution (fail closed)
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    cronLogger.error("CRON_SECRET is not configured. Failing closed.");
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
   const authHeader = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    cronLogger.warn({ authHeader }, "Unauthorized late-fee cron access attempt");
+  const expectedHeader = `Bearer ${cronSecret}`;
+  if (
+    !authHeader ||
+    authHeader.length !== expectedHeader.length ||
+    !crypto.timingSafeEqual(
+      Buffer.from(authHeader),
+      Buffer.from(expectedHeader),
+    )
+  ) {
+    cronLogger.warn(
+      { authHeader },
+      "Unauthorized late-fee cron access attempt",
+    );
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
@@ -91,7 +109,10 @@ export async function GET(req: Request) {
       for (const charge of overdueCharges) {
         // Calculate days overdue
         const diffMs = today.getTime() - new Date(charge.dueDate).getTime();
-        const daysOverdue = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+        const daysOverdue = Math.max(
+          0,
+          Math.floor(diffMs / (1000 * 60 * 60 * 24)),
+        );
 
         if (daysOverdue > 0) {
           let multiplier = 1;
@@ -108,7 +129,7 @@ export async function GET(req: Request) {
 
           // Check if there's already a late fee item
           const existingLateFeeItem = charge.items.find(
-            (i) => i.componentId === lateFeeComponent!.id
+            (i) => i.componentId === lateFeeComponent!.id,
           );
 
           if (existingLateFeeItem) {
@@ -153,7 +174,7 @@ export async function GET(req: Request) {
         recordsUpdated: appliedCount,
         durationMs,
       },
-      `[Late Fee Cron Completed] Processed ${schools.length} schools, applied/updated ${appliedCount} records in ${durationMs}ms`
+      `[Late Fee Cron Completed] Processed ${schools.length} schools, applied/updated ${appliedCount} records in ${durationMs}ms`,
     );
 
     return NextResponse.json({
@@ -165,13 +186,16 @@ export async function GET(req: Request) {
     const durationMs = Math.round(performance.now() - start);
     cronLogger.error(
       { err: error, durationMs },
-      `[Late Fee Cron Failed]: ${error?.message || error}`
+      `[Late Fee Cron Failed]: ${error?.message || error}`,
     );
 
     Sentry.captureException(error, {
       tags: { job: "cron-apply-late-fees" },
     });
 
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 },
+    );
   }
 }

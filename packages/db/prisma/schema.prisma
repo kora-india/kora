@@ -96,6 +96,24 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model SubscriptionOrder {
+  id        String           @id @default(cuid())
+  orderId   String           @unique
+  userId    String
+  plan      SubscriptionPlan
+  amount    Int
+  currency  String           @default("INR")
+  status    String           @default("PENDING")
+  paymentId String?          @unique
+  schoolId  String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([orderId])
+  @@map("subscription_orders")
+}
+
 model PlanLimit {
   id               String           @id @default(cuid())
   plan             SubscriptionPlan @unique

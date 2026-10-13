@@ -19,10 +19,16 @@ coverage
 
 # Environment files
 .env
-.env.local
+.env*.local
+.env.test
+.env.test.*
+!.env.test.example
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Sensitive/scratch scripts
+*check-password*
 
 # Logs
 *.log

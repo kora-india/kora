@@ -28,6 +28,9 @@ describe("Full registration flow (send-otp -> register -> school/create)", () =>
   });
 
   afterAll(async () => {
+    await prisma.subscriptionOrder.deleteMany({
+      where: { orderId: "order_" + runId },
+    });
     const school = await prisma.school.findUnique({ where: { subdomain } });
     if (school) {
       await prisma.subscription.deleteMany({ where: { schoolId: school.id } });
@@ -85,13 +88,24 @@ describe("Full registration flow (send-otp -> register -> school/create)", () =>
     expect(checkRes.status).toBe(200);
     expect(checkBody.available).toBe(true);
 
-    // 5. Create the school (with a valid signed payment payload)
+    // 5. Create the school (with a valid stored order and signed payment payload)
     const orderId = "order_" + runId;
     const paymentId = "pay_" + runId;
     const signature = crypto
       .createHmac("sha256", RAZORPAY_SECRET)
       .update(orderId + "|" + paymentId)
       .digest("hex");
+
+    await prisma.subscriptionOrder.create({
+      data: {
+        orderId,
+        userId,
+        plan: "BASIC",
+        amount: 99900,
+        currency: "INR",
+        status: "PENDING",
+      },
+    });
 
     const createRes = await createSchool(
       jsonRequest("http://localhost/api/school/create", {

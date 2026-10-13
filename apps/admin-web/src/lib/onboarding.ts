@@ -1,11 +1,4 @@
-import {
-  Prisma,
-  PrismaClient,
-  FeeFrequency,
-  Gender,
-  UserRole,
-} from "@schoolos/db";
-import bcrypt from "bcryptjs";
+import { Prisma, PrismaClient, FeeFrequency, Gender } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 
 const logger = createLogger("school-onboarding");
@@ -170,63 +163,43 @@ export async function seedInitialSchoolData(
     ),
   );
 
-  const primaryClass = createdClasses[0];
-  const primarySection = primaryClass.sections[0];
-  const teacherEmail = `admin.${cleanSub}@schoolos.com`;
-  const teacherPassword = await bcrypt.hash("Admin@123", 10);
-
-  // Batch 2 (Parallel): Admin/Teacher User & Fee Structure (with nested items and class assignment)
-  const [adminUser, feeStructure] = await Promise.all([
-    tx.user.create({
-      data: {
-        schoolId,
-        name: "School Admin",
-        email: teacherEmail,
-        password: teacherPassword,
-        role: UserRole.SCHOOL_ADMIN,
-        phone: "9876543211",
-        isActive: true,
+  // Batch 2: Fee Structure (with nested items and class assignment)
+  const feeStructure = await tx.feeStructure.create({
+    data: {
+      schoolId,
+      name: "Primary Fee Structure",
+      description:
+        "Standard starter structure with Tuition, Admission, Annual, Exam, and Lab fees.",
+      sessionId: session.id,
+      status: "ACTIVE",
+      items: {
+        create: [
+          { componentId: tuitionFee.id, amount: 1500 },
+          { componentId: admissionFee.id, amount: 5000 },
+          { componentId: annualFee.id, amount: 3000 },
+          { componentId: examFee.id, amount: 600 },
+          { componentId: computerFee.id, amount: 400 },
+        ],
       },
-    }),
-    tx.feeStructure.create({
-      data: {
-        schoolId,
-        name: "Primary Fee Structure",
-        description:
-          "Standard starter structure with Tuition, Admission, Annual, Exam, and Lab fees.",
-        sessionId: session.id,
-        status: "ACTIVE",
-        items: {
-          create: [
-            { componentId: tuitionFee.id, amount: 1500 },
-            { componentId: admissionFee.id, amount: 5000 },
-            { componentId: annualFee.id, amount: 3000 },
-            { componentId: examFee.id, amount: 600 },
-            { componentId: computerFee.id, amount: 400 },
-          ],
-        },
-        classAssignments: {
-          create: createdClasses.map((cls) => ({
-            classId: cls.id,
-          })),
-        },
+      classAssignments: {
+        create: createdClasses.map((cls) => ({
+          classId: cls.id,
+        })),
       },
-    }),
-  ]);
+    },
+  });
 
   logger.info(
     {
       schoolId,
       classesCreated: createdClasses.length,
-      adminUserId: adminUser.id,
     },
-    `[School Prepopulated] Started classes, fee components, and admin initialized for ${schoolName}`,
+    `[School Prepopulated] Started classes and fee components initialized for ${schoolName}`,
   );
 
   return {
     session,
     classes: createdClasses,
-    adminUser,
     feeStructure,
   };
 }
