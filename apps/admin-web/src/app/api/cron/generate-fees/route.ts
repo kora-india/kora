@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
-import { processClassFeeGeneration } from "@/lib/actions/fee-generator";
+import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
 import { invalidateFeesCache } from "@/lib/redis";
 import crypto from "crypto";
 

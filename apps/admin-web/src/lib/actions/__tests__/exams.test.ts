@@ -198,6 +198,8 @@ describe("Examinations & Report Cards Engine", () => {
     const reportCard = await getStudentReportCard(examId, student1Id);
 
     expect(reportCard).toBeDefined();
+    if ("error" in reportCard) throw new Error(String(reportCard.error));
+
     expect(reportCard.student.name).toBe("Alice Sharma");
     expect(reportCard.exam.name).toBe("Term 1 Midterm Examination 2026-27");
     expect(reportCard.subjects.length).toBe(2);

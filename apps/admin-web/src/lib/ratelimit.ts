@@ -53,17 +53,43 @@ function createInMemoryLimiter(maxRequests: number, windowSeconds: number) {
 }
 
 /**
- * OTP Dispatch Rate Limiter: Max 3 requests per 10 minutes per IP/Email
+ * OTP Dispatch Rate Limiter: Max 3 requests per 10 minutes per Email
  */
 export const otpRatelimit = isRedisConfigured
   ? new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(3, "10 m"),
       analytics: true,
-      prefix: "ratelimit:otp",
+      prefix: "ratelimit:otp:email",
       ephemeralCache: new Map(),
     })
   : createInMemoryLimiter(3, 600);
+
+/**
+ * OTP IP Limiter: Max 10 requests per 10 minutes per IP (prevents spray attacks)
+ */
+export const otpIpRatelimit = isRedisConfigured
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "10 m"),
+      analytics: true,
+      prefix: "ratelimit:otp:ip",
+      ephemeralCache: new Map(),
+    })
+  : createInMemoryLimiter(10, 600);
+
+/**
+ * Password Reset Rate Limiter: Max 3 requests per 15 minutes per IP or Email
+ */
+export const passwordResetRatelimit = isRedisConfigured
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(3, "15 m"),
+      analytics: true,
+      prefix: "ratelimit:pw-reset",
+      ephemeralCache: new Map(),
+    })
+  : createInMemoryLimiter(3, 900);
 
 /**
  * Auth Rate Limiter (Registration/Login): Max 5 requests per 15 minutes per IP
@@ -142,9 +168,12 @@ export interface RateLimitResult {
  */
 export function createRateLimitResponse(
   result: RateLimitResult,
-  customMessage?: string
+  customMessage?: string,
 ): NextResponse {
-  const retryAfterSeconds = Math.max(1, Math.ceil((result.reset - Date.now()) / 1000));
+  const retryAfterSeconds = Math.max(
+    1,
+    Math.ceil((result.reset - Date.now()) / 1000),
+  );
   const message =
     customMessage ||
     `Too many requests. Please slow down and try again in ${retryAfterSeconds} seconds.`;
@@ -155,7 +184,7 @@ export function createRateLimitResponse(
       remaining: result.remaining,
       retryAfterSeconds,
     },
-    `[Rate Limit Exceeded] Blocked request: ${message}`
+    `[Rate Limit Exceeded] Blocked request: ${message}`,
   );
 
   return NextResponse.json(
@@ -171,6 +200,6 @@ export function createRateLimitResponse(
         "X-RateLimit-Remaining": String(result.remaining),
         "X-RateLimit-Reset": String(result.reset),
       },
-    }
+    },
   );
 }

@@ -17,13 +17,52 @@ const examSchema = z.object({
   endDate: z.string().or(z.date()),
 });
 
-export async function getExams(academicYear?: string) {
+async function requireExamAccess(
+  allowedRoles?: ("SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "ACCOUNTANT")[],
+) {
   const session = await auth();
   if (!session?.user?.schoolId) {
     throw new Error("Unauthorized");
   }
+  const user = session.user;
+  const schoolId = user.schoolId as string;
 
-  const where: any = { schoolId: session.user.schoolId };
+  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
+    throw new Error("Forbidden: You do not have permission for this action");
+  }
+
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      isActive: true,
+      plan: true,
+      subscription: { select: { plan: true, status: true } },
+    },
+  });
+  if (!school) throw new Error("School not found");
+  if (!school.isActive) throw new Error("Your school account is suspended");
+
+  if (user.role !== "SUPER_ADMIN") {
+    const { hasFeatureAccess } = await import("@/lib/subscription");
+    const allowed = hasFeatureAccess(
+      school.plan,
+      school.subscription?.status || "ACTIVE",
+      "EXAMS",
+    );
+    if (!allowed) {
+      throw new Error(
+        "Examinations feature is not included in your subscription plan",
+      );
+    }
+  }
+
+  return { session, user: { ...user, schoolId } };
+}
+
+export async function getExams(academicYear?: string) {
+  const { user } = await requireExamAccess();
+
+  const where: any = { schoolId: user.schoolId };
   if (academicYear) {
     where.academicYear = academicYear;
   }
@@ -50,13 +89,10 @@ export async function getExams(academicYear?: string) {
 }
 
 export async function getExamById(examId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess();
 
   const exam = await prisma.exam.findFirst({
-    where: { id: examId, schoolId: session.user.schoolId },
+    where: { id: examId, schoolId: user.schoolId },
     include: {
       subjects: {
         include: {
@@ -89,12 +125,8 @@ export async function createExam(data: {
     examDate?: string | Date;
   }[];
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-
-  const schoolId = session.user.schoolId;
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const schoolId = user.schoolId;
 
   const validated = examSchema.parse(data);
 
@@ -156,10 +188,7 @@ export async function updateExam(
     isPublished?: boolean;
   },
 ) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
@@ -171,7 +200,7 @@ export async function updateExam(
   if (data.isPublished !== undefined) updateData.isPublished = data.isPublished;
 
   const exam = await prisma.exam.update({
-    where: { id: examId, schoolId: session.user.schoolId },
+    where: { id: examId, schoolId: user.schoolId },
     data: updateData,
   });
 
@@ -180,13 +209,10 @@ export async function updateExam(
 }
 
 export async function deleteExam(examId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   await prisma.exam.delete({
-    where: { id: examId, schoolId: session.user.schoolId },
+    where: { id: examId, schoolId: user.schoolId },
   });
 
   revalidatePath("/exams");
@@ -194,13 +220,10 @@ export async function deleteExam(examId: string) {
 }
 
 export async function togglePublishExam(examId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   const exam = await prisma.exam.findFirst({
-    where: { id: examId, schoolId: session.user.schoolId },
+    where: { id: examId, schoolId: user.schoolId },
     select: { id: true, isPublished: true },
   });
 
@@ -223,20 +246,17 @@ export async function addExamSubject(data: {
   passMarks?: number;
   examDate?: string | Date;
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   // Ensure exam belongs to school
   const exam = await prisma.exam.findFirst({
-    where: { id: data.examId, schoolId: session.user.schoolId },
+    where: { id: data.examId, schoolId: user.schoolId },
   });
   if (!exam) throw new Error("Exam not found");
 
   // Ensure class belongs to school
   const classObj = await prisma.class.findFirst({
-    where: { id: data.classId, schoolId: session.user.schoolId },
+    where: { id: data.classId, schoolId: user.schoolId },
   });
   if (!classObj) throw new Error("Class not found in your school");
 
@@ -268,16 +288,13 @@ export async function addExamSubject(data: {
 }
 
 export async function deleteExamSubject(examSubjectId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   // Check ownership through exam
   const examSubject = await prisma.examSubject.findFirst({
     where: {
       id: examSubjectId,
-      exam: { schoolId: session.user.schoolId },
+      exam: { schoolId: user.schoolId },
     },
   });
 
@@ -295,15 +312,16 @@ export async function getExamMarksSheet(
   examSubjectId: string,
   sectionId?: string,
 ) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "TEACHER",
+  ]);
 
   const examSubject = await prisma.examSubject.findFirst({
     where: {
       id: examSubjectId,
-      exam: { schoolId: session.user.schoolId },
+      exam: { schoolId: user.schoolId },
     },
     include: {
       exam: true,
@@ -318,7 +336,7 @@ export async function getExamMarksSheet(
   if (!examSubject) throw new Error("Exam subject not found");
 
   const studentWhere: any = {
-    schoolId: session.user.schoolId,
+    schoolId: user.schoolId,
     classId: examSubject.classId,
     isActive: true,
   };
@@ -410,27 +428,70 @@ export async function saveBatchMarks(
     remarks?: string;
   }[],
 ) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "TEACHER",
+  ]);
 
   const examSubject = await prisma.examSubject.findFirst({
     where: {
       id: examSubjectId,
-      exam: { schoolId: session.user.schoolId },
+      exam: { schoolId: user.schoolId },
     },
-    select: { id: true, maxMarks: true, classId: true },
+    select: { id: true, maxMarks: true, classId: true, subjectName: true },
   });
 
   if (!examSubject) throw new Error("Exam subject not found");
+
+  // A1: Allow teachers to enter marks only for subjects and sections they teach
+  if (user.role === "TEACHER") {
+    const teacher = await prisma.teacher.findFirst({
+      where: { userId: user.id, schoolId: user.schoolId },
+      include: {
+        assignedSections: true,
+        classTeacherOf: { select: { id: true } },
+      },
+    });
+    if (!teacher) throw new Error("Teacher record not found");
+
+    const isClassTeacher = teacher.classTeacherOf.some(
+      (c) => c.id === examSubject.classId,
+    );
+    const isDirectClass = teacher.assignedClassId === examSubject.classId;
+    const isSectionAssigned = teacher.assignedSections.some(
+      (as) => as.classId === examSubject.classId,
+    );
+    const isSubjectMatch =
+      teacher.subject.trim().toLowerCase() ===
+      examSubject.subjectName.trim().toLowerCase();
+
+    const hasSlot = await prisma.timetableSlot.findFirst({
+      where: {
+        schoolId: user.schoolId,
+        teacherId: teacher.id,
+        classId: examSubject.classId,
+        subjectName: { equals: examSubject.subjectName, mode: "insensitive" },
+      },
+    });
+
+    if (
+      !hasSlot &&
+      !isClassTeacher &&
+      !(isSubjectMatch && (isDirectClass || isSectionAssigned))
+    ) {
+      throw new Error(
+        "You can only enter marks for subjects and classes you teach",
+      );
+    }
+  }
 
   if (entries.length > 0) {
     const studentIds = Array.from(new Set(entries.map((e) => e.studentId)));
     const matchingStudents = await prisma.student.findMany({
       where: {
         id: { in: studentIds },
-        schoolId: session.user.schoolId,
+        schoolId: user.schoolId,
         classId: examSubject.classId,
       },
       select: { id: true },
@@ -501,12 +562,8 @@ export async function saveBatchMarks(
 }
 
 export async function getStudentReportCard(examId: string, studentId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-
-  const schoolId = session.user.schoolId;
+  const { user } = await requireExamAccess();
+  const schoolId = user.schoolId;
 
   const [school, exam, student] = await Promise.all([
     prisma.school.findUnique({
@@ -664,13 +721,10 @@ export async function getStudentReportCard(examId: string, studentId: string) {
 }
 
 export async function getSectionReportCards(examId: string, sectionId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
+  const { user } = await requireExamAccess();
 
   const section = await prisma.section.findFirst({
-    where: { id: sectionId, schoolId: session.user.schoolId },
+    where: { id: sectionId, schoolId: user.schoolId },
     select: { id: true, classId: true },
   });
 
@@ -678,7 +732,7 @@ export async function getSectionReportCards(examId: string, sectionId: string) {
 
   const students = await prisma.student.findMany({
     where: {
-      schoolId: session.user.schoolId,
+      schoolId: user.schoolId,
       sectionId,
       isActive: true,
     },

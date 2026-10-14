@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -21,7 +21,11 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginFormData>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
 
@@ -77,7 +81,10 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground" htmlFor="password">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="password"
+        >
           Password
         </label>
         <div className="relative">

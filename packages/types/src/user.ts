@@ -16,7 +16,7 @@ export const UserSchema = z.object({
 
 export const LoginSchema = z.object({
   email: z.string().email("Invalid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -29,4 +29,5 @@ export interface SessionUser {
   role: UserRole;
   schoolId: string | null;
   image?: string | null;
+  mustChangePassword?: boolean;
 }

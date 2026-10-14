@@ -30,12 +30,80 @@ const slotSchema = z.object({
   academicYear: z.string().nullable().optional(),
 });
 
-export async function getTimetablePeriods() {
+const aiTimetableLimiter = new Map<
+  string,
+  { count: number; resetAt: number }
+>();
+
+function checkAiRateLimit(schoolId: string): {
+  allowed: boolean;
+  retryAfter?: number;
+} {
+  const now = Date.now();
+  const key = `ratelimit:ai-timetable:${schoolId}`;
+  const entry = aiTimetableLimiter.get(key);
+  const windowMs = 60 * 60 * 1000; // 1 hour
+  const maxAllowed = 10; // 10 AI generation calls per hour per school
+
+  if (!entry || now > entry.resetAt) {
+    aiTimetableLimiter.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+  if (entry.count >= maxAllowed) {
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+    };
+  }
+  entry.count += 1;
+  return { allowed: true };
+}
+
+async function requireTimetableAccess(
+  allowedRoles?: ("SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "ACCOUNTANT")[],
+) {
   const session = await auth();
   if (!session?.user?.schoolId) {
     throw new Error("Unauthorized");
   }
-  const schoolId = session.user.schoolId;
+  const user = session.user;
+  const schoolId = user.schoolId as string;
+
+  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
+    throw new Error("Forbidden: You do not have permission for this action");
+  }
+
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      isActive: true,
+      plan: true,
+      subscription: { select: { plan: true, status: true } },
+    },
+  });
+  if (!school) throw new Error("School not found");
+  if (!school.isActive) throw new Error("Your school account is suspended");
+
+  if (user.role !== "SUPER_ADMIN") {
+    const { hasFeatureAccess } = await import("@/lib/subscription");
+    const allowed = hasFeatureAccess(
+      school.plan,
+      school.subscription?.status || "ACTIVE",
+      "TIMETABLE",
+    );
+    if (!allowed) {
+      throw new Error(
+        "Timetable feature is not included in your subscription plan",
+      );
+    }
+  }
+
+  return { session, user: { ...user, schoolId } };
+}
+
+export async function getTimetablePeriods() {
+  const { user } = await requireTimetableAccess();
+  const schoolId = user.schoolId;
 
   let periods = await prisma.timetablePeriod.findMany({
     where: { schoolId },
@@ -78,11 +146,11 @@ export async function savePeriodSettings(
     isBreak: boolean;
   }>,
 ) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
 
   await prisma.$transaction(async (tx) => {
     // Delete existing periods and recreate them
@@ -114,11 +182,8 @@ export async function getTimetable(filter: {
   teacherId?: string;
   academicYear?: string;
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess();
+  const schoolId = user.schoolId;
 
   const where: any = { schoolId };
   if (filter.classId) where.classId = filter.classId;
@@ -152,11 +217,8 @@ export async function checkSlotConflict(data: {
   room?: string | null;
   excludeSlotId?: string;
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess();
+  const schoolId = user.schoolId;
 
   // Query all slots for this day and startTime in the school
   const clashingSlots = await prisma.timetableSlot.findMany({
@@ -201,11 +263,11 @@ export async function checkSlotConflict(data: {
 }
 
 export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
   const data = slotSchema.parse(rawData);
 
   // Validate class belongs to school
@@ -308,11 +370,11 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
 }
 
 export async function deleteTimetableSlot(slotId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
 
   await prisma.timetableSlot.deleteMany({
     where: { id: slotId, schoolId },
@@ -323,11 +385,11 @@ export async function deleteTimetableSlot(slotId: string) {
 }
 
 export async function clearSectionTimetable(sectionId: string) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
 
   const deleted = await prisma.timetableSlot.deleteMany({
     where: { schoolId, sectionId },
@@ -345,11 +407,11 @@ export async function generateAutomatedTimetableAction(params: {
   replaceExisting?: boolean;
   academicYear?: string;
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
 
   const classObj = await prisma.class.findFirst({
     where: { id: params.classId, schoolId },
@@ -498,11 +560,12 @@ export async function generateAiTimetableAction(params: {
   academicYear?: string;
   customPrompt?: string;
 }) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  const schoolId = user.schoolId;
+  checkAiRateLimit(schoolId);
   const daysOfWeek = params.daysOfWeek || [1, 2, 3, 4, 5, 6];
 
   const [
@@ -726,11 +789,8 @@ export interface ConflictItem {
 }
 
 export async function auditSchoolConflicts(): Promise<ConflictItem[]> {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
-  }
-  const schoolId = session.user.schoolId;
+  const { user } = await requireTimetableAccess();
+  const schoolId = user.schoolId;
 
   const allSlots = await prisma.timetableSlot.findMany({
     where: { schoolId },

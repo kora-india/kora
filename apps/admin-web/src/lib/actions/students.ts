@@ -29,27 +29,19 @@ const StudentSchema = z.object({
   state: z.string().optional(),
 });
 
+import { getActiveSchoolUser } from "@/lib/auth-guard";
+
 async function getAdminSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) return null;
-  return { ...user, schoolId: user.schoolId };
+  return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 }
 
 async function getStaffSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (
-    !["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER"].includes(
-      user.role,
-    )
-  )
-    return null;
-  return { ...user, schoolId: user.schoolId };
+  return getActiveSchoolUser([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "ACCOUNTANT",
+    "TEACHER",
+  ]);
 }
 
 export async function searchStudents(query: string = "", limit: number = 25) {

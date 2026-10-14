@@ -1,6 +1,7 @@
 "use server";
 
-import { auth } from "@schoolos/auth";
+import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { hasFeatureAccess } from "@/lib/subscription";
 import {
   prisma,
   VehicleType,
@@ -24,18 +25,36 @@ async function getTransportSession(
     "TEACHER",
   ],
 ) {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!allowedRoles.includes(user.role)) return null;
-  return { ...user, schoolId: user.schoolId };
+  const guard = await requireActiveSchoolSession(allowedRoles as any);
+  if ("error" in guard) return null;
+
+  if (guard.role !== "SUPER_ADMIN") {
+    const school = await prisma.school.findUnique({
+      where: { id: guard.schoolId! },
+      select: {
+        plan: true,
+        subscription: { select: { plan: true, status: true } },
+      },
+    });
+
+    if (
+      !hasFeatureAccess(
+        school?.plan || "FREE",
+        school?.subscription?.status || "ACTIVE",
+        "TRANSPORT",
+      )
+    ) {
+      return null;
+    }
+  }
+
+  return { ...guard, schoolId: guard.schoolId! };
 }
 
 /**
- * Auto-provisions or fetches the default "Transport Fee" FeeComponent for a school
+ * Auto-provisions or fetches the default "Transport Fee" FeeComponent for a school (internal)
  */
-export async function getOrCreateTransportFeeComponent(schoolId: string) {
+async function getOrCreateTransportFeeComponent(schoolId: string) {
   let component = await prisma.feeComponent.findFirst({
     where: {
       schoolId,

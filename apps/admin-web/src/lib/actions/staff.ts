@@ -1,7 +1,7 @@
 "use server";
 
-import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { requireActiveSchoolSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache } from "@/lib/redis";
@@ -11,17 +11,24 @@ const StaffSchema = z.object({
   phone: z.string().min(7, "Phone number is required"),
   occupation: z.string().min(1, "Occupation is required"),
   qualification: z.string().optional().nullable(),
-  email: z.string().email("Invalid email").optional().nullable().or(z.literal("")),
+  email: z
+    .string()
+    .email("Invalid email")
+    .optional()
+    .nullable()
+    .or(z.literal("")),
   salary: z.coerce.number().min(0).optional().nullable(),
   joiningDate: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
 });
 
 async function getAdminSession() {
-  const session = await auth();
-  if (!session?.user?.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(session.user.role)) return null;
-  return session.user;
+  const guard = await requireActiveSchoolSession([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  if ("error" in guard) return null;
+  return { ...guard, schoolId: guard.schoolId! };
 }
 
 export async function createStaff(data: unknown) {
@@ -31,7 +38,16 @@ export async function createStaff(data: unknown) {
   const parsed = StaffSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { name, phone, occupation, qualification, email, salary, joiningDate, address } = parsed.data;
+  const {
+    name,
+    phone,
+    occupation,
+    qualification,
+    email,
+    salary,
+    joiningDate,
+    address,
+  } = parsed.data;
 
   try {
     const staff = await prisma.staff.create({
@@ -69,7 +85,16 @@ export async function updateStaff(id: string, data: unknown) {
   const parsed = StaffSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { name, phone, occupation, qualification, email, salary, joiningDate, address } = parsed.data;
+  const {
+    name,
+    phone,
+    occupation,
+    qualification,
+    email,
+    salary,
+    joiningDate,
+    address,
+  } = parsed.data;
 
   try {
     const staff = await prisma.staff.update({
@@ -124,7 +149,16 @@ export async function deleteStaff(id: string) {
   }
 }
 
-export async function getStaffList(schoolId: string) {
+export async function getStaffList() {
+  const guard = await requireActiveSchoolSession([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "TEACHER",
+    "ACCOUNTANT",
+  ]);
+  if ("error" in guard) return [];
+  const schoolId = guard.schoolId!;
+
   return getCache(
     `cache:${schoolId}:staff:list`,
     () =>
@@ -133,6 +167,6 @@ export async function getStaffList(schoolId: string) {
         orderBy: { createdAt: "desc" },
         take: 300,
       }),
-    60
+    60,
   );
 }

@@ -1,7 +1,7 @@
 "use server";
 
-import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { requireActiveSchoolSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
@@ -15,12 +15,13 @@ const NoticeSchema = z.object({
 });
 
 async function getAuthorizedSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) return null;
-  return { ...user, schoolId: user.schoolId };
+  const guard = await requireActiveSchoolSession([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "TEACHER",
+  ]);
+  if ("error" in guard) return null;
+  return { ...guard, schoolId: guard.schoolId! };
 }
 
 export async function createNotice(data: unknown) {
@@ -67,7 +68,10 @@ export async function updateNotice(id: string, data: unknown) {
 
     await prisma.notice.update({
       where: { id },
-      data: { ...parsed.data, targetClassId: parsed.data.targetClassId || null },
+      data: {
+        ...parsed.data,
+        targetClassId: parsed.data.targetClassId || null,
+      },
     });
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
@@ -107,8 +111,19 @@ export async function toggleNoticePublish(id: string, isPublished: boolean) {
   if (!user) return { error: "Unauthorized" };
 
   try {
-    await prisma.notice.update({
+    const existing = await prisma.notice.findFirst({
       where: { id, schoolId: user.schoolId },
+    });
+    if (!existing) return { error: "Notice not found" };
+
+    if (user.role === "TEACHER" && existing.publishedById !== user.id) {
+      return {
+        error: "You can only change the publish status of your own notices",
+      };
+    }
+
+    await prisma.notice.update({
+      where: { id },
       data: { isPublished },
     });
     await invalidateCache(`cache:${user.schoolId}:dashboard`);

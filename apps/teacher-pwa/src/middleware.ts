@@ -3,8 +3,17 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/login")) return NextResponse.next();
-  if (!req.auth) return NextResponse.redirect(new URL("/login", req.url));
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/login"))
+    return NextResponse.next();
+  if (!req.auth?.user) return NextResponse.redirect(new URL("/login", req.url));
+
+  const role = req.auth.user.role;
+  if (role !== "TEACHER" && role !== "SUPER_ADMIN") {
+    return NextResponse.redirect(
+      new URL("/login?error=ForbiddenRole", req.url),
+    );
+  }
+
   return NextResponse.next();
 });
 

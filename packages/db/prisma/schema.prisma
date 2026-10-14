@@ -136,11 +136,13 @@ model User {
   role             UserRole     @default(TEACHER)
   image            String?
   phone            String?
-  isActive         Boolean      @default(true)
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  resetToken       String?      @unique
-  resetTokenExpiry DateTime?
+  isActive           Boolean      @default(true)
+  mustChangePassword Boolean      @default(false)
+  passwordChangedAt  DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  resetToken         String?      @unique
+  resetTokenExpiry   DateTime?
   attendances      Attendance[]
   notices          Notice[]
   teacher          Teacher?

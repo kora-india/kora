@@ -15,7 +15,10 @@ const CreateSchoolSchema = z.object({
     .string()
     .min(3, "Subdomain must be at least 3 characters")
     .max(40, "Subdomain too long")
-    .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers and hyphens allowed"),
+    .regex(
+      /^[a-z0-9-]+$/,
+      "Only lowercase letters, numbers and hyphens allowed",
+    ),
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email("Valid email required").optional().or(z.literal("")),
@@ -25,9 +28,14 @@ const CreateSchoolSchema = z.object({
   seedDefaultClasses: z.boolean().default(false),
 });
 
+import crypto from "crypto";
+
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return Array.from(
+    { length: 16 },
+    () => chars[crypto.randomInt(0, chars.length)],
+  ).join("");
 }
 
 async function getSuperAdminSession() {
@@ -45,15 +53,28 @@ export async function createSchool(data: unknown) {
   const parsed = CreateSchoolSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const { name, subdomain, address, phone, email, plan, adminName, adminEmail, seedDefaultClasses } = parsed.data;
+  const {
+    name,
+    subdomain,
+    address,
+    phone,
+    email,
+    plan,
+    adminName,
+    adminEmail,
+    seedDefaultClasses,
+  } = parsed.data;
 
   // Check subdomain uniqueness before transaction
   const existing = await prisma.school.findUnique({ where: { subdomain } });
   if (existing) return { error: `Subdomain "${subdomain}" is already taken` };
 
   // Check admin email uniqueness
-  const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
-  if (existingUser) return { error: `A user with email "${adminEmail}" already exists` };
+  const existingUser = await prisma.user.findUnique({
+    where: { email: adminEmail },
+  });
+  if (existingUser)
+    return { error: `A user with email "${adminEmail}" already exists` };
 
   const tempPassword = generateTempPassword();
   const hashedPassword = await bcrypt.hash(tempPassword, 10);
@@ -62,51 +83,60 @@ export async function createSchool(data: unknown) {
     // Neon's pooled connection is PgBouncer transaction-mode, which can be slow
     // to hand out a connection to BEGIN a transaction — give it more room than
     // Prisma's 2s default, especially with seedDefaultClasses' ~21 sequential creates.
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Create school
-      const school = await tx.school.create({
-        data: {
-          name,
-          subdomain,
-          address: address || null,
-          phone: phone || null,
-          email: email || null,
-          plan: plan as any,
-          isActive: true,
-        },
-      });
+    const result = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        // Create school
+        const school = await tx.school.create({
+          data: {
+            name,
+            subdomain,
+            address: address || null,
+            phone: phone || null,
+            email: email || null,
+            plan: plan as any,
+            isActive: true,
+          },
+        });
 
-      // Create school admin user
-      const adminUser = await tx.user.create({
-        data: {
-          email: adminEmail,
-          name: adminName,
-          password: hashedPassword,
-          role: "SCHOOL_ADMIN",
-          schoolId: school.id,
-        },
-      });
+        // Create school admin user
+        const adminUser = await tx.user.create({
+          data: {
+            email: adminEmail,
+            name: adminName,
+            password: hashedPassword,
+            role: "SCHOOL_ADMIN",
+            schoolId: school.id,
+            mustChangePassword: true,
+          },
+        });
 
-      // Optionally seed default classes
-      if (seedDefaultClasses) {
-        const defaultGrades = [6, 7, 8, 9, 10, 11, 12];
-        for (const grade of defaultGrades) {
-          const cls = await tx.class.create({
-            data: { schoolId: school.id, name: `Grade ${grade}`, grade },
-          });
-          // Create sections A and B
-          for (const sName of ["A", "B"]) {
-            await tx.section.create({
-              data: { schoolId: school.id, classId: cls.id, name: sName },
+        // Optionally seed default classes
+        if (seedDefaultClasses) {
+          const defaultGrades = [6, 7, 8, 9, 10, 11, 12];
+          for (const grade of defaultGrades) {
+            const cls = await tx.class.create({
+              data: { schoolId: school.id, name: `Grade ${grade}`, grade },
             });
+            // Create sections A and B
+            for (const sName of ["A", "B"]) {
+              await tx.section.create({
+                data: { schoolId: school.id, classId: cls.id, name: sName },
+              });
+            }
           }
         }
-      }
 
-      return { school, adminUser };
-    }, { maxWait: 10000, timeout: 15000 });
+        return { school, adminUser };
+      },
+      { maxWait: 10000, timeout: 15000 },
+    );
 
-    logger.info("School created", { schoolId: result.school.id, subdomain, plan, createdBy: user.id });
+    logger.info("School created", {
+      schoolId: result.school.id,
+      subdomain,
+      plan,
+      createdBy: user.id,
+    });
 
     revalidatePath("/schools");
     return {
@@ -118,7 +148,8 @@ export async function createSchool(data: unknown) {
     };
   } catch (e: any) {
     logger.error("School creation failed", { error: e.message, subdomain });
-    if (e.code === "P2002") return { error: "A school with this subdomain or email already exists" };
+    if (e.code === "P2002")
+      return { error: "A school with this subdomain or email already exists" };
     return { error: "Failed to create school. Please try again." };
   }
 }

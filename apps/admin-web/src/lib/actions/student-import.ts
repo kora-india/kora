@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { prisma } from "@schoolos/db";
-import { auth } from "@schoolos/auth";
+import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { checkStudentLimit, checkClassLimit } from "@/lib/plan-limits";
 import { revalidatePath } from "next/cache";
 import { invalidateCache } from "@/lib/redis";
 import { formatAdmissionNumber } from "@/lib/admission-number";
@@ -20,12 +21,20 @@ const importStudentSchema = z.object({
 });
 
 export async function bulkImportStudents(data: any[]) {
-  const session = await auth();
-  if (!session?.user?.schoolId) {
-    throw new Error("Unauthorized");
+  const guard = await requireActiveSchoolSession([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+  ]);
+  if ("error" in guard) {
+    return {
+      imported: 0,
+      skipped: 0,
+      failed: data?.length || 0,
+      errors: [guard.error],
+    };
   }
 
-  const schoolId = session.user.schoolId;
+  const schoolId = guard.schoolId!;
 
   // 1. Validation
   const validRecords: z.infer<typeof importStudentSchema>[] = [];
@@ -69,6 +78,31 @@ export async function bulkImportStudents(data: any[]) {
     classMap.set(c.name.toLowerCase(), c);
     classMap.set(`class ${c.name.toLowerCase()}`, c);
     classMap.set(`grade ${c.name.toLowerCase()}`, c);
+  }
+
+  // Check how many new classes need to be auto-created
+  const newClassNames = new Set<string>();
+  for (const record of validRecords) {
+    const rawClass = record.classId.trim();
+    const existing =
+      classMap.get(rawClass) || classMap.get(rawClass.toLowerCase());
+    if (!existing) {
+      newClassNames.add(rawClass.toLowerCase());
+    }
+  }
+
+  if (newClassNames.size > 0) {
+    const classLimit = await checkClassLimit(schoolId);
+    if (classLimit.current + newClassNames.size > classLimit.max) {
+      return {
+        imported: 0,
+        skipped: 0,
+        failed: data.length,
+        errors: [
+          `Importing requires creating ${newClassNames.size} new classes, which exceeds your ${classLimit.plan} plan limit (${classLimit.current}/${classLimit.max} classes). Upgrade your plan to add more.`,
+        ],
+      };
+    }
   }
 
   // Pre-process validRecords to resolve classId and sectionId
@@ -246,6 +280,20 @@ export async function bulkImportStudents(data: any[]) {
       skipped: skippedCount,
       failed: data.length - skippedCount,
       errors,
+    };
+  }
+
+  // Enforce student plan limit
+  const studentLimit = await checkStudentLimit(schoolId);
+  if (studentLimit.current + toImport.length > studentLimit.max) {
+    return {
+      imported: 0,
+      skipped: skippedCount,
+      failed: data.length - skippedCount,
+      errors: [
+        ...errors,
+        `Importing ${toImport.length} students would exceed your ${studentLimit.plan} plan limit (${studentLimit.current}/${studentLimit.max} active students). Upgrade your plan to add more.`,
+      ],
     };
   }
 

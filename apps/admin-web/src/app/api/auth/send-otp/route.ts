@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
-import { otpRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
+import {
+  otpRatelimit,
+  otpIpRatelimit,
+  createRateLimitResponse,
+} from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
 import nodemailer from "nodemailer";
+import crypto from "crypto";
 import { z } from "zod";
 
 const authLogger = createLogger("auth-send-otp");
@@ -18,62 +23,92 @@ export async function POST(req: Request) {
     const ip = getClientIp(req);
     const body = await req.json();
     const { email } = SendOtpSchema.parse(body);
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // Rate limit by IP + Email combination (3 requests per 10 minutes)
-    const rateLimitResult = await otpRatelimit.limit(`${ip}:${email}`);
-    if (!rateLimitResult.success) {
-      authLogger.warn({ ip, email }, "OTP rate limit exceeded for IP/Email");
+    // 1. Rate limit by IP across all requests to prevent spray attacks
+    const ipRateLimit = await otpIpRatelimit.limit(ip);
+    if (!ipRateLimit.success) {
+      authLogger.warn({ ip }, "OTP rate limit exceeded for IP");
       return createRateLimitResponse(
-        rateLimitResult,
-        "Too many OTP requests. Please wait a few minutes before trying again.",
+        ipRateLimit,
+        "Too many requests from this network. Please wait a few minutes before trying again.",
       );
     }
 
-    // Generate a 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
+    // 2. Rate limit per recipient email
+    const emailRateLimit = await otpRatelimit.limit(normalizedEmail);
+    if (!emailRateLimit.success) {
       authLogger.warn(
-        { email },
-        "Registration attempted for already registered email",
+        { ip, email: normalizedEmail },
+        "OTP rate limit exceeded for Email",
       );
-      return NextResponse.json(
-        { error: "Email is already registered" },
-        { status: 400 },
+      return createRateLimitResponse(
+        emailRateLimit,
+        "Too many verification codes requested for this email. Please wait a few minutes before trying again.",
       );
     }
-
-    // Set expiration to 10 minutes from now
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-    // Save OTP to DB (cleanup old ones if they exist for this email to avoid clutter)
-    await prisma.otp.deleteMany({ where: { email } });
-
-    await prisma.otp.create({
-      data: {
-        email,
-        otp,
-        expiresAt,
-      },
-    });
 
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = process.env.SMTP_PORT;
+    const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass);
+
+    // In production, fail early if SMTP is missing
+    if (process.env.NODE_ENV === "production" && !hasSmtp) {
+      authLogger.error(
+        "SMTP service is unconfigured in production environment",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Email delivery service is currently unavailable. Please contact support.",
+        },
+        { status: 503 },
+      );
+    }
+
+    // Check if user already exists — return uniform message to prevent account enumeration
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existingUser) {
+      authLogger.warn(
+        { email: normalizedEmail },
+        "Registration OTP requested for an already registered email",
+      );
+      return NextResponse.json({
+        success: true,
+        message:
+          "If your email is eligible, a verification code has been sent.",
+      });
+    }
+
+    // Generate a cryptographically secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    // Save hashed OTP to DB (cleanup old ones if they exist for this email)
+    await prisma.otp.deleteMany({ where: { email: normalizedEmail } });
+    await prisma.otp.create({
+      data: {
+        email: normalizedEmail,
+        otp: hashedOtp,
+        expiresAt,
+      },
+    });
 
     // Log OTP to server console in development or if SMTP is not configured
-    if (process.env.NODE_ENV === "development" || !smtpUser || !smtpPass) {
+    if (process.env.NODE_ENV === "development" || !hasSmtp) {
       authLogger.info(
-        { email, otpMasked: "***" },
-        `[DEV OTP Generated] Verification code issued for ${email}`,
+        { email: normalizedEmail, otpMasked: "***" },
+        `[DEV OTP Generated] Verification code issued for ${normalizedEmail}`,
       );
     }
 
     // Send email using Nodemailer if SMTP credentials are provided
-    if (smtpHost && smtpPort && smtpUser && smtpPass) {
+    if (hasSmtp) {
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: Number(smtpPort),
@@ -98,17 +133,28 @@ export async function POST(req: Request) {
         </div>
       `;
 
-      await transporter.sendMail({
-        from: `"Kora" <${smtpUser}>`,
-        to: email,
-        subject: "Your Kora Verification Code",
-        html: htmlTemplate,
-      });
+      try {
+        await transporter.sendMail({
+          from: `"Kora" <${smtpUser}>`,
+          to: normalizedEmail,
+          subject: "Your Kora Verification Code",
+          html: htmlTemplate,
+        });
+      } catch (mailErr: any) {
+        authLogger.error(
+          { err: mailErr, email: normalizedEmail },
+          "Failed to dispatch OTP email",
+        );
+        return NextResponse.json(
+          { error: "Failed to dispatch verification email. Please try again." },
+          { status: 500 },
+        );
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: "OTP sent successfully",
+      message: "If your email is eligible, a verification code has been sent.",
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

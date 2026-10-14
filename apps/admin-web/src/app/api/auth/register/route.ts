@@ -5,6 +5,7 @@ import { createLogger } from "@schoolos/logger";
 import { authRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
 
 const registerLogger = createLogger("auth-register");
@@ -16,34 +17,55 @@ const RegisterSchema = z.object({
     .min(3, "Name must be at least 3 characters")
     .max(20, "Name cannot exceed 20 characters"),
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(8, "Password must be at least 8 characters"),
   otp: z.string().length(6),
 });
 
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const rateLimitResult = await authRatelimit.limit(ip);
-    if (!rateLimitResult.success) {
+    const body = await req.json();
+    const { name, email, password, otp } = RegisterSchema.parse(body);
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Rate limit by IP
+    const ipRateLimit = await authRatelimit.limit(ip);
+    if (!ipRateLimit.success) {
       registerLogger.warn({ ip }, "Registration rate limit exceeded for IP");
       return createRateLimitResponse(
-        rateLimitResult,
+        ipRateLimit,
         "Too many registration attempts. Please wait 15 minutes before trying again.",
       );
     }
 
-    const body = await req.json();
-    const { name, email, password, otp } = RegisterSchema.parse(body);
+    // 2. Rate limit OTP verification attempts by target email
+    const emailRateLimit = await authRatelimit.limit(
+      `register:email:${normalizedEmail}`,
+    );
+    if (!emailRateLimit.success) {
+      registerLogger.warn(
+        { ip, email: normalizedEmail },
+        "Registration attempt limit exceeded for Email",
+      );
+      return createRateLimitResponse(
+        emailRateLimit,
+        "Too many attempts for this email. Please request a new OTP or wait 15 minutes.",
+      );
+    }
 
-    // 1. Verify OTP
+    // 3. Verify OTP (compare SHA-256 hash with fallback to plaintext)
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
     const otpRecord = await prisma.otp.findFirst({
-      where: { email, otp },
+      where: {
+        email: normalizedEmail,
+        OR: [{ otp: hashedOtp }, { otp }],
+      },
       orderBy: { createdAt: "desc" },
     });
 
     if (!otpRecord) {
       registerLogger.warn(
-        { email },
+        { email: normalizedEmail },
         "Registration failed: Invalid OTP provided",
       );
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
@@ -51,17 +73,19 @@ export async function POST(req: Request) {
 
     if (otpRecord.expiresAt < new Date()) {
       registerLogger.warn(
-        { email },
+        { email: normalizedEmail },
         "Registration failed: Expired OTP provided",
       );
       return NextResponse.json({ error: "OTP has expired" }, { status: 400 });
     }
 
-    // 2. Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // 4. Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
     if (existingUser) {
       registerLogger.warn(
-        { email },
+        { email: normalizedEmail },
         "Registration failed: Email already registered",
       );
       return NextResponse.json(
@@ -70,15 +94,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Create user
+    // 5. Create user
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
         name,
-        email,
+        email: normalizedEmail,
         password: hashedPassword,
         role: "SCHOOL_ADMIN",
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
       },
     });
 

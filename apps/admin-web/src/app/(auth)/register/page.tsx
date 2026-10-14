@@ -18,7 +18,7 @@ const RegisterSchema = z.object({
     .min(3, "Name must be at least 3 characters")
     .max(20, "Name cannot exceed 20 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type RegisterInput = z.infer<typeof RegisterSchema>;

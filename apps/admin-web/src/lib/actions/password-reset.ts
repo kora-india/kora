@@ -4,8 +4,10 @@ import { prisma } from "@schoolos/db";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
+import { headers } from "next/headers";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 import { logger } from "@/lib/logger";
+import { passwordResetRatelimit } from "@/lib/ratelimit";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -16,7 +18,7 @@ const RequestResetSchema = z.object({
 const ResetPasswordSchema = z
   .object({
     token: z.string().min(1, "Reset link is invalid"),
-    newPassword: z.string().min(6, "Password must be at least 6 characters"),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
     confirmPassword: z.string().min(1, "Please confirm your new password"),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -28,31 +30,64 @@ export async function requestPasswordReset(data: unknown) {
   const parsed = RequestResetSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email },
-  });
-  if (!user) {
-    return {
-      error:
-        "No account found with this email address. Please check for typos or create an account.",
-    };
+  const email = parsed.data.email.toLowerCase().trim();
+
+  // Rate limiting by IP and email
+  try {
+    const h = await headers();
+    const ip =
+      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      h.get("x-real-ip") ||
+      "unknown";
+
+    const [ipLimit, emailLimit] = await Promise.all([
+      passwordResetRatelimit.limit(`pwreset:ip:${ip}`),
+      passwordResetRatelimit.limit(`pwreset:email:${email}`),
+    ]);
+
+    if (!ipLimit.success || !emailLimit.success) {
+      return {
+        error:
+          "Too many password reset requests. Please wait 15 minutes before trying again.",
+      };
+    }
+  } catch (e) {
+    logger.warn("Failed to evaluate password reset rate limit", {
+      err: String(e),
+    });
   }
-  if (!user.isActive) {
+
+  // Uniform response message to prevent account enumeration
+  const uniformSuccessMessage =
+    "If an account is associated with this email address, a password reset link has been sent.";
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user || !user.isActive) {
+    // Return success message silently without sending email to prevent user enumeration
     return {
-      error: "This account has been deactivated. Please contact support.",
+      success: true,
+      message: uniformSuccessMessage,
     };
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(rawToken)
+    .digest("hex");
   const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { resetToken: token, resetTokenExpiry },
+    data: { resetToken: hashedToken, resetTokenExpiry },
   });
 
-  const baseUrl = process.env.NEXTAUTH_URL;
-  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+  const baseUrl =
+    process.env.NEXTAUTH_URL || process.env.AUTH_URL || "http://localhost:3000";
+  const resetUrl = `${baseUrl.replace(/\/$/, "")}/reset-password?token=${rawToken}`;
 
   const emailResult = await sendPasswordResetEmail(user.email, resetUrl);
   if (!emailResult.success) {
@@ -68,7 +103,7 @@ export async function requestPasswordReset(data: unknown) {
 
   return {
     success: true,
-    message: "A password reset link has been sent to your email.",
+    message: uniformSuccessMessage,
   };
 }
 
@@ -76,9 +111,19 @@ export async function resetPassword(data: unknown) {
   const parsed = ResetPasswordSchema.safeParse(data);
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
-  const user = await prisma.user.findUnique({
-    where: { resetToken: parsed.data.token },
+  const rawToken = parsed.data.token.trim();
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(rawToken)
+    .digest("hex");
+
+  // Support hashed token with fallback to raw token for backward compatibility
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ resetToken: hashedToken }, { resetToken: rawToken }],
+    },
   });
+
   if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
     return {
       error:
@@ -89,7 +134,13 @@ export async function resetPassword(data: unknown) {
   const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
   await prisma.user.update({
     where: { id: user.id },
-    data: { password: hashed, resetToken: null, resetTokenExpiry: null },
+    data: {
+      password: hashed,
+      passwordChangedAt: new Date(),
+      mustChangePassword: false,
+      resetToken: null,
+      resetTokenExpiry: null,
+    },
   });
 
   return { success: true };
