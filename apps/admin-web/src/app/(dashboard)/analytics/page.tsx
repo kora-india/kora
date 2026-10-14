@@ -29,9 +29,13 @@ async function getAnalyticsData(schoolId: string) {
     orderBy: { date: "asc" },
   });
 
-  // 2. Real Fee Charges & Items (Bounded to 6 months)
+  // 2. Real Fee Charges & Items (Bounded to 6 months for active students)
   const feeCharges = await prisma.feeCharge.findMany({
-    where: { schoolId, dueDate: { gte: sixMonthsAgo } },
+    where: {
+      schoolId,
+      dueDate: { gte: sixMonthsAgo },
+      student: { isActive: true },
+    },
     select: {
       dueDate: true,
       items: {

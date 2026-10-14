@@ -17,7 +17,7 @@ async function getDashboardData(schoolId: string) {
   const totalClasses = await prisma.class.count({ where: { schoolId } });
   const pendingFeeItems = await prisma.feeChargeItem.findMany({
     where: {
-      charge: { schoolId },
+      charge: { schoolId, student: { isActive: true } },
       status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
     },
     select: { amount: true, paidAmount: true },
@@ -71,7 +71,11 @@ async function getDashboardData(schoolId: string) {
 
   const pendingFeeRows = await prisma.feeChargeItem.findMany({
     where: {
-      charge: { schoolId, dueDate: { gte: sixMonthsAgo } },
+      charge: {
+        schoolId,
+        student: { isActive: true },
+        dueDate: { gte: sixMonthsAgo },
+      },
       status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
     },
     select: {

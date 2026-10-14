@@ -132,7 +132,7 @@ export async function seedInitialSchoolData(
       data: {
         schoolId,
         name: "Transport Fee",
-        category: "Transport",
+        category: "TRANSPORT",
         amount: 1200,
         frequency: FeeFrequency.MONTHLY,
         isOptional: true,

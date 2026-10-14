@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
-import { differenceInMonths } from "date-fns";
 import { invalidateFeesCache } from "@/lib/redis";
 import crypto from "crypto";
 
 const cronLogger = createLogger("cron-apply-late-fees");
 
-// This route should be triggered daily by Vercel Cron or a scheduler
-// URL: /api/cron/apply-late-fees
+// Prevents this route from being statically compiled, ensuring it runs on request
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   const start = performance.now();
   // 1. Verify cron secret to prevent unauthorized execution (fail closed)
@@ -40,11 +40,12 @@ export async function GET(req: Request) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Automatically transition charges and items past due date to OVERDUE
+    // 1. Automatically transition charges and items past due date to OVERDUE for active students
     await prisma.feeCharge.updateMany({
       where: {
         status: { in: ["PENDING", "PARTIAL"] },
         dueDate: { lt: today },
+        student: { isActive: true },
       },
       data: {
         status: "OVERDUE",
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
         status: "PENDING",
         charge: {
           dueDate: { lt: today },
+          student: { isActive: true },
         },
       },
       data: {
@@ -66,7 +68,12 @@ export async function GET(req: Request) {
     // 2. Find all schools that have late fees enabled
     const schools = await prisma.school.findMany({
       where: { lateFeeEnabled: true, lateFeeAmount: { not: null } },
-      select: { id: true, lateFeeAmount: true, lateFeeFrequency: true },
+      select: {
+        id: true,
+        lateFeeAmount: true,
+        lateFeeFrequency: true,
+        maxLateFeeCap: true,
+      },
     });
 
     let appliedCount = 0;
@@ -94,12 +101,13 @@ export async function GET(req: Request) {
         });
       }
 
-      // Find all overdue FeeCharges for this school
+      // B13: Find all overdue FeeCharges for active students only
       const overdueCharges = await prisma.feeCharge.findMany({
         where: {
           schoolId: school.id,
           status: "OVERDUE",
           dueDate: { lt: today },
+          student: { isActive: true },
         },
         include: { items: true },
       });
@@ -115,17 +123,38 @@ export async function GET(req: Request) {
         );
 
         if (daysOverdue > 0) {
+          // B13: Safety caps on late fee multiplier
           let multiplier = 1;
           if (school.lateFeeFrequency === "DAILY") {
-            multiplier = daysOverdue;
+            multiplier = Math.min(daysOverdue, 30); // Max 30 days daily penalty
           } else if (school.lateFeeFrequency === "WEEKLY") {
-            multiplier = Math.ceil(daysOverdue / 7);
+            multiplier = Math.min(Math.ceil(daysOverdue / 7), 5); // Max 5 weeks
           } else {
             // MONTHLY default
-            multiplier = Math.max(1, Math.ceil(daysOverdue / 30));
+            multiplier = Math.min(Math.max(1, Math.ceil(daysOverdue / 30)), 3); // Max 3 months
           }
 
-          const totalLateFee = Number(school.lateFeeAmount) * multiplier;
+          let totalLateFee = Number(school.lateFeeAmount) * multiplier;
+
+          // B13: Cap late fee by school setting and 50% of charge principal
+          const chargePrincipal = charge.items
+            .filter((i) => i.componentId !== lateFeeComponent!.id)
+            .reduce((s, it) => s + Number(it.amount), 0);
+
+          if (school.maxLateFeeCap) {
+            totalLateFee = Math.min(totalLateFee, Number(school.maxLateFeeCap));
+          }
+          if (chargePrincipal > 0) {
+            totalLateFee = Math.min(
+              totalLateFee,
+              Math.max(
+                Number(school.lateFeeAmount),
+                Math.round(chargePrincipal * 0.5),
+              ),
+            );
+          }
+
+          totalLateFee = Math.round(totalLateFee * 100) / 100;
 
           // Check if there's already a late fee item
           const existingLateFeeItem = charge.items.find(

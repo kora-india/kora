@@ -1,9 +1,12 @@
 "use server";
 
+import { z } from "zod";
 import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache, invalidateCache } from "@/lib/redis";
+
+const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
 async function getFinanceSession() {
   const session = await auth();
@@ -56,7 +59,7 @@ export interface FeeReceiptData {
   monthTotalPaid: number;
   monthRemainingDue: number;
 
-  // New Summary & Allocation Fields
+  // Summary & Allocation Fields
   outstandingBefore: number;
   remainingOutstanding: number;
   paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT";
@@ -68,7 +71,53 @@ export interface FeeReceiptData {
   lateFeeTotal?: number;
 }
 
-export async function allocatePayment(data: {
+const allocatePaymentInputSchema = z.object({
+  studentId: z.string().min(1, "Student ID is required"),
+  monthPayments: z
+    .array(
+      z.object({
+        chargeId: z.string().min(1),
+        amount: z
+          .number()
+          .positive("Payment amount must be greater than zero.")
+          .max(10_000_000),
+      }),
+    )
+    .optional(),
+  itemPayments: z
+    .array(
+      z.object({
+        chargeItemId: z.string().min(1),
+        amount: z
+          .number()
+          .positive("Payment amount must be greater than zero.")
+          .max(10_000_000),
+      }),
+    )
+    .optional(),
+  componentPayments: z
+    .array(
+      z.object({
+        componentId: z.string().min(1),
+        amount: z
+          .number()
+          .positive("Payment amount must be greater than zero.")
+          .max(10_000_000),
+      }),
+    )
+    .optional(),
+  generalAdvanceAmount: z
+    .number()
+    .positive("Payment amount must be greater than zero.")
+    .max(10_000_000)
+    .optional(),
+  method: z.nativeEnum(PaymentMethod),
+  reference: z.string().optional(),
+  remarks: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+export async function allocatePayment(rawInput: {
   studentId: string;
   monthPayments?: { chargeId: string; amount: number }[];
   itemPayments?: { chargeItemId: string; amount: number }[];
@@ -77,32 +126,62 @@ export async function allocatePayment(data: {
   method: PaymentMethod;
   reference?: string;
   remarks?: string;
+  idempotencyKey?: string;
 }) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
-  const monthTotal = (data.monthPayments || []).reduce(
-    (sum, mp) => sum + (Number(mp.amount) || 0),
-    0,
+  // B6: Input validation
+  const parsed = allocatePaymentInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    // If any amount was zero or negative or invalid, provide a clear message
+    const msg = parsed.error.issues[0]?.message || "Invalid payment input";
+    return {
+      error: msg.includes("greater than zero")
+        ? "Payment amount must be greater than zero."
+        : msg,
+    };
+  }
+
+  const data = parsed.data;
+
+  const monthTotal = roundMoney(
+    (data.monthPayments || []).reduce((sum, mp) => sum + mp.amount, 0),
   );
-  const itemTotal = (data.itemPayments || []).reduce(
-    (sum, ip) => sum + (Number(ip.amount) || 0),
-    0,
+  const itemTotal = roundMoney(
+    (data.itemPayments || []).reduce((sum, ip) => sum + ip.amount, 0),
   );
-  const componentTotal = (data.componentPayments || []).reduce(
-    (sum, cp) => sum + (Number(cp.amount) || 0),
-    0,
+  const componentTotal = roundMoney(
+    (data.componentPayments || []).reduce((sum, cp) => sum + cp.amount, 0),
   );
-  const totalPayment =
-    monthTotal +
-    itemTotal +
-    componentTotal +
-    (Number(data.generalAdvanceAmount) || 0);
+  const totalPayment = roundMoney(
+    monthTotal + itemTotal + componentTotal + (data.generalAdvanceAmount || 0),
+  );
 
   if (totalPayment <= 0)
     return { error: "Payment amount must be greater than zero." };
 
   try {
+    // B6: Idempotency check
+    if (data.idempotencyKey) {
+      const existing = await prisma.paymentTransaction.findUnique({
+        where: {
+          schoolId_idempotencyKey: {
+            schoolId: user.schoolId,
+            idempotencyKey: data.idempotencyKey,
+          },
+        },
+      });
+      if (existing) {
+        const receiptRes = await getFeeReceiptDetails(existing.receiptNo);
+        return {
+          success: true,
+          receiptNo: existing.receiptNo,
+          receiptData: receiptRes.data,
+        };
+      }
+    }
+
     // 0. Fetch school fee policy
     const school = await prisma.school.findUnique({
       where: { id: user.schoolId },
@@ -110,6 +189,7 @@ export async function allocatePayment(data: {
         feePaymentMode: true,
         minPartialPaymentPercentage: true,
         minPartialPaymentAmount: true,
+        timezone: true,
       },
     });
 
@@ -121,8 +201,6 @@ export async function allocatePayment(data: {
       school?.minPartialPaymentAmount || 0,
     );
 
-    const receiptNo = `RCP-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
-
     const result = await prisma.$transaction(
       async (tx) => {
         // Verify student belongs to this school
@@ -133,6 +211,16 @@ export async function allocatePayment(data: {
           throw new Error("Student not found in your school");
         }
 
+        // B4: Atomic sequential receipt numbering per school
+        const updatedSchool = await tx.school.update({
+          where: { id: user.schoolId },
+          data: { nextReceiptNumber: { increment: 1 } },
+          select: { nextReceiptNumber: true, receiptPrefix: true },
+        });
+        const prefix = updatedSchool.receiptPrefix || "RCP";
+        const seq = updatedSchool.nextReceiptNumber - 1;
+        const receiptNo = `${prefix}-${new Date().getFullYear()}-${String(seq).padStart(5, "0")}`;
+
         // 1. Create Payment Transaction
         const payment = await tx.paymentTransaction.create({
           data: {
@@ -142,12 +230,17 @@ export async function allocatePayment(data: {
             method: data.method,
             reference: data.reference,
             receiptNo,
+            idempotencyKey: data.idempotencyKey || null,
             remarks: data.remarks,
             status: "SUCCESS",
           },
         });
 
-        const allocationsCreated = [];
+        const allocationsCreated: {
+          paymentId: string;
+          chargeItemId: string;
+          amount: number;
+        }[] = [];
         const affectedChargeIds = new Set<string>();
 
         // 2. Allocate Month-wise payments if provided (FIFO: oldest due date first)
@@ -173,9 +266,10 @@ export async function allocatePayment(data: {
           });
 
           for (const mp of sortedMonthPayments) {
-            const enteredAmount = Number(mp.amount) || 0;
+            const enteredAmount = roundMoney(mp.amount);
             if (enteredAmount <= 0) continue;
 
+            // B7: Fail closed if charge not found
             const charge = await tx.feeCharge.findFirst({
               where: {
                 id: mp.chargeId,
@@ -189,40 +283,42 @@ export async function allocatePayment(data: {
               },
             });
 
-            if (!charge || charge.studentId !== data.studentId) continue;
+            if (!charge) {
+              throw new Error(
+                `Charge ${mp.chargeId} not found for student in your school`,
+              );
+            }
 
             // Calculate total billed amount and remaining due for this charge
             let totalChargeBilled = 0;
             let totalChargeDue = 0;
 
             for (const it of charge.items) {
-              if (it.status === "WAIVED") continue;
-              const amt = Number(it.amount || 0);
-              const paid = Number(it.paidAmount || 0);
-              totalChargeBilled += amt;
-              totalChargeDue += Math.max(0, amt - paid);
+              if (it.status === FeeStatus.WAIVED) continue;
+              const amt = roundMoney(Number(it.amount || 0));
+              const paid = roundMoney(Number(it.paidAmount || 0));
+              totalChargeBilled = roundMoney(totalChargeBilled + amt);
+              totalChargeDue = roundMoney(
+                totalChargeDue + Math.max(0, roundMoney(amt - paid)),
+              );
             }
 
-            // Policy Enforcements
+            // B9: Policy Enforcements
             if (enteredAmount < totalChargeDue) {
               if (feePaymentMode === "FULL_ONLY") {
                 throw new Error(
                   `Payment failed: School policy requires clearing the full monthly due of ₹${totalChargeDue.toFixed(2)} for ${charge.title}. Partial payments are disabled.`,
                 );
               } else if (feePaymentMode === "ALLOW_PARTIAL") {
-                // Calculate minimum installment threshold based on the month's total billed charge
                 let minRequired = 0;
                 if (minPartialPaymentPercentage > 0) {
-                  minRequired = Math.ceil(
+                  minRequired = roundMoney(
                     (totalChargeBilled * minPartialPaymentPercentage) / 100,
                   );
                 } else if (minPartialPaymentAmount > 0) {
                   minRequired = minPartialPaymentAmount;
                 }
 
-                // LOOPHOLE PREVENTION:
-                // If remaining due is already <= minRequired threshold (e.g. ₹200 left on a ₹1,000 charge where min 80% is ₹800),
-                // the student CANNOT pay a fraction of the remaining ₹200; they must clear it in full!
                 if (minRequired > 0 && totalChargeDue <= minRequired) {
                   throw new Error(
                     `Payment failed: The remaining due for ${charge.title} is ₹${totalChargeDue.toFixed(2)}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minRequired})` : `₹${minRequired}`}). The remaining balance must be cleared in full.`,
@@ -238,41 +334,52 @@ export async function allocatePayment(data: {
             // Distribute entered amount across unpaid charge items
             let remainingForCharge = enteredAmount;
             const eligibleItems = charge.items.filter(
-              (it) => it.status !== "WAIVED",
+              (it) => it.status !== FeeStatus.WAIVED,
             );
 
             for (const item of eligibleItems) {
               if (remainingForCharge <= 0) break;
-              const itemDue = Math.max(
-                0,
-                Number(item.amount) - Number(item.paidAmount),
+              const itemDue = roundMoney(
+                Math.max(0, Number(item.amount) - Number(item.paidAmount)),
               );
               if (itemDue <= 0) continue;
 
-              const allocAmount = Math.min(itemDue, remainingForCharge);
+              const allocAmount = roundMoney(
+                Math.min(itemDue, remainingForCharge),
+              );
               allocationsCreated.push({
                 paymentId: payment.id,
                 chargeItemId: item.id,
                 amount: allocAmount,
               });
 
-              remainingForCharge -= allocAmount;
+              remainingForCharge = roundMoney(remainingForCharge - allocAmount);
 
-              const newPaidAmount = Number(item.paidAmount) + allocAmount;
+              // B5: Atomic increment on feeChargeItem paidAmount
+              const updatedItem = await tx.feeChargeItem.update({
+                where: { id: item.id },
+                data: { paidAmount: { increment: allocAmount } },
+                select: { id: true, amount: true, paidAmount: true },
+              });
+
+              const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
+              const originalAmt = roundMoney(Number(updatedItem.amount));
+              if (updatedPaid > originalAmt + 0.001) {
+                throw new Error(`Overpayment detected on fee item ${item.id}`);
+              }
+
               const newItemStatus =
-                newPaidAmount >= Number(item.amount)
-                  ? FeeStatus.PAID
-                  : FeeStatus.PARTIAL;
+                updatedPaid >= originalAmt ? FeeStatus.PAID : FeeStatus.PARTIAL;
 
               await tx.feeChargeItem.update({
                 where: { id: item.id },
-                data: { paidAmount: newPaidAmount, status: newItemStatus },
+                data: { status: newItemStatus },
               });
             }
 
             affectedChargeIds.add(charge.id);
 
-            // True surplus (paid more than the total month due) goes to advance
+            // True surplus (paid more than total month due) goes to advance
             if (remainingForCharge > 0) {
               await tx.advanceLedger.create({
                 data: {
@@ -288,9 +395,10 @@ export async function allocatePayment(data: {
         // 3. Allocate item-wise payments if provided
         if (data.itemPayments && data.itemPayments.length > 0) {
           for (const ip of data.itemPayments) {
-            const itemAmount = Number(ip.amount) || 0;
+            const itemAmount = roundMoney(ip.amount);
             if (itemAmount <= 0) continue;
 
+            // B7: Fail closed if item not found
             const item = await tx.feeChargeItem.findFirst({
               where: {
                 id: ip.chargeItemId,
@@ -302,11 +410,32 @@ export async function allocatePayment(data: {
               include: { charge: true },
             });
 
-            if (!item) continue;
+            if (!item) {
+              throw new Error(
+                `Fee charge item ${ip.chargeItemId} not found for student in your school`,
+              );
+            }
 
-            const due = Number(item.amount) - Number(item.paidAmount);
-            const allocAmount = Math.min(due, itemAmount);
-            const surplus = Math.max(0, itemAmount - due);
+            // B9: Reject allocation to waived items
+            if (item.status === FeeStatus.WAIVED) {
+              throw new Error(
+                `Fee charge item ${ip.chargeItemId} has been waived and cannot be paid`,
+              );
+            }
+
+            const due = roundMoney(
+              Math.max(0, Number(item.amount) - Number(item.paidAmount)),
+            );
+
+            // B9: Policy check for item payments
+            if (feePaymentMode === "FULL_ONLY" && itemAmount < due) {
+              throw new Error(
+                `Payment failed: School policy requires clearing full item due of ₹${due.toFixed(2)}. Partial payments are disabled.`,
+              );
+            }
+
+            const allocAmount = roundMoney(Math.min(due, itemAmount));
+            const surplus = roundMoney(Math.max(0, itemAmount - due));
 
             if (allocAmount > 0) {
               allocationsCreated.push({
@@ -315,15 +444,25 @@ export async function allocatePayment(data: {
                 amount: allocAmount,
               });
 
-              const newPaidAmount = Number(item.paidAmount) + allocAmount;
+              // B5: Atomic increment
+              const updatedItem = await tx.feeChargeItem.update({
+                where: { id: item.id },
+                data: { paidAmount: { increment: allocAmount } },
+                select: { id: true, amount: true, paidAmount: true },
+              });
+
+              const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
+              const originalAmt = roundMoney(Number(updatedItem.amount));
+              if (updatedPaid > originalAmt + 0.001) {
+                throw new Error(`Overpayment detected on fee item ${item.id}`);
+              }
+
               const newItemStatus =
-                newPaidAmount >= Number(item.amount)
-                  ? FeeStatus.PAID
-                  : FeeStatus.PARTIAL;
+                updatedPaid >= originalAmt ? FeeStatus.PAID : FeeStatus.PARTIAL;
 
               await tx.feeChargeItem.update({
                 where: { id: item.id },
-                data: { paidAmount: newPaidAmount, status: newItemStatus },
+                data: { status: newItemStatus },
               });
 
               affectedChargeIds.add(item.chargeId);
@@ -345,11 +484,22 @@ export async function allocatePayment(data: {
         // 4. Allocate component-wise payments if provided
         if (data.componentPayments && data.componentPayments.length > 0) {
           for (const cp of data.componentPayments) {
-            if (cp.amount <= 0) continue;
+            const compAmount = roundMoney(cp.amount);
+            if (compAmount <= 0) continue;
 
-            let remainingAmount = cp.amount;
+            // B7: Verify component exists
+            const comp = await tx.feeComponent.findFirst({
+              where: { id: cp.componentId, schoolId: user.schoolId },
+            });
+            if (!comp) {
+              throw new Error(
+                `Fee component ${cp.componentId} not found in your school`,
+              );
+            }
 
-            // Find all outstanding FeeChargeItems for this student and component
+            let remainingAmount = compAmount;
+
+            // Find all outstanding FeeChargeItems for this student and component (excluding WAIVED)
             const items = await tx.feeChargeItem.findMany({
               where: {
                 componentId: cp.componentId,
@@ -365,12 +515,30 @@ export async function allocatePayment(data: {
               orderBy: { charge: { dueDate: "asc" } },
             });
 
+            // B9: Policy check for component payments
+            if (feePaymentMode === "FULL_ONLY") {
+              const compTotalDue = roundMoney(
+                items.reduce(
+                  (s, it) =>
+                    s + Math.max(0, Number(it.amount) - Number(it.paidAmount)),
+                  0,
+                ),
+              );
+              if (remainingAmount < compTotalDue) {
+                throw new Error(
+                  `Payment failed: School policy requires clearing full component balance of ₹${compTotalDue.toFixed(2)}. Partial payments are disabled.`,
+                );
+              }
+            }
+
             for (const item of items) {
               if (remainingAmount <= 0) break;
 
-              const due = Number(item.amount) - Number(item.paidAmount);
+              const due = roundMoney(
+                Math.max(0, Number(item.amount) - Number(item.paidAmount)),
+              );
               if (due > 0) {
-                const allocAmount = Math.min(due, remainingAmount);
+                const allocAmount = roundMoney(Math.min(due, remainingAmount));
 
                 allocationsCreated.push({
                   paymentId: payment.id,
@@ -378,18 +546,31 @@ export async function allocatePayment(data: {
                   amount: allocAmount,
                 });
 
-                remainingAmount -= allocAmount;
+                remainingAmount = roundMoney(remainingAmount - allocAmount);
 
-                // Update item status
-                const newPaidAmount = Number(item.paidAmount) + allocAmount;
+                // B5: Atomic increment
+                const updatedItem = await tx.feeChargeItem.update({
+                  where: { id: item.id },
+                  data: { paidAmount: { increment: allocAmount } },
+                  select: { id: true, amount: true, paidAmount: true },
+                });
+
+                const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
+                const originalAmt = roundMoney(Number(updatedItem.amount));
+                if (updatedPaid > originalAmt + 0.001) {
+                  throw new Error(
+                    `Overpayment detected on fee item ${item.id}`,
+                  );
+                }
+
                 const newItemStatus =
-                  newPaidAmount >= Number(item.amount)
+                  updatedPaid >= originalAmt
                     ? FeeStatus.PAID
                     : FeeStatus.PARTIAL;
 
                 await tx.feeChargeItem.update({
                   where: { id: item.id },
-                  data: { paidAmount: newPaidAmount, status: newItemStatus },
+                  data: { status: newItemStatus },
                 });
 
                 affectedChargeIds.add(item.chargeId);
@@ -415,7 +596,7 @@ export async function allocatePayment(data: {
           await tx.advanceLedger.create({
             data: {
               studentId: data.studentId,
-              amount: data.generalAdvanceAmount,
+              amount: roundMoney(data.generalAdvanceAmount),
               description: `General Advance from payment ${receiptNo}`,
             },
           });
@@ -438,9 +619,15 @@ export async function allocatePayment(data: {
           let anyPaid = false;
 
           for (const item of items) {
-            if (item.status !== "PAID" && item.status !== "WAIVED")
+            if (
+              item.status !== FeeStatus.PAID &&
+              item.status !== FeeStatus.WAIVED
+            )
               allPaid = false;
-            if (item.status === "PAID" || item.status === "PARTIAL")
+            if (
+              item.status === FeeStatus.PAID ||
+              item.status === FeeStatus.PARTIAL
+            )
               anyPaid = true;
           }
 
@@ -454,7 +641,11 @@ export async function allocatePayment(data: {
           });
         }
 
-        return { receiptNo, allocations: allocationsCreated };
+        return {
+          paymentId: payment.id,
+          receiptNo,
+          allocations: allocationsCreated,
+        };
       },
       { maxWait: 10000, timeout: 30000 },
     );
@@ -469,12 +660,13 @@ export async function allocatePayment(data: {
       ),
     ]);
 
-    // Fetch formatted receipt data directly for immediate preview & print
-    const receiptRes = await getFeeReceiptDetails(receiptNo);
+    // B12: Fetch and snapshot receipt data
+    const receiptRes = await getFeeReceiptDetails(result.receiptNo);
 
     return {
       success: true,
-      ...result,
+      receiptNo: result.receiptNo,
+      allocations: result.allocations,
       receiptData: receiptRes.data,
     };
   } catch (e: any) {
@@ -520,6 +712,14 @@ export async function getFeeReceiptDetails(
 
     if (!payment) return { success: false, error: "Receipt not found" };
 
+    // B12: If snapshot already exists, return immutable snapshot
+    if (payment.receiptSnapshot) {
+      return {
+        success: true,
+        data: payment.receiptSnapshot as unknown as FeeReceiptData,
+      };
+    }
+
     const school = payment.school;
     const addressParts = [
       school.address,
@@ -535,8 +735,11 @@ export async function getFeeReceiptDetails(
     const regNo = student.admissionNumber || student.rollNumber || "N/A";
     const className = `${student.class?.name || "NUR"}-${student.section?.name || "None"}`;
 
+    // B12: Format timestamps in school timezone
+    const schoolTimezone = school.timezone || "Asia/Kolkata";
     const dateObj = new Date(payment.createdAt || payment.date);
     const timestamp = dateObj.toLocaleString("en-US", {
+      timeZone: schoolTimezone,
       month: "numeric",
       day: "numeric",
       year: "numeric",
@@ -579,7 +782,7 @@ export async function getFeeReceiptDetails(
     if (chargesMap.size > 0) {
       chargesMap.forEach((charge) => {
         charge.items?.forEach((it: any) => {
-          if (it.status === "WAIVED") return;
+          if (it.status === FeeStatus.WAIVED) return;
           const compName = it.component?.name || "Fee";
           const compAmount = Number(it.amount || 0);
 
@@ -589,7 +792,6 @@ export async function getFeeReceiptDetails(
               singleLateFeeRate = compAmount;
             }
           } else {
-            // Keep the actual 1-month rate (not multiplied across months)
             if (!regularHeadMap.has(compName) && compAmount > 0) {
               regularHeadMap.set(compName, compAmount);
             }
@@ -666,7 +868,7 @@ export async function getFeeReceiptDetails(
         let chargeBilled = 0;
         let chargePaid = 0;
         charge.items?.forEach((it: any) => {
-          if (it.status !== "WAIVED") {
+          if (it.status !== FeeStatus.WAIVED) {
             const amt = Number(it.amount || 0);
             const pd = Number(it.paidAmount || 0);
             chargeBilled += amt;
@@ -677,17 +879,16 @@ export async function getFeeReceiptDetails(
         monthTotalPaid += chargePaid;
         const due = Math.max(0, chargeBilled - chargePaid);
         monthRemainingDue += due;
-        if (due > 0 || charge.status !== "PAID") {
+        if (due > 0 || charge.status !== FeeStatus.PAID) {
           isPartial = true;
         }
       });
     }
 
-    // Build granular month-by-month allocation breakdown (WHAT WAS DUE -> PREVIOUSLY PAID -> PAID TODAY -> BALANCE)
+    // Build granular month-by-month allocation breakdown
     const monthAllocations: FeeReceiptMonthAllocation[] = [];
     let outstandingBefore = 0;
 
-    // Sort charges by dueDate ascending
     const sortedCharges = Array.from(chargesMap.values()).sort(
       (a: any, b: any) =>
         new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
@@ -698,13 +899,12 @@ export async function getFeeReceiptDetails(
       let totalPaidSoFar = 0;
 
       charge.items?.forEach((it: any) => {
-        if (it.status !== "WAIVED") {
+        if (it.status !== FeeStatus.WAIVED) {
           feeDue += Number(it.amount || 0);
           totalPaidSoFar += Number(it.paidAmount || 0);
         }
       });
 
-      // Sum of allocations specifically from THIS payment for this charge
       const paidNow = payment.allocations
         .filter((a: any) => a.chargeItem?.chargeId === charge.id)
         .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0);
@@ -737,7 +937,6 @@ export async function getFeeReceiptDetails(
       });
     });
 
-    // Check for advance / surplus in this payment
     const totalAllocatedToCharges = monthAllocations.reduce(
       (sum, m) => sum + m.paidNow,
       0,
@@ -800,6 +999,12 @@ export async function getFeeReceiptDetails(
       lateFeeTotal: totalLateFeeAcrossCharges,
     };
 
+    // B12: Save immutable snapshot for future viewings
+    await prisma.paymentTransaction.update({
+      where: { id: payment.id },
+      data: { receiptSnapshot: data as any },
+    });
+
     return { success: true, data };
   } catch (e: any) {
     return {
@@ -809,36 +1014,108 @@ export async function getFeeReceiptDetails(
   }
 }
 
-export async function waiveFeeChargeItem(itemId: string) {
+// B10: Waive fee charge item with audit trail, advance credit for paid amounts, and parent status recalculation
+export async function waiveFeeChargeItem(
+  itemId: string,
+  waiverReason?: string,
+) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
-    const item = await prisma.feeChargeItem.findFirst({
-      where: {
-        id: itemId,
-        charge: { schoolId: user.schoolId },
-      },
-      select: { id: true },
+    const result = await prisma.$transaction(async (tx) => {
+      const item = await tx.feeChargeItem.findFirst({
+        where: {
+          id: itemId,
+          charge: { schoolId: user.schoolId },
+        },
+        include: {
+          charge: true,
+          component: true,
+        },
+      });
+
+      if (!item) {
+        throw new Error("Fee charge item not found in your school");
+      }
+
+      const paidAmount = roundMoney(Number(item.paidAmount || 0));
+
+      // B10: If already partially paid, refund/credit the paid amount to advance balance
+      if (paidAmount > 0) {
+        await tx.advanceLedger.create({
+          data: {
+            studentId: item.charge.studentId,
+            componentId: item.componentId,
+            amount: paidAmount,
+            description: `Waiver refund credit for ${item.component?.name || "Fee"} (${item.charge.title})`,
+          },
+        });
+      }
+
+      // Mark as waived with audit trail
+      await tx.feeChargeItem.update({
+        where: { id: item.id },
+        data: {
+          status: FeeStatus.WAIVED,
+          waivedBy: user.id || user.name || "Administrator",
+          waivedAt: new Date(),
+          waiverReason: waiverReason || "Fee waived by administrator",
+        },
+      });
+
+      // Recalculate parent FeeCharge status
+      const siblingItems = await tx.feeChargeItem.findMany({
+        where: { chargeId: item.chargeId },
+      });
+
+      let allPaidOrWaived = true;
+      let allWaived = true;
+      let anyPaid = false;
+
+      for (const sib of siblingItems) {
+        const isCurrentWaived =
+          sib.id === item.id || sib.status === FeeStatus.WAIVED;
+        if (!isCurrentWaived) {
+          allWaived = false;
+          if (sib.status !== FeeStatus.PAID) {
+            allPaidOrWaived = false;
+          }
+        }
+        if (sib.status === FeeStatus.PAID || sib.status === FeeStatus.PARTIAL) {
+          anyPaid = true;
+        }
+      }
+
+      let newChargeStatus: FeeStatus = FeeStatus.PENDING;
+      if (allWaived) newChargeStatus = FeeStatus.WAIVED;
+      else if (allPaidOrWaived) newChargeStatus = FeeStatus.PAID;
+      else if (anyPaid) newChargeStatus = FeeStatus.PARTIAL;
+
+      await tx.feeCharge.update({
+        where: { id: item.chargeId },
+        data: { status: newChargeStatus },
+      });
+
+      return { studentId: item.charge.studentId };
     });
 
-    if (!item) {
-      return { error: "Fee charge item not found in your school" };
-    }
-
-    await prisma.feeChargeItem.update({
-      where: { id: item.id },
-      data: { status: "WAIVED" },
-    });
     revalidatePath("/fees");
     revalidatePath("/dashboard");
-    await invalidateFeesCache(user.schoolId);
+    revalidatePath(`/students/${result.studentId}`);
+    await Promise.all([
+      invalidateFeesCache(user.schoolId),
+      invalidateCache(
+        `cache:${user.schoolId}:students:details:${result.studentId}`,
+      ),
+    ]);
     return { success: true };
   } catch (e: any) {
     return { error: e.message };
   }
 }
 
+// B11: Side-effect-free student fee dues query
 export async function getStudentFeeDues(studentId: string) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
@@ -870,66 +1147,13 @@ export async function getStudentFeeDues(studentId: string) {
 
     if (!student) return { error: "Student not found" };
 
-    // Check if student has active transport with monthlyFee > 0
-    const activeTransport = student.transports?.[0];
-    if (activeTransport && Number(activeTransport.monthlyFee) > 0) {
-      // Ensure Transport Fee component exists
-      let transportComp = await prisma.feeComponent.findFirst({
-        where: {
-          schoolId: user.schoolId,
-          category: "TRANSPORT",
-        },
-      });
-
-      if (!transportComp) {
-        transportComp = await prisma.feeComponent.create({
-          data: {
-            schoolId: user.schoolId,
-            name: "Transport Fee",
-            description: "Monthly distance-based transport charge",
-            category: "TRANSPORT",
-            amount: 0,
-            frequency: "MONTHLY",
-            isOptional: true,
-            isActive: true,
-          },
-        });
-      }
-
-      // If open charges exist for this student, check if the latest pending/overdue charge has a Transport Fee item
-      const latestCharge = await prisma.feeCharge.findFirst({
-        where: {
-          studentId,
-          schoolId: user.schoolId,
-          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
-        },
-        orderBy: { dueDate: "desc" },
-        include: { items: true },
-      });
-
-      if (latestCharge) {
-        const hasTransportItem = latestCharge.items.some(
-          (i) => i.componentId === transportComp!.id,
-        );
-        if (!hasTransportItem) {
-          await prisma.feeChargeItem.create({
-            data: {
-              chargeId: latestCharge.id,
-              componentId: transportComp.id,
-              amount: activeTransport.monthlyFee,
-              paidAmount: 0,
-              status: "PENDING",
-            },
-          });
-        }
-      }
-    }
-
     const charges = await prisma.feeCharge.findMany({
       where: {
         studentId,
         schoolId: user.schoolId,
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        status: {
+          in: [FeeStatus.PENDING, FeeStatus.PARTIAL, FeeStatus.OVERDUE],
+        },
       },
       include: {
         items: {

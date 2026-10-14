@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { auth } from "@schoolos/auth";
 import { prisma, FeeFrequency } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
@@ -15,6 +16,22 @@ async function getFinanceSession() {
   return { ...user, schoolId: user.schoolId };
 }
 
+const academicSessionSchema = z
+  .object({
+    name: z.string().trim().min(1, "Session name is required"),
+    startDate: z
+      .string()
+      .refine((val) => !isNaN(Date.parse(val)), "Valid start date required"),
+    endDate: z
+      .string()
+      .refine((val) => !isNaN(Date.parse(val)), "Valid end date required"),
+    isCurrent: z.boolean(),
+  })
+  .refine((data) => new Date(data.startDate) < new Date(data.endDate), {
+    message: "Start date must be before end date",
+    path: ["endDate"],
+  });
+
 // -- Academic Sessions
 export async function createAcademicSession(data: {
   name: string;
@@ -25,23 +42,30 @@ export async function createAcademicSession(data: {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
-  try {
-    if (data.isCurrent) {
-      // Unset current session if this one is true
-      await prisma.academicSession.updateMany({
-        where: { schoolId: user.schoolId },
-        data: { isCurrent: false },
-      });
-    }
+  const parsed = academicSessionSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Invalid session data" };
+  }
 
-    await prisma.academicSession.create({
-      data: {
-        schoolId: user.schoolId,
-        name: data.name,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
-        isCurrent: data.isCurrent,
-      },
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (parsed.data.isCurrent) {
+        // Unset current session if this one is true
+        await tx.academicSession.updateMany({
+          where: { schoolId: user.schoolId },
+          data: { isCurrent: false },
+        });
+      }
+
+      await tx.academicSession.create({
+        data: {
+          schoolId: user.schoolId,
+          name: parsed.data.name,
+          startDate: new Date(parsed.data.startDate),
+          endDate: new Date(parsed.data.endDate),
+          isCurrent: parsed.data.isCurrent,
+        },
+      });
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
@@ -149,9 +173,12 @@ export async function assignFeeStructureToClass(
     });
     if (!structure) return { error: "Fee structure not found in your school" };
 
-    // Upsert assignment for class
+    // B3: Upsert assignment for class scoped to the same academic session
     const existing = await prisma.classFeeStructure.findFirst({
-      where: { classId },
+      where: {
+        classId,
+        structure: { sessionId: structure.sessionId },
+      },
     });
 
     if (existing) {
@@ -255,22 +282,48 @@ export async function updateAcademicSession(
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
-  try {
-    if (data.isCurrent) {
-      await prisma.academicSession.updateMany({
-        where: { schoolId: user.schoolId },
-        data: { isCurrent: false },
-      });
-    }
+  const parsed = academicSessionSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Invalid session data" };
+  }
 
-    await prisma.academicSession.update({
-      where: { id, schoolId: user.schoolId },
-      data: {
-        name: data.name,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
-        isCurrent: data.isCurrent,
-      },
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.academicSession.findFirst({
+        where: { id, schoolId: user.schoolId },
+      });
+      if (!existing) {
+        throw new Error("Academic session not found in your school");
+      }
+
+      if (parsed.data.isCurrent) {
+        await tx.academicSession.updateMany({
+          where: { schoolId: user.schoolId, id: { not: id } },
+          data: { isCurrent: false },
+        });
+      } else if (existing.isCurrent) {
+        // B15: Preserving a current session: if unsetting current session, make another session current if one exists
+        const fallback = await tx.academicSession.findFirst({
+          where: { schoolId: user.schoolId, id: { not: id } },
+          orderBy: { startDate: "desc" },
+        });
+        if (fallback) {
+          await tx.academicSession.update({
+            where: { id: fallback.id },
+            data: { isCurrent: true },
+          });
+        }
+      }
+
+      await tx.academicSession.update({
+        where: { id, schoolId: user.schoolId },
+        data: {
+          name: parsed.data.name,
+          startDate: new Date(parsed.data.startDate),
+          endDate: new Date(parsed.data.endDate),
+          isCurrent: parsed.data.isCurrent,
+        },
+      });
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);

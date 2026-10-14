@@ -34,9 +34,9 @@ export async function GET(request: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    // Get all active schools
+    // Get all active schools with autoFeeGeneration enabled
     const schools = await prisma.school.findMany({
-      where: { isActive: true },
+      where: { isActive: true, autoFeeGeneration: true },
       select: { id: true, name: true },
     });
 
