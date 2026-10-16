@@ -1,4 +1,5 @@
-"use server";
+// Server-side guards for server actions and route handlers. Not a "use server"
+// module: its exports are helpers, and must not become callable endpoints.
 
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";

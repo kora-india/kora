@@ -5,6 +5,11 @@ import { requireActiveSchoolSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache } from "@/lib/redis";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
+import {
+  formatPeriodLabel,
+  isPeriodKey,
+  periodKeyFromDate,
+} from "@/lib/fees/billing-period";
 
 async function getFinanceSession() {
   const guard = await requireActiveSchoolSession([
@@ -21,6 +26,7 @@ export async function generateMonthlyFees(
   classIds: string[] | string,
   monthTitle: string,
   dueDateStr: string,
+  billingMonth?: string,
 ) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
@@ -45,23 +51,32 @@ export async function generateMonthlyFees(
     return { error: "One or more selected classes not found in your school" };
   }
 
-  let totalGenerated = 0;
-  const errors: { classId: string; error: string }[] = [];
   const dueDate = new Date(dueDateStr);
+  if (isNaN(dueDate.getTime())) return { error: "Enter a valid due date" };
+
+  // The billing month identifies the charge; older callers only sent a due
+  // date, so fall back to its month.
+  const periodKey = isPeriodKey(billingMonth)
+    ? billingMonth
+    : periodKeyFromDate(dueDate);
+  const title = monthTitle.trim() || formatPeriodLabel(periodKey);
+
+  let totalGenerated = 0;
+  let totalAlreadyGenerated = 0;
+  const errors: { classId: string; error: string }[] = [];
 
   for (const cId of uniqueIds) {
-    const res = await processClassFeeGeneration(
-      user.schoolId,
-      sessionId,
-      cId,
-      monthTitle,
+    const res = await processClassFeeGeneration(user.schoolId, sessionId, cId, {
+      periodKey,
+      title,
       dueDate,
-    );
+    });
 
     if (res.error) {
       errors.push({ classId: cId, error: res.error });
-    } else if (res.generatedCount) {
-      totalGenerated += res.generatedCount;
+    } else {
+      totalGenerated += res.generatedCount ?? 0;
+      totalAlreadyGenerated += res.alreadyGenerated ?? 0;
     }
   }
 
@@ -78,6 +93,8 @@ export async function generateMonthlyFees(
   return {
     success: true,
     generatedCount: totalGenerated,
+    alreadyGeneratedCount: totalAlreadyGenerated,
+    periodKey,
     skippedOrErrors: errors.length > 0 ? errors : undefined,
   };
 }

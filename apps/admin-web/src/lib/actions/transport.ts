@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createTenantLogger } from "@schoolos/logger";
 import { getCache, invalidateTransportCache } from "@/lib/redis";
+import { findOrCreateTransportComponent } from "@/lib/fees/transport-component";
 
 const logger = createTenantLogger("global", "transport-actions");
 
@@ -49,35 +50,6 @@ async function getTransportSession(
   }
 
   return { ...guard, schoolId: guard.schoolId! };
-}
-
-/**
- * Auto-provisions or fetches the default "Transport Fee" FeeComponent for a school (internal)
- */
-async function getOrCreateTransportFeeComponent(schoolId: string) {
-  let component = await prisma.feeComponent.findFirst({
-    where: {
-      schoolId,
-      name: { equals: "Transport Fee", mode: "insensitive" },
-    },
-  });
-
-  if (!component) {
-    component = await prisma.feeComponent.create({
-      data: {
-        schoolId,
-        name: "Transport Fee",
-        description: "Standard distance-based or flat monthly transport charge",
-        category: "TRANSPORT",
-        amount: 0,
-        frequency: "MONTHLY",
-        isOptional: true,
-        isActive: true,
-      },
-    });
-  }
-
-  return component;
 }
 
 // ─── Query Actions ─────────────────────────────────────────────────────────
@@ -491,7 +463,7 @@ export async function enrollStudentTransport(
   if (!currentSession)
     return { error: "No active academic session configured for this school." };
 
-  const transportComp = await getOrCreateTransportFeeComponent(schoolId);
+  const transportComp = await findOrCreateTransportComponent(schoolId);
 
   const enrollment = await prisma.studentTransport.upsert({
     where: {

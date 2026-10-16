@@ -45,6 +45,11 @@ interface Props {
   userRole: string;
 }
 
+// Advance settlements (status ADJUSTMENT) move money a student already paid
+// onto a new charge. They count toward per-component allocation, but not as
+// new collections, or the same rupee would be counted twice.
+const isCollection = (tx: any) => tx.status !== "ADJUSTMENT";
+
 export function LedgerContent({
   school,
   transactions,
@@ -388,11 +393,12 @@ export function LedgerContent({
   // -------------------------------------------------------------
   const calculatedMetrics: LedgerMetrics = useMemo(() => {
     // 1. Inflows
-    const totalInflow = filteredTransactions.reduce(
+    const collections = filteredTransactions.filter(isCollection);
+    const totalInflow = collections.reduce(
       (sum, tx) => sum + Number(tx.amount || 0),
       0,
     );
-    const inflowCount = filteredTransactions.length;
+    const inflowCount = collections.length;
     const avgInflow = inflowCount > 0 ? totalInflow / inflowCount : 0;
 
     // 2. Outflows
@@ -458,7 +464,7 @@ export function LedgerContent({
       other: { inflow: 0, count: 0 },
     };
 
-    filteredTransactions.forEach((tx) => {
+    collections.forEach((tx) => {
       const m = (tx.method || "OTHER").toUpperCase();
       const amt = Number(tx.amount || 0);
 
@@ -597,7 +603,7 @@ export function LedgerContent({
       });
     });
 
-    filteredTransactions.forEach((tx) => {
+    filteredTransactions.filter(isCollection).forEach((tx) => {
       const cId = tx.student?.classId || tx.student?.class?.id;
       if (cId && classMap.has(cId)) {
         const item = classMap.get(cId)!;
@@ -778,7 +784,7 @@ export function LedgerContent({
         "Amount (INR)",
       ]);
 
-      filteredTransactions.forEach((tx) => {
+      filteredTransactions.filter(isCollection).forEach((tx) => {
         rows.push([
           new Date(tx.date || tx.createdAt).toLocaleDateString("en-IN"),
           "INFLOW (Collection)",

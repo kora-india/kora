@@ -19,7 +19,8 @@
     "db:seed:test": "tsx src/seed.ts",
     "db:dr:sync": "tsx src/scripts/backup-sync.ts --sync",
     "db:dr:verify": "tsx src/scripts/backup-sync.ts --verify",
-    "db:dr:dump": "tsx src/scripts/backup-sync.ts --dump"
+    "db:dr:dump": "tsx src/scripts/backup-sync.ts --dump",
+    "db:disable-onboarding-admins": "tsx src/scripts/disable-onboarding-admins.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",

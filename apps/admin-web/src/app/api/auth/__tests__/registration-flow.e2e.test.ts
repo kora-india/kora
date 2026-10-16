@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { POST as sendOtp } from "../send-otp/route";
 import { POST as register } from "../register/route";
 import { POST as checkSubdomain } from "../../school/check-subdomain/route";
@@ -57,13 +58,20 @@ describe("Full registration flow (send-otp -> register -> school/create)", () =>
     });
     expect(otpRow).toBeDefined();
 
-    // 2. Register using the real OTP that was generated
+    // 2. Register with the code from the email (only its hash is stored)
+    const { sendMail } = nodemailer.createTransport({} as any);
+    const sentHtml = String(
+      (vi.mocked(sendMail).mock.calls.at(-1)?.[0] as any)?.html ?? "",
+    );
+    const emailedCode = sentHtml.match(/>(\d{6})</)?.[1];
+    expect(emailedCode).toMatch(/^\d{6}$/);
+
     const registerRes = await register(
       jsonRequest("http://localhost/api/auth/register", {
         name: "E2E Test Admin",
         email,
         password,
-        otp: otpRow!.otp,
+        otp: emailedCode,
       }),
     );
     const registerBody = await registerRes.json();

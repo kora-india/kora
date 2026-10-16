@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { invalidateFeesCache } from "@/lib/redis";
+import { todayInTimeZone } from "@/lib/fees/timezone";
 import crypto from "crypto";
 
 const cronLogger = createLogger("cron-apply-late-fees");
@@ -37,39 +38,13 @@ export async function GET(req: Request) {
   }
 
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // 1. Automatically transition charges and items past due date to OVERDUE for active students
-    await prisma.feeCharge.updateMany({
-      where: {
-        status: { in: ["PENDING", "PARTIAL"] },
-        dueDate: { lt: today },
-        student: { isActive: true },
-      },
-      data: {
-        status: "OVERDUE",
-      },
-    });
-
-    await prisma.feeChargeItem.updateMany({
-      where: {
-        status: "PENDING",
-        charge: {
-          dueDate: { lt: today },
-          student: { isActive: true },
-        },
-      },
-      data: {
-        status: "OVERDUE",
-      },
-    });
-
-    // 2. Find all schools that have late fees enabled
+    // Active schools only; a suspended school's dues are frozen.
     const schools = await prisma.school.findMany({
-      where: { lateFeeEnabled: true, lateFeeAmount: { not: null } },
+      where: { isActive: true },
       select: {
         id: true,
+        timezone: true,
+        lateFeeEnabled: true,
         lateFeeAmount: true,
         lateFeeFrequency: true,
         maxLateFeeCap: true,
@@ -79,9 +54,35 @@ export async function GET(req: Request) {
     let appliedCount = 0;
 
     for (const school of schools) {
-      if (!school.lateFeeAmount) continue;
+      // "Overdue" starts at midnight in the school's own time zone.
+      const today = todayInTimeZone(school.timezone);
 
-      // Get or create the Late Fee component for this school
+      // 1. Charges and items past their due date become OVERDUE (active students only)
+      await prisma.feeCharge.updateMany({
+        where: {
+          schoolId: school.id,
+          status: { in: ["PENDING", "PARTIAL"] },
+          dueDate: { lt: today },
+          student: { isActive: true },
+        },
+        data: { status: "OVERDUE" },
+      });
+
+      await prisma.feeChargeItem.updateMany({
+        where: {
+          status: "PENDING",
+          charge: {
+            schoolId: school.id,
+            dueDate: { lt: today },
+            student: { isActive: true },
+          },
+        },
+        data: { status: "OVERDUE" },
+      });
+
+      // 2. Late fees, for schools that charge them
+      if (!school.lateFeeEnabled || !school.lateFeeAmount) continue;
+
       let lateFeeComponent = await prisma.feeComponent.findFirst({
         where: { schoolId: school.id, category: "LATE_FEE" },
       });

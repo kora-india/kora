@@ -8,6 +8,8 @@ import {
   type FeeReceiptData,
 } from "@/lib/actions/fee-allocator";
 import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
+import { WaiveReasonDialog } from "@/components/fees/waive-reason-dialog";
+import { newPaymentKey } from "@/lib/fees/payment-key";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -57,6 +59,15 @@ export function StudentFeeCollection({
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
+  // One idempotency key per payment attempt; retries of the same submit reuse it.
+  const paymentKeyRef = useRef(newPaymentKey());
+  useEffect(() => {
+    paymentKeyRef.current = newPaymentKey();
+  }, [student?.id]);
+  const [waiveTarget, setWaiveTarget] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [receiptData, setReceiptData] = useState<FeeReceiptData | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [autoPrint, setAutoPrint] = useState(false);
@@ -486,22 +497,27 @@ export function StudentFeeCollection({
     return preview;
   };
 
-  // Waive Late Fee Action
-  const handleWaiveItem = async (itemId: string) => {
+  // Waive Late Fee Action (reason is collected by WaiveReasonDialog)
+  const handleWaiveItem = async (
+    itemId: string,
+    reason: string,
+  ): Promise<boolean> => {
     setWaivingItemId(itemId);
     const toastId = `waive-${itemId}`;
     toast.loading("Waiving late fee...", { id: toastId });
 
     try {
-      const res = await waiveFeeChargeItem(itemId);
+      const res = await waiveFeeChargeItem(itemId, reason);
       if (res.error) {
         toast.error(res.error, { id: toastId });
-      } else {
-        toast.success("Late fee waived successfully", { id: toastId });
-        onWaiveSuccess?.();
+        return false;
       }
+      toast.success("Late fee waived successfully", { id: toastId });
+      onWaiveSuccess?.();
+      return true;
     } catch {
       toast.error("Failed to waive late fee", { id: toastId });
+      return false;
     } finally {
       setWaivingItemId(null);
     }
@@ -582,11 +598,13 @@ export function StudentFeeCollection({
         method: paymentMethod as any,
         reference: reference || undefined,
         remarks: remarks || undefined,
+        idempotencyKey: paymentKeyRef.current,
       });
 
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
+        paymentKeyRef.current = newPaymentKey();
         const receipt = (res as any).receiptNo || "Receipt Created";
         toast.success(`Payment successful! Receipt: ${receipt}`, {
           id: toastId,
@@ -1167,7 +1185,10 @@ export function StudentFeeCollection({
                                             type="button"
                                             disabled={waivingItemId === item.id}
                                             onClick={() =>
-                                              handleWaiveItem(item.id)
+                                              setWaiveTarget({
+                                                id: item.id,
+                                                label: `${item.componentName} (${month.title})`,
+                                              })
                                             }
                                             className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium inline-flex items-center gap-1 disabled:opacity-50"
                                           >
@@ -1379,6 +1400,12 @@ export function StudentFeeCollection({
           </div>
         </div>
       </div>
+
+      <WaiveReasonDialog
+        target={waiveTarget}
+        onClose={() => setWaiveTarget(null)}
+        onConfirm={handleWaiveItem}
+      />
 
       {/* Printable Fee Receipt Modal */}
       <FeeReceiptModal

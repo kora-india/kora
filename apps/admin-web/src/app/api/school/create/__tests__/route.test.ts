@@ -16,6 +16,25 @@ const RAZORPAY_SECRET = "test-razorpay-secret";
 const runId = Math.random().toString(36).substring(7);
 let userId: string;
 
+/** A school admin with no school yet: the only kind of user allowed to create one. */
+async function createOnboardingAdmin() {
+  const user = await prisma.user.create({
+    data: {
+      email: `admin-${runId}-${Math.random().toString(36).slice(2, 8)}@example.com`,
+      password: "irrelevant-hash",
+      name: "Onboarding Admin",
+      role: "SCHOOL_ADMIN",
+    },
+  });
+  return user.id;
+}
+
+function signInAs(id: string) {
+  vi.mocked(auth).mockResolvedValue({
+    user: { id, schoolId: null, role: "SCHOOL_ADMIN" },
+  } as any);
+}
+
 async function signedPayload(overrides: Partial<Record<string, unknown>> = {}) {
   const currentRunId = Math.random().toString(36).substring(7);
   const orderId =
@@ -47,7 +66,7 @@ async function signedPayload(overrides: Partial<Record<string, unknown>> = {}) {
     overrides;
 
   return {
-    name: "Test School " + currentRunId,
+    name: `Test School ${runId} ${currentRunId}`,
     subdomain: "school-" + currentRunId,
     phone: "9999999999",
     email: `owner-${currentRunId}@example.com`,
@@ -67,39 +86,32 @@ function makeRequest(body: unknown) {
 }
 
 describe("POST /api/school/create", () => {
-  beforeAll(async () => {
+  beforeAll(() => {
     process.env.RAZORPAY_KEY_SECRET = RAZORPAY_SECRET;
-
-    const user = await prisma.user.create({
-      data: {
-        email: `admin-${runId}@example.com`,
-        password: "irrelevant-hash",
-        name: "Onboarding Admin",
-        role: "SCHOOL_ADMIN",
-      },
-    });
-    userId = user.id;
   });
 
-  beforeEach(() => {
-    vi.mocked(auth).mockResolvedValue({
-      user: { id: userId, schoolId: null, role: "SCHOOL_ADMIN" },
-    } as any);
+  // Each test gets its own admin: once an admin has a school, S5 rightly
+  // refuses to let them create another.
+  beforeEach(async () => {
+    userId = await createOnboardingAdmin();
+    signInAs(userId);
   });
 
   afterAll(async () => {
+    const users = await prisma.user.findMany({
+      where: { email: { contains: runId } },
+      select: { id: true },
+    });
+    const userIds = users.map((u) => u.id);
     await prisma.subscriptionOrder.deleteMany({
-      where: { userId },
+      where: { userId: { in: userIds } },
     });
-    await prisma.subscription.deleteMany({
-      where: { school: { name: { contains: runId } } },
+    await prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { schoolId: null },
     });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     await prisma.school.deleteMany({ where: { name: { contains: runId } } });
-    await prisma.user.deleteMany({
-      where: {
-        OR: [{ id: userId }, { email: { contains: runId } }],
-      },
-    });
   });
 
   it("creates the school + subscription, links the user, and prepopulates starter data in one transaction", async () => {
@@ -136,15 +148,13 @@ describe("POST /api/school/create", () => {
     });
     expect(classes.length).toBeGreaterThanOrEqual(1);
 
-    const students = await prisma.student.findMany({
+    // S3: onboarding must not create any extra login (the old seed added a
+    // shared-password "admin.<subdomain>@schoolos.com" admin to every school).
+    const schoolUsers = await prisma.user.findMany({
       where: { schoolId: body.schoolId },
+      select: { id: true },
     });
-    expect(students.length).toBeGreaterThanOrEqual(1);
-
-    const teachers = await prisma.teacher.findMany({
-      where: { schoolId: body.schoolId },
-    });
-    expect(teachers.length).toBeGreaterThanOrEqual(1);
+    expect(schoolUsers.map((u) => u.id)).toEqual([userId]);
 
     const feeComponents = await prisma.feeComponent.findMany({
       where: { schoolId: body.schoolId },
@@ -195,8 +205,11 @@ describe("POST /api/school/create", () => {
 
   it("rejects a duplicate subdomain", async () => {
     const first = await signedPayload({ subdomain: "dup-" + runId });
-    await POST(makeRequest(first));
+    expect((await POST(makeRequest(first))).status).toBe(200);
 
+    // A different admin tries to take the same subdomain.
+    userId = await createOnboardingAdmin();
+    signInAs(userId);
     const second = await signedPayload({ subdomain: "dup-" + runId });
     const res = await POST(makeRequest(second));
     const body = await res.json();
@@ -226,7 +239,7 @@ describe("POST /api/school/create", () => {
   it("S5: rejects school creation when user has non-SCHOOL_ADMIN role", async () => {
     const teacherUser = await prisma.user.create({
       data: {
-        email: `teacher-${Math.random().toString(36).substring(7)}@example.com`,
+        email: `teacher-${runId}-${Math.random().toString(36).substring(7)}@example.com`,
         password: "hash",
         name: "Teacher User",
         role: "TEACHER",
@@ -247,25 +260,29 @@ describe("POST /api/school/create", () => {
 
     expect(res.status).toBe(403);
     expect(body.error).toMatch(/only school admins/i);
-
-    await prisma.user.delete({ where: { id: teacherUser.id } });
   });
 
   it("S5: rejects school creation when user already belongs to a school", async () => {
+    const existingSchool = await prisma.school.create({
+      data: {
+        name: `Existing School ${runId}`,
+        subdomain: `existing-${runId}`,
+      },
+    });
     const userWithSchool = await prisma.user.create({
       data: {
-        email: `attached-${Math.random().toString(36).substring(7)}@example.com`,
+        email: `attached-${runId}-${Math.random().toString(36).substring(7)}@example.com`,
         password: "hash",
         name: "Attached Admin",
         role: "SCHOOL_ADMIN",
-        schoolId: "some-existing-school-id",
+        schoolId: existingSchool.id,
       },
     });
 
     vi.mocked(auth).mockResolvedValueOnce({
       user: {
         id: userWithSchool.id,
-        schoolId: "some-existing-school-id",
+        schoolId: existingSchool.id,
         role: "SCHOOL_ADMIN",
       },
     } as any);
@@ -280,8 +297,11 @@ describe("POST /api/school/create", () => {
 
     expect(res.status).toBe(400);
     expect(body.error).toMatch(/already belongs/i);
-
-    await prisma.user.delete({ where: { id: userWithSchool.id } });
+    // Their existing school is untouched.
+    const after = await prisma.user.findUnique({
+      where: { id: userWithSchool.id },
+    });
+    expect(after?.schoolId).toBe(existingSchool.id);
   });
 
   it("S4: rejects school creation when payment order does not exist in DB", async () => {
@@ -308,7 +328,7 @@ describe("POST /api/school/create", () => {
     const body = await res.json();
 
     expect(res.status).toBe(400);
-    expect(body.error).toMatch(/plan mismatch/i);
+    expect(body.error).toMatch(/payment order is for plan BASIC/i);
   });
 
   it("S4: rejects school creation when order has already been consumed", async () => {

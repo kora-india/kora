@@ -33,6 +33,8 @@ describe("Timetable Generator & Conflict Resolution Engine", () => {
         id: schoolId,
         name: "Timetable Academy",
         subdomain: "tt-" + Math.random().toString(36).substring(7),
+        // Timetables are a PRO feature.
+        plan: "PRO",
       },
     });
 
@@ -249,5 +251,20 @@ describe("Timetable Generator & Conflict Resolution Engine", () => {
       c.slots.some((s) => s.sectionId === section1Id),
     );
     expect(section1Clashes.length).toBe(0);
+  });
+
+  it("blocks timetable changes for a school whose plan doesn't include them", async () => {
+    await prisma.school.update({
+      where: { id: schoolId },
+      data: { plan: "FREE" },
+    });
+    try {
+      await expect(getTimetablePeriods()).rejects.toThrow(/not included/i);
+    } finally {
+      await prisma.school.update({
+        where: { id: schoolId },
+        data: { plan: "PRO" },
+      });
+    }
   });
 });

@@ -32,6 +32,16 @@ const academicSessionSchema = z
     path: ["endDate"],
   });
 
+const feeComponentSchema = z.object({
+  name: z.string().trim().min(1, "Component name is required").max(100),
+  amount: z.coerce
+    .number({ invalid_type_error: "Amount must be a number" })
+    .min(0, "Amount can't be negative")
+    .max(10_000_000, "Amount is too large"),
+  frequency: z.nativeEnum(FeeFrequency),
+  isOptional: z.boolean(),
+});
+
 // -- Academic Sessions
 export async function createAcademicSession(data: {
   name: string;
@@ -88,14 +98,21 @@ export async function createFeeComponent(data: {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
+  const parsed = feeComponentSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message || "Invalid fee component",
+    };
+  }
+
   try {
     await prisma.feeComponent.create({
       data: {
         schoolId: user.schoolId,
-        name: data.name,
-        amount: data.amount,
-        frequency: data.frequency,
-        isOptional: data.isOptional,
+        name: parsed.data.name,
+        amount: parsed.data.amount,
+        frequency: parsed.data.frequency,
+        isOptional: parsed.data.isOptional,
       },
     });
 
@@ -349,14 +366,21 @@ export async function updateFeeComponent(
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
+  const parsed = feeComponentSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message || "Invalid fee component",
+    };
+  }
+
   try {
     await prisma.feeComponent.update({
       where: { id, schoolId: user.schoolId },
       data: {
-        name: data.name,
-        amount: data.amount,
-        frequency: data.frequency,
-        isOptional: data.isOptional,
+        name: parsed.data.name,
+        amount: parsed.data.amount,
+        frequency: parsed.data.frequency,
+        isOptional: parsed.data.isOptional,
       },
     });
 
@@ -426,27 +450,59 @@ export async function updateFeeStructure(
 }
 
 // -- Late Fee Settings
+const lateFeeSettingsSchema = z.object({
+  lateFeeEnabled: z.boolean(),
+  lateFeeAmount: z.coerce
+    .number()
+    .min(0, "Late fee can't be negative")
+    .max(1_000_000, "Late fee is too large")
+    .optional(),
+  lateFeeFrequency: z.enum(["DAILY", "WEEKLY", "MONTHLY"]).optional(),
+  maxLateFeeCap: z.coerce
+    .number()
+    .positive("Maximum late fee must be greater than zero")
+    .max(1_000_000, "Maximum late fee is too large")
+    .nullable()
+    .optional(),
+});
+
 export async function saveLateFeeSettings(data: {
   lateFeeEnabled: boolean;
   lateFeeAmount?: number;
   lateFeeFrequency?: string;
+  /** Most late fee a single charge can accrue; null removes the cap. */
+  maxLateFeeCap?: number | null;
 }) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
+
+  const parsed = lateFeeSettingsSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message || "Invalid late fee settings",
+    };
+  }
+  const settings = parsed.data;
+  if (settings.lateFeeEnabled && !settings.lateFeeAmount) {
+    return { error: "Enter a late fee amount to enable late fees" };
+  }
 
   try {
     await prisma.school.update({
       where: { id: user.schoolId },
       data: {
-        lateFeeEnabled: data.lateFeeEnabled,
+        lateFeeEnabled: settings.lateFeeEnabled,
         lateFeeAmount:
-          data.lateFeeAmount !== undefined ? data.lateFeeAmount : null,
-        lateFeeFrequency: data.lateFeeFrequency || "MONTHLY",
+          settings.lateFeeAmount !== undefined ? settings.lateFeeAmount : null,
+        lateFeeFrequency: settings.lateFeeFrequency || "MONTHLY",
+        ...(settings.maxLateFeeCap !== undefined
+          ? { maxLateFeeCap: settings.maxLateFeeCap }
+          : {}),
       },
     });
 
     // If enabled, ensure the "Late Fee" FeeComponent exists
-    if (data.lateFeeEnabled) {
+    if (settings.lateFeeEnabled) {
       const existing = await prisma.feeComponent.findFirst({
         where: { schoolId: user.schoolId, category: "LATE_FEE" },
       });
@@ -456,18 +512,15 @@ export async function saveLateFeeSettings(data: {
             schoolId: user.schoolId,
             name: "Late Fee",
             category: "LATE_FEE",
-            amount: data.lateFeeAmount || 0,
+            amount: settings.lateFeeAmount || 0,
             frequency: "MONTHLY",
             isOptional: false,
           },
         });
-      } else if (
-        existing.amount &&
-        Number(existing.amount) !== data.lateFeeAmount
-      ) {
+      } else if (Number(existing.amount) !== settings.lateFeeAmount) {
         await prisma.feeComponent.update({
           where: { id: existing.id },
-          data: { amount: data.lateFeeAmount || 0 },
+          data: { amount: settings.lateFeeAmount || 0 },
         });
       }
     }
@@ -475,6 +528,30 @@ export async function saveLateFeeSettings(data: {
     await invalidateCache(`cache:${user.schoolId}:school:*`);
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    revalidatePath("/fees");
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+// -- Automatic Monthly Generation
+/** B2: whether the monthly cron generates this school's fees automatically. */
+export async function saveFeeAutomationSettings(data: {
+  autoFeeGeneration: boolean;
+}) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+  if (typeof data?.autoFeeGeneration !== "boolean") {
+    return { error: "Invalid setting" };
+  }
+
+  try {
+    await prisma.school.update({
+      where: { id: user.schoolId },
+      data: { autoFeeGeneration: data.autoFeeGeneration },
+    });
+    await invalidateCache(`cache:${user.schoolId}:school:*`);
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {

@@ -1,534 +1,442 @@
 import "server-only";
 
 import { prisma, FeeStatus } from "@schoolos/db";
+import {
+  billingBucket,
+  formatPeriodLabel,
+  isComponentDue,
+  isPeriodKey,
+  isPeriodWithinSession,
+  parsePeriodKey,
+  periodKeyFromDate,
+} from "@/lib/fees/billing-period";
+import { findOrCreateTransportComponent } from "@/lib/fees/transport-component";
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100;
+
+/** Status of PaymentTransactions that move a student's own advance onto a new charge. */
+export const ADJUSTMENT_STATUS = "ADJUSTMENT";
+
+export interface BillingPeriodInput {
+  /** Billing month, "YYYY-MM". Duplicate generation is detected by this key. */
+  periodKey: string;
+  title: string;
+  dueDate: Date;
+}
+
+function createCuid(): string {
+  return (
+    "c" +
+    Date.now().toString(36) +
+    Math.random().toString(36).substring(2, 10) +
+    Math.random().toString(36).substring(2, 6)
+  );
+}
 
 export async function processClassFeeGeneration(
   schoolId: string,
   sessionId: string,
   classId: string,
-  monthTitle: string,
-  dueDate: Date,
+  period: BillingPeriodInput,
 ) {
+  const { periodKey, title, dueDate } = period;
+  const parsedPeriod = parsePeriodKey(periodKey);
+  if (!parsedPeriod) return { error: `Invalid billing month "${periodKey}"` };
+  if (isNaN(dueDate.getTime())) return { error: "Invalid due date" };
+
+  const periodStart = new Date(
+    Date.UTC(parsedPeriod.year, parsedPeriod.month - 1, 1),
+  );
+  const nextPeriodStart = new Date(
+    Date.UTC(parsedPeriod.year, parsedPeriod.month, 1),
+  );
+
   try {
-    // Find all active students in the class
+    const session = await prisma.academicSession.findFirst({
+      where: { id: sessionId, schoolId },
+      select: { id: true, name: true, startDate: true, endDate: true },
+    });
+    if (!session) return { error: "Academic session not found" };
+    if (!isPeriodWithinSession(periodKey, session.startDate, session.endDate)) {
+      return {
+        error: `${formatPeriodLabel(periodKey)} is outside the ${session.name} session`,
+      };
+    }
+
     const students = await prisma.student.findMany({
       where: { classId, schoolId, isActive: true },
+      select: { id: true },
     });
-
     if (students.length === 0)
       return { error: "No active students in this class" };
 
-    // B3: Select fee structure scoped to the academic session and active status
+    // B3: the structure must belong to this school and session, and be active.
     const classStructure = await prisma.classFeeStructure.findFirst({
       where: {
         classId,
-        structure: {
-          sessionId,
-          status: "ACTIVE",
-        },
+        structure: { schoolId, sessionId, status: "ACTIVE" },
       },
+      orderBy: { createdAt: "desc" },
       include: {
         structure: {
-          include: {
-            items: {
-              include: { component: true },
-            },
-          },
+          include: { items: { include: { component: true } } },
         },
       },
     });
-
     if (!classStructure)
       return {
         error:
-          "No active fee structure assigned to this class for the current session",
+          "No active fee structure assigned to this class for the selected session",
       };
 
-    // Fetch session for quarterly calculations
-    const session = await prisma.academicSession.findUnique({
-      where: { id: sessionId },
-      select: { id: true, startDate: true },
+    const studentIds = students.map((s) => s.id);
+    const transports = await prisma.studentTransport.findMany({
+      where: { studentId: { in: studentIds }, sessionId, status: "ACTIVE" },
+      select: { studentId: true, monthlyFee: true },
     });
-
-    const sessionStart = session?.startDate
-      ? new Date(session.startDate)
-      : new Date(dueDate.getFullYear(), 0, 1);
-    const monthsSinceStart =
-      (dueDate.getFullYear() - sessionStart.getFullYear()) * 12 +
-      (dueDate.getMonth() - sessionStart.getMonth());
-    // B1: Quarterly fees due every 3 months starting from session start
-    const isQuarterMonth = monthsSinceStart >= 0 && monthsSinceStart % 3 === 0;
-
-    // B2: Standard periodKey format: YYYY-MM based on dueDate
-    const periodKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, "0")}`;
+    // Resolved before the transaction: creating it can race on the unique name.
+    const transportComp = transports.some((t) => Number(t.monthlyFee) > 0)
+      ? await findOrCreateTransportComponent(schoolId)
+      : null;
 
     let generatedCount = 0;
+    let alreadyGenerated = 0;
 
     await prisma.$transaction(
       async (tx) => {
-        const studentIds = students.map((s) => s.id);
-
-        // B2: Batch find existing charges by periodKey or title
+        // B2: a charge for this month already exists if it carries the period
+        // key, or (for charges created before period keys) its due date falls
+        // in the month.
         const existingCharges = await tx.feeCharge.findMany({
           where: {
             studentId: { in: studentIds },
             sessionId,
-            OR: [{ periodKey }, { title: monthTitle }],
+            OR: [
+              { periodKey },
+              {
+                periodKey: null,
+                dueDate: { gte: periodStart, lt: nextPeriodStart },
+              },
+            ],
           },
           select: { studentId: true },
         });
         const existingStudentIds = new Set(
           existingCharges.map((c) => c.studentId),
         );
-        const eligibleStudents = students.filter(
-          (s) => !existingStudentIds.has(s.id),
+        alreadyGenerated = existingStudentIds.size;
+
+        const eligibleIds = studentIds.filter(
+          (id) => !existingStudentIds.has(id),
         );
+        if (eligibleIds.length === 0) return;
 
-        if (eligibleStudents.length === 0) return;
-
-        const eligibleIds = eligibleStudents.map((s) => s.id);
-
-        // Pre-fetch items billed in current session (for YEARLY frequency check)
-        // and lifetime billed items (for ONE_TIME frequency check)
-        const [
-          allOverrides,
-          allTransports,
-          allLedgers,
-          sessionBilledItems,
-          lifetimeBilledItems,
-        ] = await Promise.all([
+        const [overrides, ledgers] = await Promise.all([
           tx.studentFeeOverride.findMany({
             where: { studentId: { in: eligibleIds }, sessionId },
-          }),
-          tx.studentTransport.findMany({
-            where: {
-              studentId: { in: eligibleIds },
-              sessionId,
-              status: "ACTIVE",
-            },
           }),
           tx.advanceLedger.findMany({
             where: { studentId: { in: eligibleIds } },
           }),
-          tx.feeChargeItem.findMany({
-            where: {
-              charge: {
-                studentId: { in: eligibleIds },
-                sessionId,
-              },
-            },
-            select: {
-              componentId: true,
-              charge: { select: { studentId: true } },
-            },
-          }),
-          tx.feeChargeItem.findMany({
-            where: {
-              charge: {
-                studentId: { in: eligibleIds },
-              },
-            },
-            select: {
-              componentId: true,
-              charge: { select: { studentId: true } },
-            },
-          }),
         ]);
 
-        const studentSessionBilled = new Set<string>();
-        for (const item of sessionBilledItems) {
-          studentSessionBilled.add(
-            `${item.charge.studentId}:${item.componentId}`,
-          );
-        }
-
-        const studentLifetimeBilled = new Set<string>();
-        for (const item of lifetimeBilledItems) {
-          studentLifetimeBilled.add(
-            `${item.charge.studentId}:${item.componentId}`,
-          );
-        }
-
-        // Fetch any override components not in the class structure
-        const overrideCompIds = [
-          ...new Set(allOverrides.map((o) => o.componentId)),
-        ];
-        const overrideComponents = await tx.feeComponent.findMany({
-          where: { id: { in: overrideCompIds }, schoolId },
-        });
-        const overrideCompMap = new Map(
-          overrideComponents.map((c) => [c.id, c]),
+        // Components that may be billed: the structure's plus any extra
+        // components given to individual students through overrides.
+        const structureCompIds = new Set(
+          classStructure.structure.items.map((i) => i.componentId),
         );
+        const extraCompIds = [
+          ...new Set(
+            overrides
+              .map((o) => o.componentId)
+              .filter((id) => !structureCompIds.has(id)),
+          ),
+        ];
+        const extraComponents = await tx.feeComponent.findMany({
+          where: { id: { in: extraCompIds }, schoolId },
+        });
+        const frequencyByComp = new Map<string, string>();
+        for (const item of classStructure.structure.items) {
+          frequencyByComp.set(item.componentId, item.component.frequency);
+        }
+        for (const c of extraComponents) frequencyByComp.set(c.id, c.frequency);
+        if (transportComp) frequencyByComp.set(transportComp.id, "MONTHLY");
 
-        // Index pre-fetched data by studentId
-        const overridesByStudent = new Map<string, typeof allOverrides>();
-        for (const o of allOverrides) {
+        // B1: which billing buckets each student has already been charged
+        // for, per component. Session charges cover MONTHLY to YEARLY;
+        // ONE_TIME components count across every session.
+        const oneTimeCompIds = [...frequencyByComp.entries()]
+          .filter(([, f]) => f === "ONE_TIME")
+          .map(([id]) => id);
+        const [sessionItems, lifetimeOneTimeItems] = await Promise.all([
+          tx.feeChargeItem.findMany({
+            where: {
+              charge: { studentId: { in: eligibleIds }, sessionId },
+            },
+            select: {
+              componentId: true,
+              charge: {
+                select: { studentId: true, periodKey: true, dueDate: true },
+              },
+            },
+          }),
+          oneTimeCompIds.length > 0
+            ? tx.feeChargeItem.findMany({
+                where: {
+                  componentId: { in: oneTimeCompIds },
+                  charge: { studentId: { in: eligibleIds } },
+                },
+                select: {
+                  componentId: true,
+                  charge: { select: { studentId: true } },
+                },
+              })
+            : Promise.resolve([]),
+        ]);
+
+        const billed = new Map<string, Set<string>>();
+        const markBilled = (
+          studentId: string,
+          compId: string,
+          bucket: string,
+        ) => {
+          const key = `${studentId}:${compId}`;
+          if (!billed.has(key)) billed.set(key, new Set());
+          billed.get(key)!.add(bucket);
+        };
+        for (const item of sessionItems) {
+          const frequency = frequencyByComp.get(item.componentId);
+          if (!frequency) continue;
+          const chargePeriod = isPeriodKey(item.charge.periodKey)
+            ? item.charge.periodKey
+            : periodKeyFromDate(item.charge.dueDate);
+          const bucket = billingBucket(
+            frequency,
+            session.startDate,
+            chargePeriod,
+          );
+          if (bucket)
+            markBilled(item.charge.studentId, item.componentId, bucket);
+        }
+        for (const item of lifetimeOneTimeItems) {
+          markBilled(item.charge.studentId, item.componentId, "ONCE");
+        }
+        const isDue = (studentId: string, compId: string, frequency: string) =>
+          isComponentDue(
+            frequency,
+            session.startDate,
+            periodKey,
+            billed.get(`${studentId}:${compId}`) ?? new Set(),
+          );
+
+        const overridesByStudent = new Map<string, typeof overrides>();
+        for (const o of overrides) {
           if (!overridesByStudent.has(o.studentId))
             overridesByStudent.set(o.studentId, []);
           overridesByStudent.get(o.studentId)!.push(o);
         }
-
-        const transportByStudent = new Map<string, (typeof allTransports)[0]>();
-        for (const t of allTransports) {
-          transportByStudent.set(t.studentId, t);
-        }
-
-        const ledgersByStudent = new Map<string, typeof allLedgers>();
-        for (const l of allLedgers) {
+        const transportByStudent = new Map(
+          transports.map((t) => [t.studentId, t]),
+        );
+        const ledgersByStudent = new Map<string, typeof ledgers>();
+        for (const l of ledgers) {
           if (!ledgersByStudent.has(l.studentId))
             ledgersByStudent.set(l.studentId, []);
           ledgersByStudent.get(l.studentId)!.push(l);
         }
-
-        // Ensure Transport Fee component exists once (B11: uppercase "TRANSPORT")
-        let transportComp: any = null;
-        if (allTransports.some((t) => Number(t.monthlyFee) > 0)) {
-          transportComp = await tx.feeComponent.findFirst({
-            where: {
-              schoolId,
-              category: "TRANSPORT",
-            },
-          });
-          if (!transportComp) {
-            transportComp = await tx.feeComponent.create({
-              data: {
-                schoolId,
-                name: "Transport Fee",
-                description: "Distance-based monthly transport charge",
-                category: "TRANSPORT",
-                amount: 0,
-                frequency: "MONTHLY",
-                isOptional: true,
-                isActive: true,
-              },
-            });
-          }
-        }
+        const extraCompMap = new Map(extraComponents.map((c) => [c.id, c]));
 
         const chargesToCreate: any[] = [];
         const chargeItemsToCreate: any[] = [];
-        const pendingAdvancePayments: {
-          studentId: string;
-          totalAdjusted: number;
-          advancesToDeduct: {
-            componentId?: string;
-            amount: number;
-            chargeItemId: string;
-          }[];
-        }[] = [];
+        const paymentsToCreate: any[] = [];
+        const allocationsToCreate: any[] = [];
+        const advancesToCreate: any[] = [];
 
-        function createCuid(): string {
-          return (
-            "c" +
-            Date.now().toString(36) +
-            Math.random().toString(36).substring(2, 10) +
-            Math.random().toString(36).substring(2, 6)
-          );
-        }
-
-        for (const student of eligibleStudents) {
-          const overrides = overridesByStudent.get(student.id) || [];
+        for (const studentId of eligibleIds) {
+          const studentOverrides = overridesByStudent.get(studentId) || [];
           const rawItems: { componentId: string; amount: number }[] = [];
 
-          // Base components from structure
           for (const item of classStructure.structure.items) {
             const comp = item.component;
-            // B1: Skip inactive components
-            if (!comp || !comp.isActive) continue;
+            if (!comp.isActive) continue;
+            if (!isDue(studentId, comp.id, comp.frequency)) continue;
 
-            // B1: Frequency enforcement
-            if (comp.frequency === "QUARTERLY" && !isQuarterMonth) continue;
-            if (
-              comp.frequency === "YEARLY" &&
-              studentSessionBilled.has(`${student.id}:${comp.id}`)
-            )
-              continue;
-            if (
-              comp.frequency === "ONE_TIME" &&
-              studentLifetimeBilled.has(`${student.id}:${comp.id}`)
-            )
-              continue;
-
-            const override = overrides.find(
+            const override = studentOverrides.find(
               (o) => o.componentId === item.componentId,
             );
             if (override?.isExempt) continue;
 
-            let finalAmount =
+            let amount =
               override?.amount !== null && override?.amount !== undefined
                 ? Number(override.amount)
-                : Number(item.amount ?? item.component.amount);
-
+                : Number(item.amount ?? comp.amount);
             if (override?.discountAmount) {
-              finalAmount = Math.max(
-                0,
-                finalAmount - Number(override.discountAmount),
-              );
+              amount = Math.max(0, amount - Number(override.discountAmount));
             }
-
-            finalAmount = roundMoney(finalAmount);
-
-            if (finalAmount > 0) {
-              rawItems.push({
-                componentId: item.componentId,
-                amount: finalAmount,
-              });
-            }
+            amount = roundMoney(amount);
+            if (amount > 0) rawItems.push({ componentId: comp.id, amount });
           }
 
-          // Add optional components assigned to student via overrides but not in structure
-          for (const override of overrides) {
-            if (
-              override.amount &&
-              Number(override.amount) > 0 &&
-              !classStructure.structure.items.find(
-                (i) => i.componentId === override.componentId,
-              )
-            ) {
-              const comp = overrideCompMap.get(override.componentId);
-              if (!comp || !comp.isActive) continue;
-              if (comp.frequency === "QUARTERLY" && !isQuarterMonth) continue;
-              if (
-                comp.frequency === "YEARLY" &&
-                studentSessionBilled.has(`${student.id}:${comp.id}`)
-              )
-                continue;
-              if (
-                comp.frequency === "ONE_TIME" &&
-                studentLifetimeBilled.has(`${student.id}:${comp.id}`)
-              )
-                continue;
+          for (const override of studentOverrides) {
+            const comp = extraCompMap.get(override.componentId);
+            if (!comp || !comp.isActive || override.isExempt) continue;
+            if (!override.amount || Number(override.amount) <= 0) continue;
+            if (!isDue(studentId, comp.id, comp.frequency)) continue;
 
-              let finalAmount = Number(override.amount);
-              if (override.discountAmount) {
-                finalAmount = Math.max(
-                  0,
-                  finalAmount - Number(override.discountAmount),
-                );
-              }
-              finalAmount = roundMoney(finalAmount);
-
-              if (finalAmount > 0) {
-                rawItems.push({
-                  componentId: override.componentId,
-                  amount: finalAmount,
-                });
-              }
+            let amount = Number(override.amount);
+            if (override.discountAmount) {
+              amount = Math.max(0, amount - Number(override.discountAmount));
             }
+            amount = roundMoney(amount);
+            if (amount > 0) rawItems.push({ componentId: comp.id, amount });
           }
 
-          // Check transport (B1: Monthly transport fee)
-          const transport = transportByStudent.get(student.id);
-          if (transport && Number(transport.monthlyFee) > 0 && transportComp) {
-            if (!rawItems.some((i) => i.componentId === transportComp.id)) {
-              rawItems.push({
-                componentId: transportComp.id,
-                amount: roundMoney(Number(transport.monthlyFee)),
-              });
-            }
+          const transport = transportByStudent.get(studentId);
+          if (
+            transportComp &&
+            transport &&
+            Number(transport.monthlyFee) > 0 &&
+            !rawItems.some((i) => i.componentId === transportComp.id)
+          ) {
+            rawItems.push({
+              componentId: transportComp.id,
+              amount: roundMoney(Number(transport.monthlyFee)),
+            });
           }
 
           if (rawItems.length === 0) continue;
 
-          // Advance ledger balances
-          const ledgers = ledgersByStudent.get(student.id) || [];
-          let totalGeneralAdvance = 0;
+          // Advance balances: component-specific first, then general.
+          let generalAdvance = 0;
           const componentAdvances: Record<string, number> = {};
-
-          for (const l of ledgers) {
+          for (const l of ledgersByStudent.get(studentId) || []) {
             const amt = roundMoney(Number(l.amount));
             if (l.componentId) {
               componentAdvances[l.componentId] = roundMoney(
                 (componentAdvances[l.componentId] || 0) + amt,
               );
             } else {
-              totalGeneralAdvance = roundMoney(totalGeneralAdvance + amt);
+              generalAdvance = roundMoney(generalAdvance + amt);
             }
           }
 
-          const studentChargeItems: {
-            id: string;
-            componentId: string;
-            amount: number;
-            paidAmount: number;
-            status: FeeStatus;
-          }[] = [];
-          const studentDeductions: {
+          const chargeId = createCuid();
+          const itemStatuses: FeeStatus[] = [];
+          const deductions: {
             componentId?: string;
             amount: number;
             chargeItemId: string;
           }[] = [];
-          const chargeId = createCuid();
 
-          // Try to pay off components using advance balances
           for (const c of rawItems) {
-            let remainingDue = c.amount;
-            let paidAmount = 0;
             const chargeItemId = createCuid();
+            let remaining = c.amount;
+            let paid = 0;
 
-            // 1. Try component specific advance
-            if (
-              componentAdvances[c.componentId] &&
-              componentAdvances[c.componentId] > 0
-            ) {
-              const use = roundMoney(
-                Math.min(remainingDue, componentAdvances[c.componentId]),
-              );
-              componentAdvances[c.componentId] = roundMoney(
-                componentAdvances[c.componentId] - use,
-              );
-              remainingDue = roundMoney(remainingDue - use);
-              paidAmount = roundMoney(paidAmount + use);
-              studentDeductions.push({
+            const compAdvance = componentAdvances[c.componentId] || 0;
+            if (compAdvance > 0) {
+              const use = roundMoney(Math.min(remaining, compAdvance));
+              componentAdvances[c.componentId] = roundMoney(compAdvance - use);
+              remaining = roundMoney(remaining - use);
+              paid = roundMoney(paid + use);
+              deductions.push({
                 componentId: c.componentId,
                 amount: use,
                 chargeItemId,
               });
             }
-
-            // 2. Try general advance
-            if (remainingDue > 0 && totalGeneralAdvance > 0) {
-              const use = roundMoney(
-                Math.min(remainingDue, totalGeneralAdvance),
-              );
-              totalGeneralAdvance = roundMoney(totalGeneralAdvance - use);
-              remainingDue = roundMoney(remainingDue - use);
-              paidAmount = roundMoney(paidAmount + use);
-              studentDeductions.push({ amount: use, chargeItemId });
+            if (remaining > 0 && generalAdvance > 0) {
+              const use = roundMoney(Math.min(remaining, generalAdvance));
+              generalAdvance = roundMoney(generalAdvance - use);
+              remaining = roundMoney(remaining - use);
+              paid = roundMoney(paid + use);
+              deductions.push({ amount: use, chargeItemId });
             }
 
-            let itemStatus: FeeStatus = FeeStatus.PENDING;
-            if (paidAmount >= c.amount) itemStatus = FeeStatus.PAID;
-            else if (paidAmount > 0) itemStatus = FeeStatus.PARTIAL;
-
-            studentChargeItems.push({
-              id: chargeItemId,
-              componentId: c.componentId,
-              amount: c.amount,
-              paidAmount: paidAmount,
-              status: itemStatus,
-            });
-
+            const status =
+              paid >= c.amount
+                ? FeeStatus.PAID
+                : paid > 0
+                  ? FeeStatus.PARTIAL
+                  : FeeStatus.PENDING;
+            itemStatuses.push(status);
             chargeItemsToCreate.push({
               id: chargeItemId,
-              chargeId: chargeId,
+              chargeId,
               componentId: c.componentId,
               amount: c.amount,
-              paidAmount: paidAmount,
-              status: itemStatus,
+              paidAmount: paid,
+              status,
             });
           }
 
-          if (studentChargeItems.length > 0) {
-            let chargeStatus: FeeStatus = FeeStatus.PENDING;
-            if (studentChargeItems.every((i) => i.status === FeeStatus.PAID))
-              chargeStatus = FeeStatus.PAID;
-            else if (
-              studentChargeItems.some(
-                (i) =>
-                  i.status === FeeStatus.PAID || i.status === FeeStatus.PARTIAL,
-              )
+          let chargeStatus: FeeStatus = FeeStatus.PENDING;
+          if (itemStatuses.every((s) => s === FeeStatus.PAID))
+            chargeStatus = FeeStatus.PAID;
+          else if (
+            itemStatuses.some(
+              (s) => s === FeeStatus.PAID || s === FeeStatus.PARTIAL,
             )
-              chargeStatus = FeeStatus.PARTIAL;
+          )
+            chargeStatus = FeeStatus.PARTIAL;
 
-            chargesToCreate.push({
-              id: chargeId,
-              schoolId,
-              studentId: student.id,
-              sessionId,
-              title: monthTitle,
-              periodKey,
-              dueDate,
-              status: chargeStatus,
-            });
-
-            if (studentDeductions.length > 0) {
-              const totalAdjusted = roundMoney(
-                studentDeductions.reduce((sum, d) => sum + d.amount, 0),
-              );
-              pendingAdvancePayments.push({
-                studentId: student.id,
-                totalAdjusted,
-                advancesToDeduct: studentDeductions,
-              });
-            }
-
-            generatedCount++;
-          }
-        }
-
-        // B4: Generate atomic, sequential receipt numbers for advance settlements
-        const paymentsToCreate: any[] = [];
-        const allocationsToCreate: any[] = [];
-        const advancesToCreate: any[] = [];
-
-        if (pendingAdvancePayments.length > 0) {
-          const updatedSchool = await tx.school.update({
-            where: { id: schoolId },
-            data: {
-              nextReceiptNumber: { increment: pendingAdvancePayments.length },
-            },
-            select: { nextReceiptNumber: true, receiptPrefix: true },
+          chargesToCreate.push({
+            id: chargeId,
+            schoolId,
+            studentId,
+            sessionId,
+            title,
+            periodKey,
+            dueDate,
+            status: chargeStatus,
           });
 
-          const prefix = updatedSchool.receiptPrefix || "RCP";
-          const startSeq =
-            updatedSchool.nextReceiptNumber - pendingAdvancePayments.length;
-          const currentYear = new Date().getFullYear();
-
-          for (let i = 0; i < pendingAdvancePayments.length; i++) {
-            const item = pendingAdvancePayments[i];
-            const seq = startSeq + i;
-            const receiptNo = `${prefix}-${currentYear}-${String(seq).padStart(5, "0")}`;
+          if (deductions.length > 0) {
+            // Moving a student's own advance onto this charge is not new
+            // money: record it as an ADJUSTMENT so revenue reports don't
+            // count the original payment twice. It gets no receipt number.
             const paymentId = createCuid();
-
             paymentsToCreate.push({
               id: paymentId,
               schoolId,
-              studentId: item.studentId,
-              amount: item.totalAdjusted,
+              studentId,
+              amount: roundMoney(deductions.reduce((s, d) => s + d.amount, 0)),
               method: "OTHER",
-              reference: `Advance settlement for ${monthTitle}`,
-              receiptNo,
-              remarks: `Auto-settled from student advance balance for ${monthTitle}`,
-              status: "SUCCESS",
+              reference: `Advance settlement for ${title}`,
+              receiptNo: `ADJ-${chargeId}`,
+              remarks: `Auto-settled from student advance balance for ${title}`,
+              status: ADJUSTMENT_STATUS,
             });
-
-            for (const deduction of item.advancesToDeduct) {
+            for (const d of deductions) {
               allocationsToCreate.push({
                 id: createCuid(),
-                paymentId: paymentId,
-                chargeItemId: deduction.chargeItemId,
-                amount: deduction.amount,
+                paymentId,
+                chargeItemId: d.chargeItemId,
+                amount: d.amount,
               });
-
               advancesToCreate.push({
                 id: createCuid(),
-                studentId: item.studentId,
-                componentId: deduction.componentId || null,
-                amount: -deduction.amount,
-                description: `Auto-adjusted against generated fee: ${monthTitle}`,
+                studentId,
+                componentId: d.componentId || null,
+                amount: -d.amount,
+                description: `Auto-adjusted against generated fee: ${title}`,
               });
             }
           }
+
+          generatedCount++;
         }
 
-        // Execute bulk writes
         if (chargesToCreate.length > 0) {
           await tx.feeCharge.createMany({ data: chargesToCreate });
           await tx.feeChargeItem.createMany({ data: chargeItemsToCreate });
         }
-
         if (paymentsToCreate.length > 0) {
           await tx.paymentTransaction.createMany({ data: paymentsToCreate });
         }
-
         if (allocationsToCreate.length > 0) {
           await tx.paymentAllocation.createMany({ data: allocationsToCreate });
         }
-
         if (advancesToCreate.length > 0) {
           await tx.advanceLedger.createMany({ data: advancesToCreate });
         }
@@ -536,8 +444,13 @@ export async function processClassFeeGeneration(
       { maxWait: 10000, timeout: 60000 },
     );
 
-    return { success: true, generatedCount };
+    return { success: true, generatedCount, alreadyGenerated };
   } catch (e: any) {
-    return { error: e.message };
+    if (e?.code === "P2002") {
+      return {
+        error: `Fees for ${formatPeriodLabel(periodKey)} were generated for some of these students at the same time by another run. Refresh and try again.`,
+      };
+    }
+    return { error: e?.message || "Fee generation failed" };
   }
 }

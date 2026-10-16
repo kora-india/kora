@@ -12,6 +12,8 @@ interface ConfirmDialogProps {
   onConfirm: () => Promise<void>;
   confirmLabel?: string;
   variant?: "danger" | "default";
+  /** Extra content shown under the description, e.g. an option checkbox. */
+  children?: React.ReactNode;
 }
 
 export function ConfirmDialog({
@@ -22,6 +24,7 @@ export function ConfirmDialog({
   onConfirm,
   confirmLabel = "Confirm",
   variant = "danger",
+  children,
 }: ConfirmDialogProps) {
   const [loading, setLoading] = useState(false);
 
@@ -36,9 +39,15 @@ export function ConfirmDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={title} className="max-w-sm">
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      className="max-w-sm"
+    >
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">{description}</p>
+        {children}
         <div className="flex gap-2 justify-end">
           <button
             onClick={() => onOpenChange(false)}

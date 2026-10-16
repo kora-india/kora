@@ -8,11 +8,23 @@ import {
   vi,
 } from "vitest";
 import nodemailer from "nodemailer";
+import crypto from "crypto";
 import { POST } from "../route";
 import { prisma } from "@schoolos/db";
 
 const testEmail =
   "send-otp-" + Math.random().toString(36).substring(7) + "@example.com";
+
+/** The code in the most recent OTP email the route sent. */
+function lastEmailedCode(): string {
+  const { sendMail } = nodemailer.createTransport({} as any);
+  const calls = vi.mocked(sendMail).mock.calls;
+  const html = String((calls[calls.length - 1]?.[0] as any)?.html ?? "");
+  return html.match(/>(\d{6})</)?.[1] ?? "";
+}
+
+const sha256 = (value: string) =>
+  crypto.createHash("sha256").update(value).digest("hex");
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/auth/send-otp", {
@@ -52,7 +64,10 @@ describe("POST /api/auth/send-otp", () => {
       orderBy: { createdAt: "desc" },
     });
     expect(otpRow).toBeDefined();
-    expect(otpRow!.otp).toMatch(/^\d{6}$/);
+    // Only a hash of the code is stored; the emailed code must match it.
+    const code = lastEmailedCode();
+    expect(code).toMatch(/^\d{6}$/);
+    expect(otpRow!.otp).toBe(sha256(code));
 
     const expiresInMs = otpRow!.expiresAt.getTime() - before;
     expect(expiresInMs).toBeGreaterThan(9 * 60 * 1000);
@@ -61,7 +76,7 @@ describe("POST /api/auth/send-otp", () => {
     expect(nodemailer.createTransport).toHaveBeenCalled();
   });
 
-  it("rejects when the email already belongs to a registered user", async () => {
+  it("doesn't reveal or email an address that is already registered", async () => {
     await prisma.user.create({
       data: {
         email: testEmail,
@@ -74,8 +89,13 @@ describe("POST /api/auth/send-otp", () => {
     const res = await POST(makeRequest({ email: testEmail }));
     const body = await res.json();
 
-    expect(res.status).toBe(400);
-    expect(body.error).toMatch(/already registered/i);
+    // Same reply as for a new address, so the endpoint can't be used to
+    // discover accounts, but no code is stored or sent.
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(await prisma.otp.count({ where: { email: testEmail } })).toBe(0);
+    const { sendMail } = nodemailer.createTransport({} as any);
+    expect(sendMail).not.toHaveBeenCalled();
 
     await prisma.user.deleteMany({ where: { email: testEmail } });
   });

@@ -4,6 +4,8 @@ import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
 import { invalidateFeesCache } from "@/lib/redis";
+import { formatPeriodLabel } from "@/lib/fees/billing-period";
+import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
 import crypto from "crypto";
 
 const cronLogger = createLogger("cron-generate-fees");
@@ -37,34 +39,24 @@ export async function GET(request: Request) {
     // Get all active schools with autoFeeGeneration enabled
     const schools = await prisma.school.findMany({
       where: { isActive: true, autoFeeGeneration: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, timezone: true },
     });
 
     let totalGenerated = 0;
     const results = [];
-
-    // Calculate current month strings (e.g. "October 2026")
     const now = new Date();
-    const monthNames = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
-    const monthTitle = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
-
-    // Default due date to the 10th of the current month
-    const dueDate = new Date(now.getFullYear(), now.getMonth(), 10);
 
     for (const school of schools) {
+      // The billing month is the current month in the school's own time zone;
+      // the charge is due on the 10th of it.
+      const periodKey = calendarDateInTimeZone(
+        resolveTimeZone(school.timezone),
+        now,
+      ).slice(0, 7);
+      const [year, month] = periodKey.split("-").map(Number);
+      const title = formatPeriodLabel(periodKey);
+      const dueDate = new Date(Date.UTC(year, month - 1, 10));
+
       // Find the current active session for the school
       const currentSession = await prisma.academicSession.findFirst({
         where: { schoolId: school.id, isCurrent: true },
@@ -75,23 +67,25 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // Get all active classes
       const classes = await prisma.class.findMany({
         where: { schoolId: school.id },
+        select: { id: true, name: true },
       });
 
       let schoolGeneratedCount = 0;
+      const classErrors: { className: string; error: string }[] = [];
 
       for (const cls of classes) {
         const res = await processClassFeeGeneration(
           school.id,
           currentSession.id,
           cls.id,
-          monthTitle,
-          dueDate,
+          { periodKey, title, dueDate },
         );
 
-        if (res.success && res.generatedCount) {
+        if (res.error) {
+          classErrors.push({ className: cls.name, error: res.error });
+        } else if (res.generatedCount) {
           schoolGeneratedCount += res.generatedCount;
           totalGenerated += res.generatedCount;
         }
@@ -101,13 +95,17 @@ export async function GET(request: Request) {
         await invalidateFeesCache(school.id);
       }
 
-      results.push({ school: school.name, generated: schoolGeneratedCount });
+      results.push({
+        school: school.name,
+        month: periodKey,
+        generated: schoolGeneratedCount,
+        ...(classErrors.length > 0 ? { classErrors } : {}),
+      });
     }
 
     const durationMs = Math.round(performance.now() - start);
     cronLogger.info(
       {
-        month: monthTitle,
         schoolsCount: schools.length,
         totalChargesGenerated: totalGenerated,
         durationMs,
@@ -117,7 +115,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      month: monthTitle,
       totalChargesGenerated: totalGenerated,
       details: results,
       durationMs,

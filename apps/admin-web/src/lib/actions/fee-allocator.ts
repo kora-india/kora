@@ -1,21 +1,36 @@
 "use server";
 
 import { z } from "zod";
-import { auth } from "@schoolos/auth";
-import { prisma, FeeStatus, PaymentMethod } from "@schoolos/db";
+import { prisma, FeeStatus, PaymentMethod, type Prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache, invalidateCache } from "@/lib/redis";
+import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { allocateReceiptNumber } from "@/lib/fees/receipt-number";
+import { recomputeChargeStatus } from "@/lib/fees/charge-status";
+import { waiveChargeItemInTx } from "@/lib/fees/waive";
+import {
+  formatDateTimeInTimeZone,
+  resolveTimeZone,
+  todayInTimeZone,
+} from "@/lib/fees/timezone";
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
 async function getFinanceSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role))
-    return null;
-  return { ...user, schoolId: user.schoolId };
+  const guard = await requireActiveSchoolSession([
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "ACCOUNTANT",
+  ]);
+  if ("error" in guard) return null;
+  return guard;
+}
+
+function isIdempotencyConflict(e: any): boolean {
+  return (
+    e?.code === "P2002" &&
+    JSON.stringify(e?.meta?.target ?? "").includes("idempotencyKey")
+  );
 }
 
 export interface FeeReceiptItem {
@@ -173,11 +188,14 @@ export async function allocatePayment(rawInput: {
         },
       });
       if (existing) {
-        const receiptRes = await getFeeReceiptDetails(existing.receiptNo);
         return {
           success: true,
           receiptNo: existing.receiptNo,
-          receiptData: receiptRes.data,
+          receiptData: await buildReceiptData(
+            prisma,
+            { id: existing.id },
+            user.name,
+          ),
         };
       }
     }
@@ -192,6 +210,8 @@ export async function allocatePayment(rawInput: {
         timezone: true,
       },
     });
+    const timeZone = resolveTimeZone(school?.timezone);
+    const today = todayInTimeZone(timeZone);
 
     const feePaymentMode = school?.feePaymentMode || "ALLOW_PARTIAL";
     const minPartialPaymentPercentage = Number(
@@ -211,15 +231,14 @@ export async function allocatePayment(rawInput: {
           throw new Error("Student not found in your school");
         }
 
-        // B4: Atomic sequential receipt numbering per school
-        const updatedSchool = await tx.school.update({
-          where: { id: user.schoolId },
-          data: { nextReceiptNumber: { increment: 1 } },
-          select: { nextReceiptNumber: true, receiptPrefix: true },
-        });
-        const prefix = updatedSchool.receiptPrefix || "RCP";
-        const seq = updatedSchool.nextReceiptNumber - 1;
-        const receiptNo = `${prefix}-${new Date().getFullYear()}-${String(seq).padStart(5, "0")}`;
+        // B4/B5: sequential per-school receipt number. This also locks the
+        // school row until commit, so concurrent payments for the school run
+        // one at a time and the balance reads below are never stale.
+        const receiptNo = await allocateReceiptNumber(
+          tx,
+          user.schoolId,
+          timeZone,
+        );
 
         // 1. Create Payment Transaction
         const payment = await tx.paymentTransaction.create({
@@ -609,42 +628,27 @@ export async function allocatePayment(rawInput: {
           });
         }
 
-        // 7. Update Parent Charge Statuses
+        // 7. Update parent charge statuses
         for (const chargeId of Array.from(affectedChargeIds)) {
-          const items = await tx.feeChargeItem.findMany({
-            where: { chargeId },
-          });
-
-          let allPaid = true;
-          let anyPaid = false;
-
-          for (const item of items) {
-            if (
-              item.status !== FeeStatus.PAID &&
-              item.status !== FeeStatus.WAIVED
-            )
-              allPaid = false;
-            if (
-              item.status === FeeStatus.PAID ||
-              item.status === FeeStatus.PARTIAL
-            )
-              anyPaid = true;
-          }
-
-          let newChargeStatus: FeeStatus = FeeStatus.PENDING;
-          if (allPaid) newChargeStatus = FeeStatus.PAID;
-          else if (anyPaid) newChargeStatus = FeeStatus.PARTIAL;
-
-          await tx.feeCharge.update({
-            where: { id: chargeId },
-            data: { status: newChargeStatus },
-          });
+          await recomputeChargeStatus(tx, chargeId, today);
         }
+
+        // B12: freeze the receipt as of this payment so reprints never change
+        const receiptData = await buildReceiptData(
+          tx,
+          { id: payment.id },
+          user.name,
+        );
+        await tx.paymentTransaction.update({
+          where: { id: payment.id },
+          data: { receiptSnapshot: receiptData as any },
+        });
 
         return {
           paymentId: payment.id,
           receiptNo,
           allocations: allocationsCreated,
+          receiptData,
         };
       },
       { maxWait: 10000, timeout: 30000 },
@@ -660,18 +664,350 @@ export async function allocatePayment(rawInput: {
       ),
     ]);
 
-    // B12: Fetch and snapshot receipt data
-    const receiptRes = await getFeeReceiptDetails(result.receiptNo);
-
     return {
       success: true,
       receiptNo: result.receiptNo,
       allocations: result.allocations,
-      receiptData: receiptRes.data,
+      receiptData: result.receiptData,
     };
   } catch (e: any) {
+    // A concurrent submit with the same key won the race: return its receipt.
+    if (data.idempotencyKey && isIdempotencyConflict(e)) {
+      const existing = await prisma.paymentTransaction.findUnique({
+        where: {
+          schoolId_idempotencyKey: {
+            schoolId: user.schoolId,
+            idempotencyKey: data.idempotencyKey,
+          },
+        },
+      });
+      if (existing) {
+        return {
+          success: true,
+          receiptNo: existing.receiptNo,
+          receiptData: await buildReceiptData(
+            prisma,
+            { id: existing.id },
+            user.name,
+          ),
+        };
+      }
+    }
     return { error: e.message };
   }
+}
+
+/**
+ * Builds a payment's receipt from the current state of its charges. Called
+ * inside the payment transaction to produce the stored snapshot, and as a
+ * fallback for receipts issued before snapshots existed.
+ */
+async function buildReceiptData(
+  db: Prisma.TransactionClient,
+  where: { id: string },
+  generatedByName?: string | null,
+): Promise<FeeReceiptData> {
+  const payment = await db.paymentTransaction.findUniqueOrThrow({
+    where,
+    include: {
+      school: true,
+      student: {
+        include: {
+          class: true,
+          section: true,
+        },
+      },
+      allocations: {
+        include: {
+          chargeItem: {
+            include: {
+              component: true,
+              charge: {
+                include: {
+                  items: {
+                    include: { component: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const school = payment.school;
+  const addressParts = [
+    school.address,
+    school.city,
+    school.state,
+    school.pincode,
+  ].filter(Boolean);
+  const schoolAddress = addressParts.join(", ") || "School Campus";
+  const contactParts = [school.email, school.phone].filter(Boolean);
+  const schoolContact = contactParts.join(" | ") || "";
+
+  const student = payment.student;
+  const regNo = student.admissionNumber || student.rollNumber || "N/A";
+  const className = `${student.class?.name || "NUR"}-${student.section?.name || "None"}`;
+
+  // B12: show the time in the school's time zone, not the server's
+  const timestamp = formatDateTimeInTimeZone(
+    new Date(payment.createdAt || payment.date),
+    school.timezone,
+  );
+
+  const monthsSet = new Set<string>();
+  const chargesMap = new Map<string, any>();
+
+  for (const alloc of payment.allocations) {
+    const charge = alloc.chargeItem?.charge;
+    if (charge) {
+      monthsSet.add(charge.title);
+      if (!chargesMap.has(charge.id)) {
+        chargesMap.set(charge.id, charge);
+      }
+    }
+  }
+
+  const monthCount =
+    chargesMap.size > 0
+      ? chargesMap.size
+      : monthsSet.size > 0
+        ? monthsSet.size
+        : 1;
+
+  // Helper to detect late fee components
+  const isLateFeeComp = (item: any) =>
+    item?.component?.category === "LATE_FEE" ||
+    item?.component?.name?.toLowerCase().includes("late");
+
+  // Extract actual 1-month rate/price for each unique component
+  const regularHeadMap = new Map<string, number>();
+  let totalLateFeeAcrossCharges = 0;
+  let singleLateFeeRate = 0;
+
+  if (chargesMap.size > 0) {
+    chargesMap.forEach((charge) => {
+      charge.items?.forEach((it: any) => {
+        if (it.status === FeeStatus.WAIVED) return;
+        const compName = it.component?.name || "Fee";
+        const compAmount = Number(it.amount || 0);
+
+        if (isLateFeeComp(it)) {
+          totalLateFeeAcrossCharges += compAmount;
+          if (singleLateFeeRate === 0 && compAmount > 0) {
+            singleLateFeeRate = compAmount;
+          }
+        } else {
+          if (!regularHeadMap.has(compName) && compAmount > 0) {
+            regularHeadMap.set(compName, compAmount);
+          }
+        }
+      });
+    });
+  }
+
+  // Fallback: If no charge structure linked, inspect allocations
+  if (regularHeadMap.size === 0) {
+    for (const alloc of payment.allocations) {
+      const item = alloc.chargeItem;
+      const compName = item?.component?.name || "Fee";
+      const compAmount = Number(item?.amount || alloc.amount || 0);
+
+      if (isLateFeeComp(item)) {
+        totalLateFeeAcrossCharges += Number(alloc.amount || 0);
+        if (singleLateFeeRate === 0) singleLateFeeRate = compAmount;
+      } else {
+        if (!regularHeadMap.has(compName) && compAmount > 0) {
+          regularHeadMap.set(compName, compAmount);
+        }
+      }
+    }
+  }
+
+  const items: FeeReceiptItem[] = [];
+  regularHeadMap.forEach((oneMonthAmt, head) => {
+    items.push({
+      head,
+      amount: oneMonthAmt,
+    });
+  });
+
+  if (totalLateFeeAcrossCharges > 0) {
+    items.push({
+      head: "Late Fine / Overdue Penalty",
+      amount:
+        singleLateFeeRate > 0 ? singleLateFeeRate : totalLateFeeAcrossCharges,
+    });
+  }
+
+  const txAmount = Number(payment.amount || 0);
+  if (items.length === 0 && txAmount > 0) {
+    items.push({
+      head: "Fee Payment",
+      amount: txAmount,
+    });
+  }
+
+  const monthsList = Array.from(monthsSet);
+  let paidForMonths = "General Account";
+  if (monthsList.length === 1) {
+    paidForMonths = monthsList[0];
+  } else if (monthsList.length > 1) {
+    paidForMonths = `${monthsList[0]} - ${monthsList[monthsList.length - 1]} (${monthsList.length} Months)`;
+  }
+
+  const methodStr = (payment.method || "CASH").replace(/_/g, " ");
+  const paymentType = payment.reference
+    ? `${methodStr} (${payment.reference})`
+    : methodStr;
+
+  const generatedBy = generatedByName || "School Administration";
+
+  // Determine if this payment leaves dues or clears the month
+  let monthTotalBilled = 0;
+  let monthTotalPaid = 0;
+  let monthRemainingDue = 0;
+  let isPartial = false;
+
+  if (chargesMap.size > 0) {
+    chargesMap.forEach((charge) => {
+      let chargeBilled = 0;
+      let chargePaid = 0;
+      charge.items?.forEach((it: any) => {
+        if (it.status !== FeeStatus.WAIVED) {
+          const amt = Number(it.amount || 0);
+          const pd = Number(it.paidAmount || 0);
+          chargeBilled += amt;
+          chargePaid += pd;
+        }
+      });
+      monthTotalBilled += chargeBilled;
+      monthTotalPaid += chargePaid;
+      const due = Math.max(0, chargeBilled - chargePaid);
+      monthRemainingDue += due;
+      if (due > 0 || charge.status !== FeeStatus.PAID) {
+        isPartial = true;
+      }
+    });
+  }
+
+  // Build granular month-by-month allocation breakdown
+  const monthAllocations: FeeReceiptMonthAllocation[] = [];
+  let outstandingBefore = 0;
+
+  const sortedCharges = Array.from(chargesMap.values()).sort(
+    (a: any, b: any) =>
+      new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+  );
+
+  sortedCharges.forEach((charge: any) => {
+    let feeDue = 0;
+    let totalPaidSoFar = 0;
+
+    charge.items?.forEach((it: any) => {
+      if (it.status !== FeeStatus.WAIVED) {
+        feeDue += Number(it.amount || 0);
+        totalPaidSoFar += Number(it.paidAmount || 0);
+      }
+    });
+
+    const paidNow = payment.allocations
+      .filter((a: any) => a.chargeItem?.chargeId === charge.id)
+      .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0);
+
+    const previouslyPaid = Math.max(0, totalPaidSoFar - paidNow);
+    const balanceDue = Math.max(0, feeDue - totalPaidSoFar);
+    const status: "PAID" | "PARTIALLY PAID" | "UNPAID" =
+      balanceDue <= 0
+        ? "PAID"
+        : previouslyPaid + paidNow > 0
+          ? "PARTIALLY PAID"
+          : "UNPAID";
+    const coveragePercent =
+      feeDue > 0
+        ? Math.round(((previouslyPaid + paidNow) / feeDue) * 100)
+        : 100;
+
+    outstandingBefore += feeDue - previouslyPaid;
+
+    monthAllocations.push({
+      chargeId: charge.id,
+      month: charge.title,
+      dueDate: charge.dueDate,
+      feeDue,
+      previouslyPaid,
+      paidNow,
+      balanceDue,
+      status,
+      coveragePercent,
+    });
+  });
+
+  const totalAllocatedToCharges = monthAllocations.reduce(
+    (sum, m) => sum + m.paidNow,
+    0,
+  );
+  const advanceSurplus = Math.max(0, txAmount - totalAllocatedToCharges);
+  if (advanceSurplus > 0) {
+    monthAllocations.push({
+      chargeId: "advance-deposit",
+      month: "Advance / Prepaid Balance Deposit",
+      feeDue: advanceSurplus,
+      previouslyPaid: 0,
+      paidNow: advanceSurplus,
+      balanceDue: 0,
+      status: "PAID",
+      coveragePercent: 100,
+    });
+  }
+
+  if (outstandingBefore === 0) {
+    outstandingBefore = txAmount;
+  }
+
+  const remainingOutstanding = Math.max(0, outstandingBefore - txAmount);
+  const paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT" =
+    remainingOutstanding <= 0 ? "PAID_IN_FULL" : "PARTIAL_PAYMENT";
+  const paymentStatusText =
+    remainingOutstanding <= 0
+      ? "PAID IN FULL"
+      : `PARTIAL PAYMENT — ₹${remainingOutstanding.toLocaleString("en-IN")} DUE`;
+
+  const documentType = isPartial ? "PARTIAL_INVOICE" : "OFFICIAL_RECEIPT";
+
+  const data: FeeReceiptData = {
+    schoolName: school?.name || "School",
+    schoolAddress,
+    schoolContact,
+    timestamp,
+    receiptNo: payment.receiptNo,
+    regNo,
+    rollNumber: student.rollNumber || "-",
+    studentName: student.name,
+    className,
+    items,
+    total: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
+    amountPaid: txAmount,
+    paidForMonths,
+    paymentType,
+    generatedBy,
+    isPartial,
+    documentType,
+    monthTotalBilled: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
+    monthTotalPaid: monthTotalPaid > 0 ? monthTotalPaid : txAmount,
+    monthRemainingDue: remainingOutstanding,
+    outstandingBefore,
+    remainingOutstanding,
+    paymentStatus,
+    paymentStatusText,
+    monthAllocations,
+    monthCount,
+    lateFeeTotal: totalLateFeeAcrossCharges,
+  };
+
+  return data;
 }
 
 export async function getFeeReceiptDetails(
@@ -683,36 +1019,11 @@ export async function getFeeReceiptDetails(
   try {
     const payment = await prisma.paymentTransaction.findFirst({
       where: { receiptNo, schoolId: user.schoolId },
-      include: {
-        school: true,
-        student: {
-          include: {
-            class: true,
-            section: true,
-          },
-        },
-        allocations: {
-          include: {
-            chargeItem: {
-              include: {
-                component: true,
-                charge: {
-                  include: {
-                    items: {
-                      include: { component: true },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      select: { id: true, receiptSnapshot: true },
     });
-
     if (!payment) return { success: false, error: "Receipt not found" };
 
-    // B12: If snapshot already exists, return immutable snapshot
+    // B12: receipts are frozen at payment time
     if (payment.receiptSnapshot) {
       return {
         success: true,
@@ -720,292 +1031,12 @@ export async function getFeeReceiptDetails(
       };
     }
 
-    const school = payment.school;
-    const addressParts = [
-      school.address,
-      school.city,
-      school.state,
-      school.pincode,
-    ].filter(Boolean);
-    const schoolAddress = addressParts.join(", ") || "School Campus";
-    const contactParts = [school.email, school.phone].filter(Boolean);
-    const schoolContact = contactParts.join(" | ") || "";
-
-    const student = payment.student;
-    const regNo = student.admissionNumber || student.rollNumber || "N/A";
-    const className = `${student.class?.name || "NUR"}-${student.section?.name || "None"}`;
-
-    // B12: Format timestamps in school timezone
-    const schoolTimezone = school.timezone || "Asia/Kolkata";
-    const dateObj = new Date(payment.createdAt || payment.date);
-    const timestamp = dateObj.toLocaleString("en-US", {
-      timeZone: schoolTimezone,
-      month: "numeric",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-
-    const monthsSet = new Set<string>();
-    const chargesMap = new Map<string, any>();
-
-    for (const alloc of payment.allocations) {
-      const charge = alloc.chargeItem?.charge;
-      if (charge) {
-        monthsSet.add(charge.title);
-        if (!chargesMap.has(charge.id)) {
-          chargesMap.set(charge.id, charge);
-        }
-      }
-    }
-
-    const monthCount =
-      chargesMap.size > 0
-        ? chargesMap.size
-        : monthsSet.size > 0
-          ? monthsSet.size
-          : 1;
-
-    // Helper to detect late fee components
-    const isLateFeeComp = (item: any) =>
-      item?.component?.category === "LATE_FEE" ||
-      item?.component?.name?.toLowerCase().includes("late");
-
-    // Extract actual 1-month rate/price for each unique component
-    const regularHeadMap = new Map<string, number>();
-    let totalLateFeeAcrossCharges = 0;
-    let singleLateFeeRate = 0;
-
-    if (chargesMap.size > 0) {
-      chargesMap.forEach((charge) => {
-        charge.items?.forEach((it: any) => {
-          if (it.status === FeeStatus.WAIVED) return;
-          const compName = it.component?.name || "Fee";
-          const compAmount = Number(it.amount || 0);
-
-          if (isLateFeeComp(it)) {
-            totalLateFeeAcrossCharges += compAmount;
-            if (singleLateFeeRate === 0 && compAmount > 0) {
-              singleLateFeeRate = compAmount;
-            }
-          } else {
-            if (!regularHeadMap.has(compName) && compAmount > 0) {
-              regularHeadMap.set(compName, compAmount);
-            }
-          }
-        });
-      });
-    }
-
-    // Fallback: If no charge structure linked, inspect allocations
-    if (regularHeadMap.size === 0) {
-      for (const alloc of payment.allocations) {
-        const item = alloc.chargeItem;
-        const compName = item?.component?.name || "Fee";
-        const compAmount = Number(item?.amount || alloc.amount || 0);
-
-        if (isLateFeeComp(item)) {
-          totalLateFeeAcrossCharges += Number(alloc.amount || 0);
-          if (singleLateFeeRate === 0) singleLateFeeRate = compAmount;
-        } else {
-          if (!regularHeadMap.has(compName) && compAmount > 0) {
-            regularHeadMap.set(compName, compAmount);
-          }
-        }
-      }
-    }
-
-    const items: FeeReceiptItem[] = [];
-    regularHeadMap.forEach((oneMonthAmt, head) => {
-      items.push({
-        head,
-        amount: oneMonthAmt,
-      });
-    });
-
-    if (totalLateFeeAcrossCharges > 0) {
-      items.push({
-        head: "Late Fine / Overdue Penalty",
-        amount:
-          singleLateFeeRate > 0 ? singleLateFeeRate : totalLateFeeAcrossCharges,
-      });
-    }
-
-    const txAmount = Number(payment.amount || 0);
-    if (items.length === 0 && txAmount > 0) {
-      items.push({
-        head: "Fee Payment",
-        amount: txAmount,
-      });
-    }
-
-    const monthsList = Array.from(monthsSet);
-    let paidForMonths = "General Account";
-    if (monthsList.length === 1) {
-      paidForMonths = `${monthsList[0]} - ${monthsList[0]}`;
-    } else if (monthsList.length > 1) {
-      paidForMonths = `${monthsList[0]} - ${monthsList[monthsList.length - 1]} (${monthsList.length} Months)`;
-    }
-
-    const methodStr = (payment.method || "CASH").replace(/_/g, " ");
-    const paymentType = payment.reference
-      ? `${methodStr} (${payment.reference})`
-      : methodStr;
-
-    const generatedBy = user.name || "School Administration";
-
-    // Determine if this payment leaves dues or clears the month
-    let monthTotalBilled = 0;
-    let monthTotalPaid = 0;
-    let monthRemainingDue = 0;
-    let isPartial = false;
-
-    if (chargesMap.size > 0) {
-      chargesMap.forEach((charge) => {
-        let chargeBilled = 0;
-        let chargePaid = 0;
-        charge.items?.forEach((it: any) => {
-          if (it.status !== FeeStatus.WAIVED) {
-            const amt = Number(it.amount || 0);
-            const pd = Number(it.paidAmount || 0);
-            chargeBilled += amt;
-            chargePaid += pd;
-          }
-        });
-        monthTotalBilled += chargeBilled;
-        monthTotalPaid += chargePaid;
-        const due = Math.max(0, chargeBilled - chargePaid);
-        monthRemainingDue += due;
-        if (due > 0 || charge.status !== FeeStatus.PAID) {
-          isPartial = true;
-        }
-      });
-    }
-
-    // Build granular month-by-month allocation breakdown
-    const monthAllocations: FeeReceiptMonthAllocation[] = [];
-    let outstandingBefore = 0;
-
-    const sortedCharges = Array.from(chargesMap.values()).sort(
-      (a: any, b: any) =>
-        new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
-    );
-
-    sortedCharges.forEach((charge: any) => {
-      let feeDue = 0;
-      let totalPaidSoFar = 0;
-
-      charge.items?.forEach((it: any) => {
-        if (it.status !== FeeStatus.WAIVED) {
-          feeDue += Number(it.amount || 0);
-          totalPaidSoFar += Number(it.paidAmount || 0);
-        }
-      });
-
-      const paidNow = payment.allocations
-        .filter((a: any) => a.chargeItem?.chargeId === charge.id)
-        .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0);
-
-      const previouslyPaid = Math.max(0, totalPaidSoFar - paidNow);
-      const balanceDue = Math.max(0, feeDue - totalPaidSoFar);
-      const status: "PAID" | "PARTIALLY PAID" | "UNPAID" =
-        balanceDue <= 0
-          ? "PAID"
-          : previouslyPaid + paidNow > 0
-            ? "PARTIALLY PAID"
-            : "UNPAID";
-      const coveragePercent =
-        feeDue > 0
-          ? Math.round(((previouslyPaid + paidNow) / feeDue) * 100)
-          : 100;
-
-      outstandingBefore += feeDue - previouslyPaid;
-
-      monthAllocations.push({
-        chargeId: charge.id,
-        month: charge.title,
-        dueDate: charge.dueDate,
-        feeDue,
-        previouslyPaid,
-        paidNow,
-        balanceDue,
-        status,
-        coveragePercent,
-      });
-    });
-
-    const totalAllocatedToCharges = monthAllocations.reduce(
-      (sum, m) => sum + m.paidNow,
-      0,
-    );
-    const advanceSurplus = Math.max(0, txAmount - totalAllocatedToCharges);
-    if (advanceSurplus > 0) {
-      monthAllocations.push({
-        chargeId: "advance-deposit",
-        month: "Advance / Prepaid Balance Deposit",
-        feeDue: advanceSurplus,
-        previouslyPaid: 0,
-        paidNow: advanceSurplus,
-        balanceDue: 0,
-        status: "PAID",
-        coveragePercent: 100,
-      });
-    }
-
-    if (outstandingBefore === 0) {
-      outstandingBefore = txAmount;
-    }
-
-    const remainingOutstanding = Math.max(0, outstandingBefore - txAmount);
-    const paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT" =
-      remainingOutstanding <= 0 ? "PAID_IN_FULL" : "PARTIAL_PAYMENT";
-    const paymentStatusText =
-      remainingOutstanding <= 0
-        ? "PAID IN FULL"
-        : `PARTIAL PAYMENT — ₹${remainingOutstanding.toLocaleString("en-IN")} DUE`;
-
-    const documentType = isPartial ? "PARTIAL_INVOICE" : "OFFICIAL_RECEIPT";
-
-    const data: FeeReceiptData = {
-      schoolName: school?.name || "Horizon Private School",
-      schoolAddress,
-      schoolContact,
-      timestamp,
-      receiptNo: payment.receiptNo,
-      regNo,
-      rollNumber: student.rollNumber || "-",
-      studentName: student.name,
-      className,
-      items,
-      total: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
-      amountPaid: txAmount,
-      paidForMonths,
-      paymentType,
-      generatedBy,
-      isPartial,
-      documentType,
-      monthTotalBilled: monthTotalBilled > 0 ? monthTotalBilled : txAmount,
-      monthTotalPaid: monthTotalPaid > 0 ? monthTotalPaid : txAmount,
-      monthRemainingDue: remainingOutstanding,
-      outstandingBefore,
-      remainingOutstanding,
-      paymentStatus,
-      paymentStatusText,
-      monthAllocations,
-      monthCount,
-      lateFeeTotal: totalLateFeeAcrossCharges,
+    // Older receipts have no snapshot. Rebuild them from current data but
+    // don't store the result: it would freeze today's balances as history.
+    return {
+      success: true,
+      data: await buildReceiptData(prisma, { id: payment.id }, user.name),
     };
-
-    // B12: Save immutable snapshot for future viewings
-    await prisma.paymentTransaction.update({
-      where: { id: payment.id },
-      data: { receiptSnapshot: data as any },
-    });
-
-    return { success: true, data };
   } catch (e: any) {
     return {
       success: false,
@@ -1014,15 +1045,26 @@ export async function getFeeReceiptDetails(
   }
 }
 
-// B10: Waive fee charge item with audit trail, advance credit for paid amounts, and parent status recalculation
-export async function waiveFeeChargeItem(
-  itemId: string,
-  waiverReason?: string,
-) {
+/** B10: Waives what is still owed on a fee item (see `waiveChargeItemInTx`). */
+export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
   const user = await getFinanceSession();
   if (!user) return { error: "Unauthorized" };
 
+  const reason = (waiverReason ?? "").trim();
+  if (reason.length < 3) {
+    return { error: "Enter a reason for the waiver (at least 3 characters)" };
+  }
+  if (reason.length > 500) {
+    return { error: "Waiver reason must be at most 500 characters" };
+  }
+
   try {
+    const school = await prisma.school.findUnique({
+      where: { id: user.schoolId },
+      select: { timezone: true },
+    });
+    const today = todayInTimeZone(school?.timezone);
+
     const result = await prisma.$transaction(async (tx) => {
       const item = await tx.feeChargeItem.findFirst({
         where: {
@@ -1039,63 +1081,8 @@ export async function waiveFeeChargeItem(
         throw new Error("Fee charge item not found in your school");
       }
 
-      const paidAmount = roundMoney(Number(item.paidAmount || 0));
-
-      // B10: If already partially paid, refund/credit the paid amount to advance balance
-      if (paidAmount > 0) {
-        await tx.advanceLedger.create({
-          data: {
-            studentId: item.charge.studentId,
-            componentId: item.componentId,
-            amount: paidAmount,
-            description: `Waiver refund credit for ${item.component?.name || "Fee"} (${item.charge.title})`,
-          },
-        });
-      }
-
-      // Mark as waived with audit trail
-      await tx.feeChargeItem.update({
-        where: { id: item.id },
-        data: {
-          status: FeeStatus.WAIVED,
-          waivedBy: user.id || user.name || "Administrator",
-          waivedAt: new Date(),
-          waiverReason: waiverReason || "Fee waived by administrator",
-        },
-      });
-
-      // Recalculate parent FeeCharge status
-      const siblingItems = await tx.feeChargeItem.findMany({
-        where: { chargeId: item.chargeId },
-      });
-
-      let allPaidOrWaived = true;
-      let allWaived = true;
-      let anyPaid = false;
-
-      for (const sib of siblingItems) {
-        const isCurrentWaived =
-          sib.id === item.id || sib.status === FeeStatus.WAIVED;
-        if (!isCurrentWaived) {
-          allWaived = false;
-          if (sib.status !== FeeStatus.PAID) {
-            allPaidOrWaived = false;
-          }
-        }
-        if (sib.status === FeeStatus.PAID || sib.status === FeeStatus.PARTIAL) {
-          anyPaid = true;
-        }
-      }
-
-      let newChargeStatus: FeeStatus = FeeStatus.PENDING;
-      if (allWaived) newChargeStatus = FeeStatus.WAIVED;
-      else if (allPaidOrWaived) newChargeStatus = FeeStatus.PAID;
-      else if (anyPaid) newChargeStatus = FeeStatus.PARTIAL;
-
-      await tx.feeCharge.update({
-        where: { id: item.chargeId },
-        data: { status: newChargeStatus },
-      });
+      await waiveChargeItemInTx(tx, item, user.id, reason);
+      await recomputeChargeStatus(tx, item.chargeId, today);
 
       return { studentId: item.charge.studentId };
     });

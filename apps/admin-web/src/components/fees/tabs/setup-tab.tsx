@@ -29,6 +29,7 @@ import {
   updateFeeStructure,
   saveLateFeeSettings,
   saveFeeCollectionPolicy,
+  saveFeeAutomationSettings,
 } from "@/lib/actions/fee-settings";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
@@ -95,9 +96,46 @@ export function SetupTab({
     defaultValues: {
       lateFeeEnabled: school?.lateFeeEnabled || false,
       lateFeeAmount: Number(school?.lateFeeAmount) || undefined,
-      lateFeeFrequency: school?.lateFeeFrequency || "MONTHLY",
+      // The late-fee job supports daily, weekly and monthly fines; anything
+      // else stored earlier (e.g. "PER_TERM") has always been billed monthly.
+      lateFeeFrequency: ["DAILY", "WEEKLY", "MONTHLY"].includes(
+        school?.lateFeeFrequency,
+      )
+        ? school.lateFeeFrequency
+        : "MONTHLY",
+      maxLateFeeCap: Number(school?.maxLateFeeCap) || undefined,
     },
   });
+
+  const [autoFeeGeneration, setAutoFeeGeneration] = useState<boolean>(
+    school?.autoFeeGeneration ?? true,
+  );
+  const [savingAutomation, setSavingAutomation] = useState(false);
+
+  const onAutoFeeGenerationChange = async (enabled: boolean) => {
+    setAutoFeeGeneration(enabled);
+    setSavingAutomation(true);
+    try {
+      const res = await saveFeeAutomationSettings({
+        autoFeeGeneration: enabled,
+      });
+      if (res.error) {
+        setAutoFeeGeneration(!enabled);
+        toast.error(res.error);
+      } else {
+        toast.success(
+          enabled
+            ? "Monthly fees will be generated automatically on the 1st"
+            : "Automatic monthly fee generation turned off",
+        );
+      }
+    } catch {
+      setAutoFeeGeneration(!enabled);
+      toast.error("Failed to update automatic billing");
+    } finally {
+      setSavingAutomation(false);
+    }
+  };
 
   const policyForm = useForm({
     defaultValues: {
@@ -280,6 +318,8 @@ export function SetupTab({
         lateFeeAmount: data.lateFeeAmount
           ? Number(data.lateFeeAmount)
           : undefined,
+        // Blank removes the cap.
+        maxLateFeeCap: data.maxLateFeeCap ? Number(data.maxLateFeeCap) : null,
       };
       const res = await saveLateFeeSettings(payload);
       if (res.error) toast.error(res.error, { id: toastId });
@@ -617,25 +657,41 @@ export function SetupTab({
                   className="space-y-3 pt-1"
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FormField label="Monthly Flat Fine (₹)" required>
+                    <FormField label="Fine Amount (₹)" required>
                       <input
                         type="number"
+                        min={0}
                         placeholder="e.g. 200"
                         {...lateFeeForm.register("lateFeeAmount")}
                         className={inputCls}
                       />
                     </FormField>
 
-                    <FormField label="Fine Frequency" required>
+                    <FormField label="Charged" required>
                       <select
                         {...lateFeeForm.register("lateFeeFrequency")}
                         className={selectCls}
                       >
-                        <option value="MONTHLY">Monthly</option>
-                        <option value="PER_TERM">Per Term / Session</option>
+                        <option value="MONTHLY">Every month overdue</option>
+                        <option value="WEEKLY">Every week overdue</option>
+                        <option value="DAILY">Every day overdue</option>
                       </select>
                     </FormField>
+
+                    <FormField label="Maximum Fine per Charge (₹)">
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="No limit"
+                        {...lateFeeForm.register("maxLateFeeCap")}
+                        className={inputCls}
+                      />
+                    </FormField>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Fines also stop growing after 3 months, 5 weeks or 30 days
+                    overdue, and never exceed half of the original charge.
+                  </p>
                 </motion.div>
               )}
 
@@ -652,6 +708,37 @@ export function SetupTab({
                 </button>
               )}
             </form>
+          </div>
+
+          {/* Automatic Monthly Billing Card */}
+          <div className="bg-card border rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">
+                    Automatic Monthly Billing
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Generate each month&apos;s fees on the 1st, due on the 10th.
+                    Months already generated by hand are skipped.
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  aria-label="Automatic monthly billing"
+                  checked={autoFeeGeneration}
+                  disabled={!canEdit || savingAutomation}
+                  onChange={(e) => onAutoFeeGenerationChange(e.target.checked)}
+                />
+                <div className="w-11 h-6 bg-muted-foreground/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600 peer-disabled:opacity-50"></div>
+              </label>
+            </div>
           </div>
 
           {/* Fee Collection Policy Card */}

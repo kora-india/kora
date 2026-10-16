@@ -5,7 +5,10 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkStudentLimit, planLimitMessage } from "@/lib/plan-limits";
-import { getCache, invalidateCache } from "@/lib/redis";
+import { getCache, invalidateCache, invalidateFeesCache } from "@/lib/redis";
+import { recomputeChargeStatus } from "@/lib/fees/charge-status";
+import { todayInTimeZone } from "@/lib/fees/timezone";
+import { waiveChargeItemInTx } from "@/lib/fees/waive";
 import {
   calculateSubjectGrade,
   calculateReportCardSummary,
@@ -223,7 +226,15 @@ export async function updateStudent(id: string, data: unknown) {
   }
 }
 
-export async function deleteStudent(id: string) {
+/**
+ * Withdraws a student (they are deactivated, never deleted). With
+ * `waiveOpenCharges`, everything they still owe is waived in the same
+ * transaction (B16), so withdrawn students don't stay on the dues lists.
+ */
+export async function deleteStudent(
+  id: string,
+  options: { waiveOpenCharges?: boolean } = {},
+) {
   const user = await getAdminSession();
   if (!user) return { error: "Unauthorized" };
 
@@ -233,20 +244,52 @@ export async function deleteStudent(id: string) {
     });
     if (!existing) return { error: "Student not found in your school" };
 
-    await prisma.student.update({
-      where: { id: existing.id },
-      data: { isActive: false },
+    const school = await prisma.school.findUnique({
+      where: { id: user.schoolId },
+      select: { timezone: true },
     });
+    const today = todayInTimeZone(school?.timezone);
+
+    const waivedCount = await prisma.$transaction(async (tx) => {
+      await tx.student.update({
+        where: { id: existing.id },
+        data: { isActive: false },
+      });
+
+      if (!options.waiveOpenCharges) return 0;
+
+      const openItems = await tx.feeChargeItem.findMany({
+        where: {
+          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+          charge: { studentId: existing.id, schoolId: user.schoolId },
+        },
+        include: { charge: true, component: true },
+      });
+      for (const item of openItems) {
+        await waiveChargeItemInTx(
+          tx,
+          item,
+          user.id,
+          "Student withdrawn from school",
+        );
+      }
+      for (const chargeId of new Set(openItems.map((i) => i.chargeId))) {
+        await recomputeChargeStatus(tx, chargeId, today);
+      }
+      return openItems.length;
+    });
+
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
       invalidateCache(`cache:${user.schoolId}:analytics`),
+      ...(waivedCount > 0 ? [invalidateFeesCache(user.schoolId)] : []),
     ]);
     revalidatePath("/students");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
-    return { success: true };
+    return { success: true, waivedCount };
   } catch (e: any) {
     return { error: e.message };
   }
@@ -272,9 +315,6 @@ export async function getStudentDetails(id: string) {
             },
             class: true,
             section: true,
-            fees: {
-              orderBy: { dueDate: "desc" },
-            },
             feeCharges: {
               orderBy: { createdAt: "desc" },
               include: {

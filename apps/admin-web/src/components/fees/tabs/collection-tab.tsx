@@ -16,6 +16,8 @@ import {
   type FeeReceiptData,
 } from "@/lib/actions/fee-allocator";
 import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
+import { WaiveReasonDialog } from "@/components/fees/waive-reason-dialog";
+import { newPaymentKey } from "@/lib/fees/payment-key";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -72,6 +74,12 @@ export function CollectionTab({
   const [showPreview, setShowPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [waivingItemId, setWaivingItemId] = useState<string | null>(null);
+  // One idempotency key per payment attempt; retries of the same submit reuse it.
+  const paymentKeyRef = useRef(newPaymentKey());
+  const [waiveTarget, setWaiveTarget] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   // Filter students based on search
   const filteredStudents =
@@ -119,6 +127,10 @@ export function CollectionTab({
       ? students.find((s: any) => s.id === selectedStudent.id) ||
         selectedStudent
       : null);
+
+  useEffect(() => {
+    paymentKeyRef.current = newPaymentKey();
+  }, [currentStudent?.id]);
 
   // Calculate student dues from dynamic query
   const studentCharges =
@@ -547,6 +559,34 @@ export function CollectionTab({
     }
   };
 
+  // Waive a late fee; the reason is collected by WaiveReasonDialog.
+  const handleWaiveItem = async (
+    itemId: string,
+    reason: string,
+  ): Promise<boolean> => {
+    setWaivingItemId(itemId);
+    const toastId = `waive-${itemId}`;
+    toast.loading("Waiving late fee...", { id: toastId });
+    try {
+      const res = await waiveFeeChargeItem(itemId, reason);
+      if (res.error) {
+        toast.error(res.error, { id: toastId });
+        return false;
+      }
+      toast.success("Late fee waived", { id: toastId });
+      if (currentStudent?.id) {
+        await refreshCurrentStudent(currentStudent.id);
+      }
+      router.refresh();
+      return true;
+    } catch {
+      toast.error("Failed to waive late fee", { id: toastId });
+      return false;
+    } finally {
+      setWaivingItemId(null);
+    }
+  };
+
   const handlePayment = async (shouldPrint: boolean = false) => {
     if (totalPayment <= 0) {
       toast.error("Enter payment amounts first.");
@@ -620,11 +660,13 @@ export function CollectionTab({
           Number(generalAdvance) > 0 ? Number(generalAdvance) : undefined,
         method: paymentMethod as any,
         reference: reference || undefined,
+        idempotencyKey: paymentKeyRef.current,
       });
 
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
+        paymentKeyRef.current = newPaymentKey();
         const receiptNo = (res as any).receiptNo || "Receipt Created";
         const docLabel = (res as any).receiptData?.isPartial
           ? "Provisional Invoice"
@@ -1304,46 +1346,12 @@ export function CollectionTab({
                                                     disabled={
                                                       waivingItemId === item.id
                                                     }
-                                                    onClick={async () => {
-                                                      setWaivingItemId(item.id);
-                                                      const toastId = `waive-${item.id}`;
-                                                      toast.loading(
-                                                        "Waiving late fee...",
-                                                        { id: toastId },
-                                                      );
-                                                      try {
-                                                        const res =
-                                                          await waiveFeeChargeItem(
-                                                            item.id,
-                                                          );
-                                                        if (res.error)
-                                                          toast.error(
-                                                            res.error,
-                                                            { id: toastId },
-                                                          );
-                                                        else {
-                                                          toast.success(
-                                                            "Late fee waived",
-                                                            { id: toastId },
-                                                          );
-                                                          if (
-                                                            currentStudent?.id
-                                                          ) {
-                                                            await refreshCurrentStudent(
-                                                              currentStudent.id,
-                                                            );
-                                                          }
-                                                          router.refresh();
-                                                        }
-                                                      } catch {
-                                                        toast.error(
-                                                          "Failed to waive late fee",
-                                                          { id: toastId },
-                                                        );
-                                                      } finally {
-                                                        setWaivingItemId(null);
-                                                      }
-                                                    }}
+                                                    onClick={() =>
+                                                      setWaiveTarget({
+                                                        id: item.id,
+                                                        label: `${item.componentName || "late fee"} (${charge.title})`,
+                                                      })
+                                                    }
                                                     className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
                                                   >
                                                     {waivingItemId ===
@@ -1756,6 +1764,12 @@ export function CollectionTab({
       </div>
 
       {/* Fee Receipt Modal */}
+      <WaiveReasonDialog
+        target={waiveTarget}
+        onClose={() => setWaiveTarget(null)}
+        onConfirm={handleWaiveItem}
+      />
+
       <FeeReceiptModal
         isOpen={receiptModal.open}
         onClose={() =>

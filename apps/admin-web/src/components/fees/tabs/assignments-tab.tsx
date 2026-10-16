@@ -57,27 +57,36 @@ export function AssignmentsTab({
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
-  // Local state for optimistic UI updates of class assignments
-  const [classAssignments, setClassAssignments] = useState<
-    Record<string, string>
-  >(() => {
+  const activeSession = sessions.find((s: any) => s.isCurrent) || sessions[0];
+
+  // B3: a class has one structure per session; show and edit the active one.
+  const sessionStructures = useMemo(
+    () => structures.filter((s: any) => s.sessionId === activeSession?.id),
+    [structures, activeSession?.id],
+  );
+  const buildAssignmentMap = () => {
+    const sessionStructureIds = new Set(
+      sessionStructures.map((s: any) => s.id),
+    );
     const map: Record<string, string> = {};
     classes?.forEach((c: any) => {
-      map[c.id] = c.classFeeStructures?.[0]?.structureId || "";
+      map[c.id] =
+        c.classFeeStructures?.find((a: any) =>
+          sessionStructureIds.has(a.structureId),
+        )?.structureId || "";
     });
     return map;
-  });
+  };
+
+  // Local state for optimistic UI updates of class assignments
+  const [classAssignments, setClassAssignments] =
+    useState<Record<string, string>>(buildAssignmentMap);
 
   // Synchronize when server props update
   useEffect(() => {
-    const map: Record<string, string> = {};
-    classes?.forEach((c: any) => {
-      map[c.id] = c.classFeeStructures?.[0]?.structureId || "";
-    });
-    setClassAssignments(map);
-  }, [classes]);
-
-  const activeSession = sessions.find((s: any) => s.isCurrent) || sessions[0];
+    setClassAssignments(buildAssignmentMap());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classes, sessionStructures]);
 
   // Sort classes logically by grade
   const sortedClasses = useMemo(() => {
@@ -414,7 +423,7 @@ export function AssignmentsTab({
                         disabled={!canEdit || isUpdating}
                       >
                         <option value="">-- No Structure Assigned --</option>
-                        {structures.map((s: any) => (
+                        {sessionStructures.map((s: any) => (
                           <option key={s.id} value={s.id}>
                             {s.name}
                           </option>

@@ -117,23 +117,30 @@ export function LogsTab({ transactions = [] }: Readonly<Props>) {
     });
   }, [transactions, searchTerm, methodFilter, dateFilter]);
 
-  // Aggregate Metrics
+  // Aggregate Metrics. Advance settlements (status ADJUSTMENT) re-apply money
+  // already collected, so they are listed but not added to collection totals.
+  const filteredCollections = useMemo(
+    () => filteredTransactions.filter((tx) => tx.status !== "ADJUSTMENT"),
+    [filteredTransactions],
+  );
+
   const totalVolume = useMemo(() => {
-    return filteredTransactions.reduce(
+    return filteredCollections.reduce(
       (sum, tx) => sum + Number(tx.amount || 0),
       0,
     );
-  }, [filteredTransactions]);
+  }, [filteredCollections]);
 
   const todayVolume = useMemo(() => {
     return transactions
+      .filter((tx) => tx.status !== "ADJUSTMENT")
       .filter((tx) => isToday(new Date(tx.date || tx.createdAt)))
       .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
   }, [transactions]);
 
   const avgReceiptSize =
-    filteredTransactions.length > 0
-      ? totalVolume / filteredTransactions.length
+    filteredCollections.length > 0
+      ? totalVolume / filteredCollections.length
       : 0;
 
   const upiTotal = useMemo(() => {

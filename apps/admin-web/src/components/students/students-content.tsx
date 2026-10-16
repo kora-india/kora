@@ -172,6 +172,24 @@ export function StudentsContent({
   );
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [waiveOnRemove, setWaiveOnRemove] = useState(false);
+
+  // What the student being removed still owes, from the open charges on the list row.
+  const deleteTargetOutstanding = useMemo(() => {
+    if (!deleteTarget?.feeCharges) return 0;
+    return deleteTarget.feeCharges.reduce(
+      (sum: number, charge: any) =>
+        sum +
+        (charge.items || []).reduce(
+          (s: number, item: any) =>
+            item.status === "WAIVED"
+              ? s
+              : s + Math.max(0, Number(item.amount) - Number(item.paidAmount)),
+          0,
+        ),
+      0,
+    );
+  }, [deleteTarget]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [expandedChargeId, setExpandedChargeId] = useState<string | null>(null);
   const [detailsModal, setDetailsModal] = useState<{
@@ -394,11 +412,17 @@ export function StudentsContent({
   };
 
   const handleDelete = async () => {
-    const result = await deleteStudent(deleteTarget.id);
+    const result = await deleteStudent(deleteTarget.id, {
+      waiveOpenCharges: waiveOnRemove && deleteTargetOutstanding > 0,
+    });
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success("Student removed");
+      toast.success(
+        result.waivedCount
+          ? `Student removed and ${result.waivedCount} unpaid fee items waived`
+          : "Student removed",
+      );
       router.refresh();
     }
   };
@@ -859,13 +883,34 @@ export function StudentsContent({
         <ConfirmDialog
           open={!!deleteTarget}
           onOpenChange={(open) => {
-            if (!open) setDeleteTarget(null);
+            if (!open) {
+              setDeleteTarget(null);
+              setWaiveOnRemove(false);
+            }
           }}
           title="Remove Student"
           description={`Are you sure you want to remove ${deleteTarget?.name}? This will deactivate their account but preserve historical records.`}
           confirmLabel="Remove"
           onConfirm={handleDelete}
-        />
+        >
+          {deleteTargetOutstanding > 0 && (
+            <label className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={waiveOnRemove}
+                onChange={(e) => setWaiveOnRemove(e.target.checked)}
+              />
+              <span>
+                Also waive the {formatCurrency(deleteTargetOutstanding)} they
+                still owe.
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Leave unticked to keep collecting these dues.
+                </span>
+              </span>
+            </label>
+          )}
+        </ConfirmDialog>
 
         <Modal
           open={detailsModal.open}

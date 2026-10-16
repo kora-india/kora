@@ -22,6 +22,18 @@ import {
 } from "lucide-react";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import { formatCurrency } from "@schoolos/utils";
+import {
+  formatPeriodLabel,
+  isPeriodWithinSession,
+  monthsIntoSession,
+  parsePeriodKey,
+  toPeriodKey,
+} from "@/lib/fees/billing-period";
+
+/** Default due date for a billing month: the 10th, as "YYYY-MM-DD". */
+const defaultDueDate = (periodKey: string) => `${periodKey}-10`;
+const defaultTitle = (periodKey: string) =>
+  `${formatPeriodLabel(periodKey)} Fees`;
 
 interface GeneratorTabProps {
   sessions?: any[];
@@ -43,30 +55,39 @@ export function GeneratorTab({
   const [loading, setLoading] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [classSearch, setClassSearch] = useState("");
-  const [feeTitle, setFeeTitle] = useState("");
-  const [dueDate, setDueDate] = useState("");
-
   const activeSession = sessions.find((s: any) => s.isCurrent) || sessions[0];
 
-  // Helper date presets for quick title selection
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
+  // B2: the billing month identifies the charge, so generating the same month
+  // twice (here or by the monthly cron) never bills a student twice.
   const now = new Date();
-  const currentMonthTitle = `${monthNames[now.getMonth()]} ${now.getFullYear()} Tuition Fee`;
+  const currentMonthKey = toPeriodKey(now.getFullYear(), now.getMonth() + 1);
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextMonthTitle = `${monthNames[nextMonthDate.getMonth()]} ${nextMonthDate.getFullYear()} Tuition Fee`;
+  const nextMonthKey = toPeriodKey(
+    nextMonthDate.getFullYear(),
+    nextMonthDate.getMonth() + 1,
+  );
+
+  const [billingMonth, setBillingMonth] = useState(currentMonthKey);
+  const [feeTitle, setFeeTitle] = useState(defaultTitle(currentMonthKey));
+  const [dueDate, setDueDate] = useState(defaultDueDate(currentMonthKey));
+  // Title and due date follow the billing month until the user edits them.
+  const [titleEdited, setTitleEdited] = useState(false);
+  const [dueDateEdited, setDueDateEdited] = useState(false);
+
+  const selectBillingMonth = (periodKey: string) => {
+    if (!parsePeriodKey(periodKey)) return;
+    setBillingMonth(periodKey);
+    if (!titleEdited) setFeeTitle(defaultTitle(periodKey));
+    if (!dueDateEdited) setDueDate(defaultDueDate(periodKey));
+  };
+
+  const billingMonthInSession =
+    !activeSession ||
+    isPeriodWithinSession(
+      billingMonth,
+      new Date(activeSession.startDate),
+      new Date(activeSession.endDate),
+    );
 
   // Student count by class map
   const studentCountByClass = useMemo(() => {
@@ -79,36 +100,63 @@ export function GeneratorTab({
     return map;
   }, [students]);
 
-  // Structure by class map
+  // B3: a class's plan is its active structure for the active session
+  // (classes can have one structure assignment per session).
   const structureByClass = useMemo(() => {
     const map: Record<string, any> = {};
     for (const c of classes) {
-      const structId = c.classFeeStructures?.[0]?.structureId;
-      if (structId) {
-        const struct = structures.find((s: any) => s.id === structId);
-        if (struct) map[c.id] = struct;
+      for (const assignment of c.classFeeStructures || []) {
+        const struct = structures.find(
+          (s: any) => s.id === assignment.structureId,
+        );
+        if (
+          struct &&
+          struct.sessionId === activeSession?.id &&
+          (struct.status ?? "ACTIVE") === "ACTIVE"
+        ) {
+          map[c.id] = struct;
+          break;
+        }
       }
     }
     return map;
-  }, [classes, structures]);
+  }, [classes, structures, activeSession?.id]);
 
-  // Fee per student by class
+  // Estimated fee per student for the billing month. Quarterly and half-yearly
+  // components are counted in the first month of their period, and yearly and
+  // one-time ones in the session's first month; the server also bills them
+  // later in the period if they were missed, so this is an estimate.
   const feePerStudentByClass = useMemo(() => {
     const map: Record<string, number> = {};
+    const monthIndex =
+      activeSession && parsePeriodKey(billingMonth)
+        ? monthsIntoSession(new Date(activeSession.startDate), billingMonth)
+        : 0;
+    const dueThisMonth = (frequency?: string) => {
+      switch (frequency) {
+        case "QUARTERLY":
+          return monthIndex % 3 === 0;
+        case "HALF_YEARLY":
+          return monthIndex % 6 === 0;
+        case "YEARLY":
+        case "ONE_TIME":
+          return monthIndex === 0;
+        case "CUSTOM":
+          return false;
+        default:
+          return true;
+      }
+    };
     for (const c of classes) {
       const struct = structureByClass[c.id];
-      if (struct?.items) {
-        map[c.id] = struct.items.reduce(
-          (sum: number, item: any) =>
-            sum + Number(item.amount || item.component?.amount || 0),
-          0,
-        );
-      } else {
-        map[c.id] = 0;
-      }
+      map[c.id] = (struct?.items || []).reduce((sum: number, item: any) => {
+        if (item.component?.isActive === false) return sum;
+        if (!dueThisMonth(item.component?.frequency)) return sum;
+        return sum + Number(item.amount ?? item.component?.amount ?? 0);
+      }, 0);
     }
     return map;
-  }, [classes, structureByClass]);
+  }, [classes, structureByClass, activeSession, billingMonth]);
 
   // Selected classes metadata
   const selectedClasses = useMemo(() => {
@@ -183,9 +231,16 @@ export function GeneratorTab({
       return;
     }
 
-    if (!feeTitle.trim() || !dueDate) {
+    if (!feeTitle.trim() || !dueDate || !parsePeriodKey(billingMonth)) {
       toast.error(
-        "Please provide both a fee charge title and a payment due date",
+        "Please choose a billing month, a fee charge title and a payment due date",
+      );
+      return;
+    }
+
+    if (!billingMonthInSession) {
+      toast.error(
+        `${formatPeriodLabel(billingMonth)} is outside the ${activeSession?.name} session`,
       );
       return;
     }
@@ -212,22 +267,33 @@ export function GeneratorTab({
       targetClassIds,
       feeTitle,
       dueDate,
+      billingMonth,
     );
     setLoading(false);
 
     if (res.error) {
       toast.error(res.error);
     } else {
-      toast.success(
-        `Generated periodic fee obligations for ${res.generatedCount} students across ${classesWithPlan.length} classes successfully!`,
-      );
-      if (res.skippedOrErrors && res.skippedOrErrors.length > 0) {
+      const monthLabel = formatPeriodLabel(billingMonth);
+      if (res.generatedCount && res.generatedCount > 0) {
+        toast.success(
+          `Generated ${monthLabel} fees for ${res.generatedCount} students across ${classesWithPlan.length} classes.`,
+        );
+      } else {
+        toast.info(`No new ${monthLabel} fees were needed.`);
+      }
+      if (res.alreadyGeneratedCount && res.alreadyGeneratedCount > 0) {
         toast.info(
-          `Note: ${res.skippedOrErrors.length} classes were skipped or encountered warnings.`,
+          `${res.alreadyGeneratedCount} students already had ${monthLabel} fees and were skipped.`,
         );
       }
-      setFeeTitle("");
-      setDueDate("");
+      if (res.skippedOrErrors && res.skippedOrErrors.length > 0) {
+        toast.warning(
+          `${res.skippedOrErrors.length} classes were skipped: ${res.skippedOrErrors
+            .map((e) => e.error)
+            .join("; ")}`,
+        );
+      }
     }
   };
 
@@ -267,11 +333,8 @@ export function GeneratorTab({
               {classes.length} Classes
             </p>
             <p className="text-[11px] text-muted-foreground">
-              {
-                classes.filter((c: any) => c.classFeeStructures?.length > 0)
-                  .length
-              }{" "}
-              with assigned structures
+              {Object.keys(structureByClass).length} with a structure for this
+              session
             </p>
           </div>
           <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
@@ -339,35 +402,53 @@ export function GeneratorTab({
             </div>
 
             <form onSubmit={handleGenerate} className="space-y-5">
-              {/* Quick Title Presets */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Quick Month Presets
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFeeTitle(currentMonthTitle)}
-                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-muted/60 hover:bg-violet-50 hover:text-violet-700 dark:hover:bg-violet-950/40 dark:hover:text-violet-300 border border-border transition-colors cursor-pointer"
-                  >
-                    {currentMonthTitle}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFeeTitle(nextMonthTitle)}
-                    className="px-2.5 py-1 text-xs rounded-lg font-medium bg-muted/60 hover:bg-violet-50 hover:text-violet-700 dark:hover:bg-violet-950/40 dark:hover:text-violet-300 border border-border transition-colors cursor-pointer"
-                  >
-                    {nextMonthTitle}
-                  </button>
+              {/* Billing Month */}
+              <FormField label="Billing Month" required>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="month"
+                    value={billingMonth}
+                    onChange={(e) => selectBillingMonth(e.target.value)}
+                    className={`${inputCls} max-w-[12rem]`}
+                    required
+                  />
+                  {[currentMonthKey, nextMonthKey].map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectBillingMonth(key)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium border transition-colors cursor-pointer ${
+                        billingMonth === key
+                          ? "bg-violet-50 text-violet-700 border-violet-300 dark:bg-violet-950/40 dark:text-violet-300"
+                          : "bg-muted/60 hover:bg-violet-50 hover:text-violet-700 dark:hover:bg-violet-950/40 dark:hover:text-violet-300 border-border"
+                      }`}
+                    >
+                      {formatPeriodLabel(key)}
+                    </button>
+                  ))}
                 </div>
-              </div>
+                {!billingMonthInSession && (
+                  <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                    {formatPeriodLabel(billingMonth)} is outside the{" "}
+                    {activeSession?.name} session.
+                  </p>
+                )}
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Students who already have fees for this month are skipped.
+                  Quarterly, half-yearly, yearly and one-time components are
+                  added only when they are due.
+                </p>
+              </FormField>
 
               {/* Title Input */}
               <FormField label="Fee Charge Title" required>
                 <input
                   value={feeTitle}
-                  onChange={(e) => setFeeTitle(e.target.value)}
-                  placeholder="e.g. October 2026 Tuition & Activity"
+                  onChange={(e) => {
+                    setFeeTitle(e.target.value);
+                    setTitleEdited(true);
+                  }}
+                  placeholder="e.g. October 2026 Fees"
                   className={inputCls}
                   required
                 />
@@ -574,7 +655,10 @@ export function GeneratorTab({
                 <input
                   type="date"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+                  onChange={(e) => {
+                    setDueDate(e.target.value);
+                    setDueDateEdited(true);
+                  }}
                   className={inputCls}
                   required
                 />
@@ -587,7 +671,8 @@ export function GeneratorTab({
                   loading ||
                   !canEdit ||
                   selectedClassIds.length === 0 ||
-                  classesWithPlan.length === 0
+                  classesWithPlan.length === 0 ||
+                  !billingMonthInSession
                 }
                 className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
