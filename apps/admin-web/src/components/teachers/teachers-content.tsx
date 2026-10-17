@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { formatCurrency } from "@schoolos/utils";
+import { describeReleasedAssignments } from "./released-assignments";
 
 interface Props {
   teachers: any[];
@@ -157,7 +158,9 @@ export function TeachersContent({
     const result = await deleteTeacher(deleteTeacherTarget.id);
     if (result.error) toast.error(result.error);
     else {
-      toast.success(`${deleteTeacherTarget.name} has been deactivated`);
+      toast.success(
+        `${deleteTeacherTarget.name} has been deactivated.${describeReleasedAssignments(result)}`,
+      );
       router.refresh();
     }
   };

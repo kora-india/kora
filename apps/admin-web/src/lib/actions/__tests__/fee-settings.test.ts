@@ -1,26 +1,34 @@
-import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vitest';
-import { saveLateFeeSettings } from '../fee-settings';
-import { prisma } from '@schoolos/db';
-import { auth } from '@schoolos/auth';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterAll,
+  beforeAll,
+  vi,
+} from "vitest";
+import { saveLateFeeSettings } from "../fee-settings";
+import { prisma, purgeSchool } from "@schoolos/db";
+import { auth } from "@schoolos/auth";
 
-const schoolId = 'settings-school-' + Math.random().toString(36).substring(7);
+const schoolId = "settings-school-" + Math.random().toString(36).substring(7);
 
-describe('Fee Settings Actions', () => {
+describe("Fee Settings Actions", () => {
   beforeAll(async () => {
     vi.mocked(auth).mockResolvedValue({
-      user: { id: 'test-user', schoolId, role: 'SUPER_ADMIN' }
+      user: { id: "test-user", schoolId, role: "SUPER_ADMIN" },
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
 
     // Create required initial data
     await prisma.school.create({
       data: {
         id: schoolId,
-        name: 'Test School',
-        subdomain: 'testschool-' + Math.random().toString(36).substring(7),
-      }
+        name: "Test School",
+        subdomain: "testschool-" + Math.random().toString(36).substring(7),
+      },
     });
   });
 
@@ -33,20 +41,20 @@ describe('Fee Settings Actions', () => {
       data: {
         lateFeeEnabled: false,
         lateFeeAmount: null,
-        lateFeeFrequency: 'MONTHLY'
-      }
+        lateFeeFrequency: "MONTHLY",
+      },
     });
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
-  it('should enable late fee, update school, and create Late Fee component if not exists', async () => {
+  it("should enable late fee, update school, and create Late Fee component if not exists", async () => {
     const response = await saveLateFeeSettings({
       lateFeeEnabled: true,
       lateFeeAmount: 500,
-      lateFeeFrequency: 'MONTHLY'
+      lateFeeFrequency: "MONTHLY",
     });
 
     expect(response.success).toBe(true);
@@ -56,44 +64,44 @@ describe('Fee Settings Actions', () => {
     expect(school?.lateFeeAmount?.toNumber()).toBe(500);
 
     const component = await prisma.feeComponent.findFirst({
-      where: { schoolId, category: 'LATE_FEE' }
+      where: { schoolId, category: "LATE_FEE" },
     });
     expect(component).toBeDefined();
-    expect(component?.name).toBe('Late Fee');
+    expect(component?.name).toBe("Late Fee");
     expect(component?.amount.toNumber()).toBe(500);
   });
 
-  it('should update existing Late Fee component amount when saving settings', async () => {
+  it("should update existing Late Fee component amount when saving settings", async () => {
     // Manually create existing component
     await prisma.feeComponent.create({
       data: {
         schoolId,
-        name: 'Late Fee',
-        category: 'LATE_FEE',
+        name: "Late Fee",
+        category: "LATE_FEE",
         amount: 200,
-      }
+      },
     });
 
     const response = await saveLateFeeSettings({
       lateFeeEnabled: true,
       lateFeeAmount: 750,
-      lateFeeFrequency: 'MONTHLY'
+      lateFeeFrequency: "MONTHLY",
     });
 
     expect(response.success).toBe(true);
 
     const component = await prisma.feeComponent.findFirst({
-      where: { schoolId, category: 'LATE_FEE' }
+      where: { schoolId, category: "LATE_FEE" },
     });
     // The amount should have updated to 750
     expect(component?.amount.toNumber()).toBe(750);
   });
 
-  it('should disable late fee without creating component if lateFeeEnabled is false', async () => {
+  it("should disable late fee without creating component if lateFeeEnabled is false", async () => {
     const response = await saveLateFeeSettings({
       lateFeeEnabled: false,
       lateFeeAmount: 0,
-      lateFeeFrequency: 'MONTHLY'
+      lateFeeFrequency: "MONTHLY",
     });
 
     expect(response.success).toBe(true);
@@ -102,48 +110,50 @@ describe('Fee Settings Actions', () => {
     expect(school?.lateFeeEnabled).toBe(false);
 
     const component = await prisma.feeComponent.findFirst({
-      where: { schoolId, category: 'LATE_FEE' }
+      where: { schoolId, category: "LATE_FEE" },
     });
     expect(component).toBeNull();
   });
 
-  it('should create fee structure and invalidate feeStructures cache', async () => {
-    const { invalidateCache } = await import('@/lib/redis');
+  it("should create fee structure and invalidate feeStructures cache", async () => {
+    const { invalidateCache } = await import("@/lib/redis");
     vi.mocked(invalidateCache).mockClear();
 
     const session = await prisma.academicSession.create({
       data: {
         schoolId,
-        name: '2026-27',
-        startDate: new Date('2026-04-01'),
-        endDate: new Date('2027-03-31'),
+        name: "2026-27",
+        startDate: new Date("2026-04-01"),
+        endDate: new Date("2027-03-31"),
         isCurrent: true,
-      }
+      },
     });
 
     const comp = await prisma.feeComponent.create({
       data: {
         schoolId,
-        name: 'Tuition',
+        name: "Tuition",
         amount: 1500,
-        frequency: 'MONTHLY',
+        frequency: "MONTHLY",
         isOptional: false,
-      }
+      },
     });
 
-    const { createFeeStructure } = await import('../fee-settings');
+    const { createFeeStructure } = await import("../fee-settings");
     const response = await createFeeStructure({
-      name: 'Primary Grade Structure',
+      name: "Primary Grade Structure",
       sessionId: session.id,
-      components: [{ componentId: comp.id, amount: 1500 }]
+      components: [{ componentId: comp.id, amount: 1500 }],
     });
 
     expect(response.success).toBe(true);
-    expect(invalidateCache).toHaveBeenCalledWith(`cache:${schoolId}:feeStructures:*`);
+    expect(invalidateCache).toHaveBeenCalledWith(
+      `cache:${schoolId}:feeStructures:*`,
+    );
 
     const structure = await prisma.feeStructure.findFirst({
-      where: { schoolId, name: 'Primary Grade Structure' },
-      include: { items: true }
+      where: { schoolId, name: "Primary Grade Structure" },
+      include: { items: true },
     });
     expect(structure).toBeDefined();
     expect(structure?.items.length).toBe(1);

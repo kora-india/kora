@@ -104,17 +104,45 @@ export function PeriodSettingsModal({
         return;
       }
 
-      await savePeriodSettings(
-        periods.map((p, idx) => ({
-          periodNumber: idx + 1,
-          name: p.name,
-          startTime: p.startTime,
-          endTime: p.endTime,
-          isBreak: p.isBreak,
-        })),
-      );
+      // Ids let the server update periods in place, so classes already
+      // scheduled in them move with any timing change (D7).
+      const payload = periods.map((p, idx) => ({
+        id: p.id,
+        periodNumber: idx + 1,
+        name: p.name,
+        startTime: p.startTime,
+        endTime: p.endTime,
+        isBreak: p.isBreak,
+      }));
 
-      message.success("Period timings and break schedules saved!");
+      let res = await savePeriodSettings(payload);
+      if (!res.success && res.code === "PERIOD_HAS_CLASSES") {
+        const confirmed = await new Promise<boolean>((resolve) => {
+          Modal.confirm({
+            title: "Remove scheduled classes?",
+            content: res.success ? "" : res.error,
+            okText: "Remove and save",
+            okButtonProps: { danger: true },
+            cancelText: "Keep editing",
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        });
+        if (!confirmed) return;
+        res = await savePeriodSettings(payload, {
+          removeScheduledClasses: true,
+        });
+      }
+      if (!res.success) {
+        message.error(res.error);
+        return;
+      }
+
+      message.success(
+        res.removedClasses > 0
+          ? `Periods saved. ${res.removedClasses} classes in removed periods were taken off the timetable.`
+          : "Period timings and break schedules saved!",
+      );
       onSaved();
       onClose();
     } catch (err: any) {

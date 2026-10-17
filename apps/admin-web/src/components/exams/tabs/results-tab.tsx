@@ -270,7 +270,9 @@ export function ResultsTab({
                           ? "text-emerald-600"
                           : card.summary.result === "COMPARTMENT"
                             ? "text-amber-600"
-                            : "text-rose-600"
+                            : card.summary.result === "PENDING"
+                              ? "text-muted-foreground"
+                              : "text-rose-600"
                       }`}
                     >
                       {card.summary.result === "PASSED" ? (

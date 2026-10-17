@@ -28,17 +28,31 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teacher?: any;
-  classes: { id: string; name: string; sections: { id: string; name: string }[] }[];
+  classes: {
+    id: string;
+    name: string;
+    sections: { id: string; name: string }[];
+  }[];
 }
 
-export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly<Props>) {
+export function TeacherDialog({
+  open,
+  onOpenChange,
+  teacher,
+  classes,
+}: Readonly<Props>) {
   const router = useRouter();
   const isEdit = !!teacher;
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [showTempPassword, setShowTempPassword] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
     resolver: zodResolver(Schema),
   });
 
@@ -54,7 +68,8 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
 
   useEffect(() => {
     if (teacher) {
-      const initialSectionIds: string[] = teacher.assignedSections?.map((as: any) => as.sectionId) ??
+      const initialSectionIds: string[] =
+        teacher.assignedSections?.map((as: any) => as.sectionId) ??
         (teacher.assignedSectionId ? [teacher.assignedSectionId] : []);
       setSelectedSectionIds(initialSectionIds);
 
@@ -65,7 +80,9 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
         subject: teacher.subject,
         qualification: teacher.qualification ?? "",
         salary: teacher.salary ? Number(teacher.salary) : undefined,
-        joiningDate: teacher.joiningDate ? new Date(teacher.joiningDate).toISOString().split("T")[0] : "",
+        joiningDate: teacher.joiningDate
+          ? new Date(teacher.joiningDate).toISOString().split("T")[0]
+          : "",
       });
     } else {
       setSelectedSectionIds([]);
@@ -89,7 +106,10 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
 
     if (isEdit) {
       const result = await updateTeacher(teacher.id, payload);
-      if (result.error) { toast.error(result.error); return; }
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
       toast.success("Teacher updated");
       onOpenChange(false);
       router.refresh();
@@ -97,7 +117,15 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
     }
 
     const result = await createTeacher(payload);
-    if (result.error || !result.tempPassword) { toast.error(result.error ?? "Failed to create teacher"); return; }
+    if (result.error || !result.tempPassword) {
+      toast.error(result.error ?? "Failed to create teacher");
+      return;
+    }
+    if (result.reactivated) {
+      toast.info(
+        "This email belonged to a removed teacher, so their account was reactivated with a new password.",
+      );
+    }
     setTempPassword(result.tempPassword);
     setShowTempPassword(false);
     router.refresh();
@@ -112,14 +140,18 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
     return (
       <Dialog
         open={open}
-        onOpenChange={(o) => { if (!o) handleDone(); }}
+        onOpenChange={(o) => {
+          if (!o) handleDone();
+        }}
         title="Teacher Added"
         description="Share these credentials with the teacher securely."
       >
         <div className="space-y-4">
           <div className="bg-muted/40 rounded-xl p-4 space-y-3">
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Temporary Password</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                Temporary Password
+              </p>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-mono font-semibold">
                   {showTempPassword ? tempPassword : "••••••••••••"}
@@ -127,16 +159,25 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    aria-label={showTempPassword ? "Hide password" : "Show password"}
+                    aria-label={
+                      showTempPassword ? "Hide password" : "Show password"
+                    }
                     onClick={() => setShowTempPassword(!showTempPassword)}
                     className="p-1 rounded hover:bg-muted transition-colors"
                   >
-                    {showTempPassword ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Eye className="w-3.5 h-3.5 text-muted-foreground" />}
+                    {showTempPassword ? (
+                      <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
                   </button>
                   <button
                     type="button"
                     aria-label="Copy temporary password"
-                    onClick={() => { navigator.clipboard.writeText(tempPassword); toast.success("Password copied!"); }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(tempPassword);
+                      toast.success("Password copied!");
+                    }}
                     className="p-1 rounded hover:bg-muted transition-colors"
                   >
                     <Copy className="w-3.5 h-3.5 text-muted-foreground" />
@@ -146,7 +187,8 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
             </div>
           </div>
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            ⚠️ Save this password now. It will not be shown again. The teacher should change it after first login.
+            ⚠️ Save this password now. It will not be shown again. The teacher
+            should change it after first login.
           </p>
           <button
             type="button"
@@ -165,37 +207,80 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
       open={open}
       onOpenChange={onOpenChange}
       title={isEdit ? "Edit Teacher" : "Add New Teacher"}
-      description={isEdit ? "Update teacher details" : "A login account will be created with a temporary password"}
+      description={
+        isEdit
+          ? "Update teacher details"
+          : "A login account will be created with a temporary password"
+      }
       className="max-w-xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <FormField label="Full Name" error={errors.name?.message} required className="col-span-2">
-            <input {...register("name")} className={inputCls} placeholder="e.g. Priya Nair" />
+          <FormField
+            label="Full Name"
+            error={errors.name?.message}
+            required
+            className="col-span-2"
+          >
+            <input
+              {...register("name")}
+              className={inputCls}
+              placeholder="e.g. Priya Nair"
+            />
           </FormField>
 
           <FormField label="Email" error={errors.email?.message} required>
-            <input {...register("email")} type="email" className={inputCls} placeholder="teacher@school.edu" />
+            <input
+              {...register("email")}
+              type="email"
+              className={inputCls}
+              placeholder="teacher@school.edu"
+            />
           </FormField>
 
           <FormField label="Phone" error={errors.phone?.message}>
-            <input {...register("phone")} className={inputCls} placeholder="+91 98765 43210" />
+            <input
+              {...register("phone")}
+              className={inputCls}
+              placeholder="+91 98765 43210"
+            />
           </FormField>
 
           <FormField label="Subject" error={errors.subject?.message} required>
-            <input {...register("subject")} className={inputCls} placeholder="e.g. Mathematics" />
+            <input
+              {...register("subject")}
+              className={inputCls}
+              placeholder="e.g. Mathematics"
+            />
           </FormField>
 
-          <FormField label="Qualification" error={errors.qualification?.message}>
-            <input {...register("qualification")} className={inputCls} placeholder="e.g. M.Sc, B.Ed" />
+          <FormField
+            label="Qualification"
+            error={errors.qualification?.message}
+          >
+            <input
+              {...register("qualification")}
+              className={inputCls}
+              placeholder="e.g. M.Sc, B.Ed"
+            />
           </FormField>
 
           <FormField label="Monthly Salary (₹)" error={errors.salary?.message}>
-            <input {...register("salary")} type="number" min="0" className={inputCls} placeholder="e.g. 35000" />
+            <input
+              {...register("salary")}
+              type="number"
+              min="0"
+              className={inputCls}
+              placeholder="e.g. 35000"
+            />
           </FormField>
 
           <FormField label="Joining Date" error={errors.joiningDate?.message}>
-            <input {...register("joiningDate")} type="date" className={inputCls} />
+            <input
+              {...register("joiningDate")}
+              type="date"
+              className={inputCls}
+            />
           </FormField>
 
           <FormField label="Assigned Classes & Sections" className="col-span-2">
@@ -207,7 +292,9 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
                 value={selectedSectionIds}
                 onChange={setSelectedSectionIds}
                 options={groupedSectionOptions}
-                getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                getPopupContainer={(triggerNode) =>
+                  triggerNode.parentElement || document.body
+                }
                 dropdownStyle={{ maxHeight: 260, overflowY: "auto" }}
                 virtual={false}
                 className="w-full ant-select-custom"
@@ -231,7 +318,11 @@ export function TeacherDialog({ open, onOpenChange, teacher, classes }: Readonly
         </div>
 
         <div className="flex gap-2 justify-end pt-2 border-t">
-          <button type="button" onClick={() => onOpenChange(false)} className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
+          >
             Cancel
           </button>
           <button

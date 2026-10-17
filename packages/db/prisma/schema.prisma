@@ -133,14 +133,14 @@ model PlanLimit {
 }
 
 model User {
-  id               String       @id @default(cuid())
-  schoolId         String?
-  email            String       @unique
-  password         String
-  name             String
-  role             UserRole     @default(TEACHER)
-  image            String?
-  phone            String?
+  id                 String       @id @default(cuid())
+  schoolId           String?
+  email              String       @unique
+  password           String
+  name               String
+  role               UserRole     @default(TEACHER)
+  image              String?
+  phone              String?
   isActive           Boolean      @default(true)
   mustChangePassword Boolean      @default(false)
   passwordChangedAt  DateTime?
@@ -148,11 +148,11 @@ model User {
   updatedAt          DateTime     @updatedAt
   resetToken         String?      @unique
   resetTokenExpiry   DateTime?
-  attendances      Attendance[]
-  notices          Notice[]
-  teacher          Teacher?
-  recordedExpenses Expense[]
-  school           School?      @relation(fields: [schoolId], references: [id])
+  attendances        Attendance[]
+  notices            Notice[]
+  teacher            Teacher?
+  recordedExpenses   Expense[]
+  school             School?      @relation(fields: [schoolId], references: [id])
 
   @@index([schoolId])
   @@index([email])
@@ -212,7 +212,7 @@ model Student {
   classId         String
   sectionId       String
   rollNumber      String
-  admissionNumber String                 @unique
+  admissionNumber String
   name            String
   dateOfBirth     DateTime?
   gender          Gender                 @default(MALE)
@@ -241,7 +241,11 @@ model Student {
   school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section         Section                @relation(fields: [sectionId], references: [id])
 
-  @@unique([schoolId, rollNumber, classId])
+  // D3: admission numbers are unique within a school, not across all schools.
+  @@unique([schoolId, admissionNumber])
+  // D4: roll numbers are per section and only need to be unique among active
+  // students (withdrawn students keep theirs); enforced in the student actions.
+  @@index([sectionId, rollNumber])
   @@index([schoolId])
   @@index([classId])
   @@index([schoolId, isActive, classId])
@@ -336,7 +340,7 @@ model Attendance {
   markedBy   User             @relation(fields: [markedById], references: [id])
   school     School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section    Section          @relation(fields: [sectionId], references: [id])
-  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: NoAction)
 
   @@unique([studentId, date])
   @@index([schoolId, date])
@@ -346,25 +350,25 @@ model Attendance {
 }
 
 model Fee {
-  id         String    @id @default(cuid())
-  schoolId   String
-  studentId  String
-  classId    String
-  feeType    String
-  amount     Decimal   @db.Decimal(10, 2)
-  dueDate    DateTime  @db.Date
-  status     FeeStatus @default(PENDING)
+  id               String    @id @default(cuid())
+  schoolId         String
+  studentId        String
+  classId          String
+  feeType          String
+  amount           Decimal   @db.Decimal(10, 2)
+  dueDate          DateTime  @db.Date
+  status           FeeStatus @default(PENDING)
   paidAt           DateTime?
   paidAmount       Decimal?  @db.Decimal(10, 2)
   remarks          String?
   isMigrated       Boolean   @default(false)
   migratedChargeId String?
   createdAt        DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  class      Class     @relation(fields: [classId], references: [id])
-  school     School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  payments   Payment[]
+  updatedAt        DateTime  @updatedAt
+  class            Class     @relation(fields: [classId], references: [id])
+  school           School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student          Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments         Payment[]
 
   @@index([schoolId])
   @@index([studentId])
@@ -527,8 +531,8 @@ model FeeCharge {
   updatedAt DateTime        @updatedAt
   items     FeeChargeItem[]
   school    School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session   AcademicSession @relation(fields: [sessionId], references: [id], onDelete: NoAction)
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: NoAction)
 
   @@unique([studentId, sessionId, periodKey])
   @@index([schoolId])
@@ -551,7 +555,7 @@ model FeeChargeItem {
   waiverReason String?
   createdAt    DateTime            @default(now())
   charge       FeeCharge           @relation(fields: [chargeId], references: [id], onDelete: Cascade)
-  component    FeeComponent        @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  component    FeeComponent        @relation(fields: [componentId], references: [id], onDelete: NoAction)
   allocations  PaymentAllocation[]
 
   @@unique([chargeId, componentId])
@@ -577,7 +581,7 @@ model PaymentTransaction {
   updatedAt       DateTime            @updatedAt
   allocations     PaymentAllocation[]
   school          School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  student         Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student         Student             @relation(fields: [studentId], references: [id], onDelete: NoAction)
 
   @@unique([schoolId, receiptNo])
   @@unique([schoolId, idempotencyKey])
@@ -609,7 +613,7 @@ model AdvanceLedger {
   amount      Decimal       @db.Decimal(10, 2)
   description String?
   createdAt   DateTime      @default(now())
-  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student     Student       @relation(fields: [studentId], references: [id], onDelete: NoAction)
   component   FeeComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
 
   @@index([studentId])
@@ -900,8 +904,9 @@ model StudentTransport {
   school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   student Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
   session AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  route   TransportRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  stop    RouteStop       @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  // D1: removing a route or stop must never delete the students' enrollments.
+  route   TransportRoute  @relation(fields: [routeId], references: [id], onDelete: NoAction)
+  stop    RouteStop       @relation(fields: [stopId], references: [id], onDelete: NoAction)
   vehicle Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
   @@unique([studentId, sessionId])
@@ -980,7 +985,7 @@ model ExamMark {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   examSubject   ExamSubject @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
-  student       Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: NoAction)
 
   @@unique([examSubjectId, studentId])
   @@index([studentId])
@@ -1075,7 +1080,7 @@ model SalarySlip {
   updatedAt       DateTime         @updatedAt
 
   school  School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  teacher Teacher         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher Teacher         @relation(fields: [teacherId], references: [id], onDelete: NoAction)
   payouts PayrollPayout[]
 
   @@unique([teacherId, year, month])
@@ -1100,7 +1105,7 @@ model PayrollPayout {
   updatedAt     DateTime            @updatedAt
 
   school     School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  salarySlip SalarySlip @relation(fields: [salarySlipId], references: [id], onDelete: Cascade)
+  salarySlip SalarySlip @relation(fields: [salarySlipId], references: [id], onDelete: NoAction)
 
   @@index([schoolId])
   @@index([salarySlipId])

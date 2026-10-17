@@ -12,7 +12,7 @@ import {
   getFeeReceiptDetails,
   waiveFeeChargeItem,
 } from "../fee-allocator";
-import { prisma } from "@schoolos/db";
+import { prisma, purgeSchool } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 
 const schoolId = "allocator-school-" + Math.random().toString(36).substring(7);
@@ -32,7 +32,7 @@ describe("Fee Allocator Actions", () => {
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
 
     // Create required initial data
     const school = await prisma.school.create({
@@ -123,7 +123,7 @@ describe("Fee Allocator Actions", () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
   it("should allocate payment fully to a component and update charge to PAID", async () => {

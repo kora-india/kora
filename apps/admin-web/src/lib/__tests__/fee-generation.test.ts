@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { prisma } from "@schoolos/db";
+import { prisma, purgeSchool } from "@schoolos/db";
 
 // Next.js resolves "server-only" at build time; vitest can't.
 vi.mock("server-only", () => ({}));
@@ -153,7 +153,7 @@ describe("monthly fee generation", () => {
   });
 
   afterAll(async () => {
-    await prisma.school.delete({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
   it("bills every due component in the session's first month, skipping inactive ones", async () => {

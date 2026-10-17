@@ -299,7 +299,13 @@ export function AttendanceContent({
               type="date"
               value={selectedDate}
               max={today}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                // The loaded statuses belong to the previous date; saving them
+                // now would overwrite this date's attendance (D2).
+                setStudents([]);
+                setAttendance({});
+              }}
               className="h-8 px-2 rounded-lg border bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <select

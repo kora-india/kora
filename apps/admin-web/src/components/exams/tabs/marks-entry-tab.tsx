@@ -17,6 +17,18 @@ import {
 } from "lucide-react";
 import { Select } from "antd";
 
+/** A typed mark that the server would reject (D11). Blank means "not entered". */
+function isInvalidMark(value: string, maxMarks: number): boolean {
+  if (value.trim() === "") return false;
+  const n = Number(value);
+  return (
+    !Number.isFinite(n) ||
+    n < 0 ||
+    n > maxMarks ||
+    Math.round(n * 100) !== n * 100
+  );
+}
+
 interface MarksEntryTabProps {
   exams: any[];
   classes: any[];
@@ -61,6 +73,50 @@ export function MarksEntryTab({
       { marksObtained: string; isAbsent: boolean; remarks: string }
     >
   >({});
+  // What was loaded, to save only changed rows and detect unsaved edits.
+  const [originalEntries, setOriginalEntries] = useState<typeof entries>({});
+  const [loadedAt, setLoadedAt] = useState<string | undefined>();
+
+  const isLocked = Boolean(sheetData?.examSubject?.isPublished);
+  const maxMarksValue = Number(sheetData?.examSubject?.maxMarks ?? 0);
+  const changedStudentIds = useMemo(
+    () =>
+      Object.keys(entries).filter((id) => {
+        const now = entries[id];
+        const before = originalEntries[id];
+        return (
+          !before ||
+          now.marksObtained !== before.marksObtained ||
+          now.isAbsent !== before.isAbsent ||
+          (now.remarks || "") !== (before.remarks || "")
+        );
+      }),
+    [entries, originalEntries],
+  );
+  const isDirty = changedStudentIds.length > 0;
+  const invalidCount = useMemo(
+    () =>
+      Object.values(entries).filter(
+        (e) => !e.isAbsent && isInvalidMark(e.marksObtained, maxMarksValue),
+      ).length,
+    [entries, maxMarksValue],
+  );
+
+  // Warn before leaving the page with unsaved marks.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
+  /** Switching exam, class, section or subject reloads the sheet. */
+  const confirmDiscard = () =>
+    !isDirty ||
+    window.confirm("You have unsaved marks on this sheet. Discard them?");
 
   // Active exam object
   const activeExam = useMemo(
@@ -117,6 +173,8 @@ export function MarksEntryTab({
         };
       }
       setEntries(initialEntries);
+      setOriginalEntries(initialEntries);
+      setLoadedAt(data.loadedAt);
     } catch (err: any) {
       toast.error(err.message || "Failed to load marksheet");
     } finally {
@@ -161,24 +219,51 @@ export function MarksEntryTab({
     }));
   };
 
-  // Save Batch Marks
+  // Save Batch Marks: only the rows that changed since the sheet loaded
   const handleSave = async () => {
     if (!selectedSubjectId || !sheetData) return;
+    if (isLocked) {
+      toast.error(
+        "Results for this exam are published. Unpublish the exam to change marks.",
+      );
+      return;
+    }
+    if (invalidCount > 0) {
+      toast.error(
+        `Fix ${invalidCount} invalid mark(s) first. Marks must be between 0 and ${maxMarksValue}.`,
+      );
+      return;
+    }
+    if (!isDirty) {
+      toast.info("No changes to save");
+      return;
+    }
 
     setSaving(true);
     try {
-      const payload = Object.entries(entries).map(([studentId, data]) => ({
-        studentId,
-        marksObtained:
-          data.isAbsent || data.marksObtained === ""
-            ? null
-            : Number(data.marksObtained),
-        isAbsent: data.isAbsent,
-        remarks: data.remarks,
-      }));
+      const payload = changedStudentIds.map((studentId) => {
+        const data = entries[studentId];
+        return {
+          studentId,
+          marksObtained:
+            data.isAbsent || data.marksObtained.trim() === ""
+              ? null
+              : Number(data.marksObtained),
+          isAbsent: data.isAbsent,
+          remarks: data.remarks,
+        };
+      });
 
-      await saveBatchMarks(selectedSubjectId, payload);
-      toast.success("Marks saved successfully!");
+      const res = await saveBatchMarks(selectedSubjectId, payload, {
+        since: loadedAt,
+      });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(
+        `Saved marks for ${res.savedCount} student${res.savedCount === 1 ? "" : "s"}`,
+      );
       loadMarksheet();
     } catch (err: any) {
       toast.error(err.message || "Failed to save marks");
@@ -232,7 +317,9 @@ export function MarksEntryTab({
             </label>
             <Select
               value={selectedExamId}
-              onChange={setSelectedExamId}
+              onChange={(val) => {
+                if (confirmDiscard()) setSelectedExamId(val);
+              }}
               className="w-full"
               options={exams.map((ex) => ({
                 label: `${ex.name} (${ex.academicYear})`,
@@ -249,6 +336,7 @@ export function MarksEntryTab({
             <Select
               value={selectedClassId}
               onChange={(val) => {
+                if (!confirmDiscard()) return;
                 setSelectedClassId(val);
                 setSelectedSectionId("all");
               }}
@@ -267,7 +355,9 @@ export function MarksEntryTab({
             </label>
             <Select
               value={selectedSectionId}
-              onChange={setSelectedSectionId}
+              onChange={(val) => {
+                if (confirmDiscard()) setSelectedSectionId(val);
+              }}
               className="w-full"
               options={[
                 { label: "All Sections", value: "all" },
@@ -286,7 +376,9 @@ export function MarksEntryTab({
             </label>
             <Select
               value={selectedSubjectId || undefined}
-              onChange={setSelectedSubjectId}
+              onChange={(val) => {
+                if (confirmDiscard()) setSelectedSubjectId(val);
+              }}
               disabled={availableSubjects.length === 0}
               placeholder={
                 availableSubjects.length === 0
@@ -332,6 +424,7 @@ export function MarksEntryTab({
               <button
                 type="button"
                 onClick={handleFillMaxMarks}
+                disabled={isLocked}
                 className="px-2.5 py-1 rounded-lg border bg-background hover:bg-muted text-[11px] font-medium text-foreground transition"
               >
                 Fill Max Marks
@@ -339,6 +432,7 @@ export function MarksEntryTab({
               <button
                 type="button"
                 onClick={handleClearAll}
+                disabled={isLocked}
                 className="px-2.5 py-1 rounded-lg border bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground transition"
               >
                 Clear All
@@ -346,7 +440,7 @@ export function MarksEntryTab({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || isLocked || !isDirty}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50"
               >
                 {saving ? (
@@ -354,12 +448,22 @@ export function MarksEntryTab({
                 ) : (
                   <Save className="w-3.5 h-3.5" />
                 )}
-                Save Marks
+                Save Marks{isDirty ? ` (${changedStudentIds.length})` : ""}
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {isLocked && (
+        <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 text-xs">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Results for this exam are published, so these marks are read-only.
+            Unpublish the exam to change them.
+          </span>
+        </div>
+      )}
 
       {/* Marksheet Spreadsheet Table */}
       {availableSubjects.length === 0 ? (
@@ -445,18 +549,29 @@ export function MarksEntryTab({
                         min={0}
                         max={sheetData.examSubject.maxMarks}
                         step="0.5"
-                        disabled={entry.isAbsent}
+                        disabled={entry.isAbsent || isLocked}
                         placeholder="0.0"
                         value={entry.marksObtained}
                         onChange={(e) =>
                           handleMarksChange(st.studentId, e.target.value)
                         }
+                        aria-invalid={isInvalidMark(
+                          entry.marksObtained,
+                          maxMarksValue,
+                        )}
+                        title={
+                          isInvalidMark(entry.marksObtained, maxMarksValue)
+                            ? `Enter a mark between 0 and ${maxMarksValue}`
+                            : undefined
+                        }
                         className={`w-full px-3 py-1.5 text-xs rounded-lg border font-mono font-bold transition focus:ring-2 focus:ring-violet-500/20 ${
                           entry.isAbsent
                             ? "bg-muted text-muted-foreground cursor-not-allowed"
-                            : gradeInfo.isPass
-                              ? "bg-background text-foreground"
-                              : "bg-rose-50 dark:bg-rose-950/30 text-rose-600 border-rose-300 dark:border-rose-800"
+                            : isInvalidMark(entry.marksObtained, maxMarksValue)
+                              ? "bg-rose-50 dark:bg-rose-950/30 text-rose-700 border-rose-500 ring-2 ring-rose-500/30"
+                              : gradeInfo.isPass
+                                ? "bg-background text-foreground"
+                                : "bg-rose-50 dark:bg-rose-950/30 text-rose-600 border-rose-300 dark:border-rose-800"
                         }`}
                       />
                     </td>
@@ -465,6 +580,7 @@ export function MarksEntryTab({
                         <input
                           type="checkbox"
                           checked={entry.isAbsent}
+                          disabled={isLocked}
                           onChange={(e) =>
                             handleAbsentToggle(st.studentId, e.target.checked)
                           }
@@ -492,6 +608,7 @@ export function MarksEntryTab({
                         type="text"
                         placeholder="Remark..."
                         value={entry.remarks}
+                        disabled={isLocked}
                         onChange={(e) =>
                           handleRemarksChange(st.studentId, e.target.value)
                         }

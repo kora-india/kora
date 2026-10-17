@@ -8,7 +8,7 @@ import {
   vi,
 } from "vitest";
 import { createSections, createClass } from "../classes";
-import { prisma } from "@schoolos/db";
+import { prisma, purgeSchool } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 
 const schoolId =
@@ -23,7 +23,7 @@ describe("Classes & Multiple Sections Management", () => {
     } as any);
 
     // Cleanup and setup school
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
     await prisma.school.create({
       data: {
         id: schoolId,
@@ -43,7 +43,7 @@ describe("Classes & Multiple Sections Management", () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
   it("creates multiple sections at once using an array of names", async () => {

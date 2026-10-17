@@ -34,7 +34,22 @@ export function evaluateSubscriptionValidity(
   const rawStatus =
     (subscription?.status as SubscriptionStatus) || SubscriptionStatus.ACTIVE;
 
-  // If status is explicitly CANCELLED or EXPIRED in database
+  // D16: a status stored as EXPIRED is final, even with no period end set
+  // (this used to fall through and evaluate as ACTIVE).
+  if (rawStatus === SubscriptionStatus.EXPIRED) {
+    return {
+      status: SubscriptionStatus.EXPIRED,
+      plan,
+      isTrial: false,
+      isActive: false,
+      isPastDue: false,
+      isExpired: true,
+      daysRemaining: 0,
+      message: "Subscription has expired. Please renew to continue.",
+    };
+  }
+
+  // If status is explicitly CANCELLED in database
   if (rawStatus === SubscriptionStatus.CANCELLED) {
     return {
       status: SubscriptionStatus.CANCELLED,
@@ -99,6 +114,21 @@ export function evaluateSubscriptionValidity(
   const periodEnd = subscription?.currentPeriodEnd
     ? new Date(subscription.currentPeriodEnd)
     : null;
+
+  // PAST_DUE with no period end: we can't time the grace period, so keep
+  // access but report it as past due instead of quietly ACTIVE.
+  if (!periodEnd && rawStatus === SubscriptionStatus.PAST_DUE) {
+    return {
+      status: SubscriptionStatus.PAST_DUE,
+      plan,
+      isTrial: false,
+      isActive: true,
+      isPastDue: true,
+      isExpired: false,
+      daysRemaining: 0,
+      message: "Billing past due. Please renew to avoid interruption.",
+    };
+  }
 
   // If no period end is specified, assume active (e.g. Free plan without end date)
   if (!periodEnd) {

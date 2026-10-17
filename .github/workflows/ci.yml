@@ -65,8 +65,10 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm run db:generate
 
-      - name: Push Schema to Test Database
-        run: pnpm --filter @schoolos/db run db:push --accept-data-loss
+      # Apply the real migration history (not `db push`), so a schema change
+      # without a migration fails CI instead of reaching production.
+      - name: Apply Migrations to Test Database
+        run: pnpm --filter @schoolos/db run db:deploy
 
       - name: Run Type Checking
         run: pnpm run type-check

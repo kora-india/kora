@@ -111,3 +111,63 @@ export function formatAdmissionNumber(
 
   return result;
 }
+
+/** The prefix and format a school's admission numbers use. */
+export function admissionSettingsFor(school: {
+  admissionNumberPrefix?: string | null;
+  admissionNumberFormat?: string | null;
+  subdomain?: string | null;
+}): { prefix: string; format: string } {
+  const prefix =
+    school.admissionNumberPrefix ||
+    school.subdomain
+      ?.replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 4)
+      .toUpperCase() ||
+    "SCH";
+  return {
+    prefix,
+    format: school.admissionNumberFormat || "{PREFIX}-{YYYY}-{SEQ:4}",
+  };
+}
+
+/**
+ * The next `count` admission numbers in a school's sequence, starting at
+ * `fromSequence`. Pure: callers check which are free in one query.
+ */
+export function admissionNumberCandidates(
+  format: string,
+  prefix: string,
+  fromSequence: number,
+  count: number,
+  date: Date = new Date(),
+): { sequence: number; admissionNumber: string }[] {
+  const start = Math.max(1, fromSequence);
+  return Array.from({ length: count }, (_, i) => ({
+    sequence: start + i,
+    admissionNumber: formatAdmissionNumber(format, prefix, start + i, date),
+  }));
+}
+
+/**
+ * Which sequence number produced `admissionNumber`, looking `lookahead`
+ * numbers past `fromSequence`; null for a number typed in by hand.
+ */
+export function sequenceOfAdmissionNumber(
+  admissionNumber: string,
+  format: string,
+  prefix: string,
+  fromSequence: number,
+  lookahead = 500,
+  date: Date = new Date(),
+): number | null {
+  const target = admissionNumber.trim().toUpperCase();
+  const match = admissionNumberCandidates(
+    format,
+    prefix,
+    fromSequence,
+    lookahead,
+    date,
+  ).find((c) => c.admissionNumber.toUpperCase() === target);
+  return match ? match.sequence : null;
+}

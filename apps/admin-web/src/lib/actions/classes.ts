@@ -214,6 +214,37 @@ export async function deleteClass(id: string) {
     });
     if (!existingClass) return { error: "Class not found in your school" };
 
+    // D18: say exactly what is in the way. Exam marks matter most: deleting
+    // the class would cascade through its exam subjects and erase the marks
+    // of students who have since moved to another class.
+    const [active, withdrawn, attendance, marks, assignments, legacyFees] =
+      await Promise.all([
+        prisma.student.count({ where: { classId: id, isActive: true } }),
+        prisma.student.count({ where: { classId: id, isActive: false } }),
+        prisma.attendance.count({ where: { classId: id } }),
+        prisma.examMark.count({ where: { examSubject: { classId: id } } }),
+        prisma.assignment.count({ where: { classId: id } }),
+        prisma.fee.count({ where: { classId: id } }),
+      ]);
+    const blockers = [
+      active && `${active} active student${active === 1 ? "" : "s"}`,
+      withdrawn &&
+        `${withdrawn} withdrawn student${withdrawn === 1 ? "" : "s"}`,
+      attendance && "attendance records",
+      marks && "exam marks",
+      assignments && "assignments",
+      legacyFees && "fee records",
+    ].filter(Boolean);
+    if (blockers.length > 0) {
+      return {
+        error: `${existingClass.name} can't be deleted because it has ${blockers.join(", ")}. ${
+          active
+            ? "Move its students to another class first."
+            : "Classes with history are kept for the records."
+        }`,
+      };
+    }
+
     await prisma.class.delete({ where: { id: existingClass.id } });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
@@ -224,7 +255,7 @@ export async function deleteClass(id: string) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: "Cannot delete class with existing students or sections" };
+    return { error: e.message || "Failed to delete class" };
   }
 }
 
@@ -339,12 +370,29 @@ export async function deleteSection(id: string) {
     });
     if (!existingSection) return { error: "Section not found in your school" };
 
+    const [students, attendance, assignments] = await Promise.all([
+      prisma.student.count({ where: { sectionId: id } }),
+      prisma.attendance.count({ where: { sectionId: id } }),
+      prisma.assignment.count({ where: { sectionId: id } }),
+    ]);
+    const blockers = [
+      students &&
+        `${students} student${students === 1 ? "" : "s"} (including withdrawn)`,
+      attendance && "attendance records",
+      assignments && "assignments",
+    ].filter(Boolean);
+    if (blockers.length > 0) {
+      return {
+        error: `Section ${existingSection.name} can't be deleted because it has ${blockers.join(", ")}.`,
+      };
+    }
+
     await prisma.section.delete({ where: { id: existingSection.id } });
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
     revalidatePath("/students");
     return { success: true };
   } catch (e: any) {
-    return { error: "Cannot delete section with existing students" };
+    return { error: e.message || "Failed to delete section" };
   }
 }

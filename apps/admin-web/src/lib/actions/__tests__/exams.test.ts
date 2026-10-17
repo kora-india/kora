@@ -12,7 +12,7 @@ import {
   calculateSubjectGrade,
   calculateReportCardSummary,
 } from "../../grading";
-import { prisma, ExamType, GradingSystem } from "@schoolos/db";
+import { prisma, purgeSchool, ExamType, GradingSystem } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 
 const schoolId = "exam-school-" + Math.random().toString(36).substring(7);
@@ -90,7 +90,7 @@ describe("Examinations & Report Cards Engine", () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
   it("should correctly evaluate CBSE 9-point grades and GPAs", () => {
@@ -180,7 +180,7 @@ describe("Examinations & Report Cards Engine", () => {
       },
     ]);
 
-    expect(result.success).toBe(true);
+    if (!result.success) throw new Error(result.error);
     expect(result.savedCount).toBe(2);
 
     const mark1 = await prisma.examMark.findUnique({
@@ -218,5 +218,95 @@ describe("Examinations & Report Cards Engine", () => {
     expect(sectionCards.length).toBe(2);
     expect(sectionCards.map((c) => c.student.name)).toContain("Alice Sharma");
     expect(sectionCards.map((c) => c.student.name)).toContain("Bob Verma");
+  });
+
+  it("rejects invalid marks instead of saving 0 or the maximum", async () => {
+    const result = await saveBatchMarks(examSubjectId, [
+      { studentId: student1Id, marksObtained: 150 },
+      { studentId: student2Id, marksObtained: -3 },
+    ]);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.invalidStudentIds?.sort()).toEqual(
+      [student1Id, student2Id].sort(),
+    );
+
+    const mark1 = await prisma.examMark.findUnique({
+      where: {
+        examSubjectId_studentId: { examSubjectId, studentId: student1Id },
+      },
+    });
+    expect(Number(mark1?.marksObtained)).toBe(95);
+  });
+
+  it("refuses to overwrite marks someone changed after the sheet was loaded", async () => {
+    const loadedAt = new Date(Date.now() - 60_000).toISOString();
+    await saveBatchMarks(examSubjectId, [
+      { studentId: student2Id, marksObtained: 40 },
+    ]);
+
+    const stale = await saveBatchMarks(
+      examSubjectId,
+      [{ studentId: student2Id, marksObtained: 10 }],
+      { since: loadedAt },
+    );
+    expect(stale.success).toBe(false);
+    if (!stale.success) expect(stale.error).toMatch(/Bob Verma/);
+
+    const fresh = await saveBatchMarks(
+      examSubjectId,
+      [{ studentId: student2Id, marksObtained: 41 }],
+      { since: new Date().toISOString() },
+    );
+    expect(fresh.success).toBe(true);
+  });
+
+  it("locks marks once the exam's results are published", async () => {
+    await prisma.exam.update({
+      where: { id: examId },
+      data: { isPublished: true },
+    });
+    try {
+      const result = await saveBatchMarks(examSubjectId, [
+        { studentId: student1Id, marksObtained: 50 },
+      ]);
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error).toMatch(/published/i);
+    } finally {
+      await prisma.exam.update({
+        where: { id: examId },
+        data: { isPublished: false },
+      });
+    }
+  });
+
+  it("decides pass or fail by the subject's pass mark, not the grade band", () => {
+    // 35/100 is a passing D band, but the pass mark is 40.
+    const below = calculateSubjectGrade(35, 100, 40, false, "CBSE_9_POINT");
+    expect(below.isPass).toBe(false);
+    expect(below.grade).toBe("E");
+
+    // 30/100 is below the 33% band, but the pass mark is 25.
+    const above = calculateSubjectGrade(
+      30,
+      100,
+      25,
+      false,
+      "PERCENTAGE_LETTER",
+    );
+    expect(above.isPass).toBe(true);
+  });
+
+  it("leaves unmarked subjects out of the totals and reports the result as pending", () => {
+    const summary = calculateReportCardSummary(
+      [
+        { maxMarks: 100, passMarks: 33, marksObtained: 80 },
+        { maxMarks: 100, passMarks: 33, marksObtained: null },
+      ],
+      "CBSE_9_POINT",
+    );
+    expect(summary.totalMaxMarks).toBe(100);
+    expect(summary.overallPercentage).toBe(80);
+    expect(summary.result).toBe("PENDING");
   });
 });

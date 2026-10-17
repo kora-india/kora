@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import {
   getTimetablePeriods,
+  savePeriodSettings,
   saveTimetableSlot,
   getTimetable,
   checkSlotConflict,
@@ -266,5 +267,109 @@ describe("Timetable Generator & Conflict Resolution Engine", () => {
         data: { plan: "PRO" },
       });
     }
+  });
+
+  it("D8: moving a slot to another day moves it instead of leaving a copy", async () => {
+    const periods = await getTimetablePeriods();
+    const period = periods.filter((p) => !p.isBreak)[1];
+    const created = await saveTimetableSlot({
+      classId: class2Id,
+      sectionId: section2Id,
+      dayOfWeek: 6,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      subjectName: "Art (move test)",
+    });
+    expect(created.success).toBe(true);
+
+    const moved = await saveTimetableSlot({
+      id: created.slot!.id,
+      classId: class2Id,
+      sectionId: section2Id,
+      dayOfWeek: 5,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      subjectName: "Art (move test)",
+    });
+    expect(moved.success).toBe(true);
+
+    const copies = await prisma.timetableSlot.findMany({
+      where: { schoolId, subjectName: "Art (move test)" },
+    });
+    expect(copies.map((c) => c.dayOfWeek)).toEqual([5]);
+  });
+
+  it("D7: changing a period's times moves the classes scheduled in it", async () => {
+    const periods = await getTimetablePeriods();
+    const last = periods[periods.length - 1];
+    await prisma.timetableSlot.create({
+      data: {
+        schoolId,
+        classId: class2Id,
+        sectionId: section2Id,
+        periodId: last.id,
+        dayOfWeek: 4,
+        startTime: last.startTime,
+        endTime: last.endTime,
+        subjectName: "Retime test",
+      },
+    });
+
+    const shift = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      const total = h * 60 + m + 5;
+      return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    };
+    const payload = periods.map((p) => ({
+      id: p.id,
+      name: p.name,
+      periodNumber: p.periodNumber,
+      startTime: p.id === last.id ? shift(p.startTime) : p.startTime,
+      endTime: p.id === last.id ? shift(p.endTime) : p.endTime,
+      isBreak: p.isBreak,
+    }));
+    const res = await savePeriodSettings(payload);
+    expect(res).toEqual({ success: true, removedClasses: 0 });
+
+    const slot = await prisma.timetableSlot.findFirstOrThrow({
+      where: { schoolId, subjectName: "Retime test" },
+    });
+    expect(slot.startTime).toBe(shift(last.startTime));
+    expect(slot.periodId).toBe(last.id);
+  });
+
+  it("D7: removing a period with classes in it needs confirmation", async () => {
+    const periods = await getTimetablePeriods();
+    const last = periods[periods.length - 1];
+    const payload = periods
+      .filter((p) => p.id !== last.id)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        periodNumber: p.periodNumber,
+        startTime: p.startTime,
+        endTime: p.endTime,
+        isBreak: p.isBreak,
+      }));
+
+    const refused = await savePeriodSettings(payload);
+    expect(refused).toMatchObject({
+      success: false,
+      code: "PERIOD_HAS_CLASSES",
+    });
+    if (!refused.success) expect(refused.code).toBe("PERIOD_HAS_CLASSES");
+    expect(
+      await prisma.timetablePeriod.findUnique({ where: { id: last.id } }),
+    ).not.toBeNull();
+
+    const confirmed = await savePeriodSettings(payload, {
+      removeScheduledClasses: true,
+    });
+    expect(confirmed.success).toBe(true);
+    expect(
+      await prisma.timetableSlot.count({
+        where: { schoolId, subjectName: "Retime test" },
+      }),
+    ).toBe(0);
   });
 });

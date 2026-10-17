@@ -15,6 +15,7 @@ import {
   PaymentMethod,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { purgeSchool } from "./purge-school";
 
 const prisma = new PrismaClient({
   datasources: {
@@ -52,8 +53,8 @@ async function main() {
       data: { schoolId: null },
     });
 
-    // 2. Delete School (this automatically cascade deletes Attendances, Notices, Students, Fees, etc.)
-    await prisma.school.delete({ where: { id: school.id } });
+    // 2. Delete the school and everything in it
+    await purgeSchool(prisma, school.id);
 
     // 3. Delete the orphaned Users (safe now because Attendances and Notices are gone)
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });

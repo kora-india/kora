@@ -5,7 +5,11 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
-import { formatAdmissionNumber } from "@/lib/admission-number";
+import {
+  admissionNumberCandidates,
+  admissionSettingsFor,
+  formatAdmissionNumber,
+} from "@/lib/admission-number";
 
 const AdmissionSettingsSchema = z.object({
   prefix: z
@@ -153,41 +157,35 @@ export async function getNextAdmissionNumber(
 
     if (!school) return { error: "School not found" };
 
-    const prefix =
-      overridePrefix?.trim().toUpperCase() ||
-      school.admissionNumberPrefix ||
-      school.subdomain
-        ?.replace(/[^a-zA-Z0-9]/g, "")
-        .slice(0, 4)
-        .toUpperCase() ||
-      "SCH";
+    const defaults = admissionSettingsFor(school);
+    const prefix = overridePrefix?.trim().toUpperCase() || defaults.prefix;
+    const format = overrideFormat?.trim() || defaults.format;
 
-    const format =
-      overrideFormat?.trim() ||
-      school.admissionNumberFormat ||
-      "{PREFIX}-{YYYY}-{SEQ:4}";
-
-    let sequence = Math.max(1, school.nextAdmissionNumber ?? 1);
-    let candidate = formatAdmissionNumber(format, prefix, sequence);
-
-    // Collision check: verify candidate doesn't already belong to an enrolled student
-    // Check up to 100 consecutive numbers to guarantee uniqueness
-    for (let attempts = 0; attempts < 100; attempts++) {
-      const existing = await prisma.student.findFirst({
-        where: {
-          schoolId: user.schoolId,
-          admissionNumber: candidate,
-        },
-        select: { id: true },
-      });
-
-      if (!existing) {
-        break;
-      }
-
-      sequence += 1;
-      candidate = formatAdmissionNumber(format, prefix, sequence);
+    // D3: find the first unused number among the next 200 in one query
+    // (this used to be up to 100 sequential lookups).
+    const candidates = admissionNumberCandidates(
+      format,
+      prefix,
+      school.nextAdmissionNumber ?? 1,
+      200,
+    );
+    const taken = await prisma.student.findMany({
+      where: {
+        schoolId: user.schoolId,
+        admissionNumber: { in: candidates.map((c) => c.admissionNumber) },
+      },
+      select: { admissionNumber: true },
+    });
+    const takenSet = new Set(taken.map((t) => t.admissionNumber));
+    const free = candidates.find((c) => !takenSet.has(c.admissionNumber));
+    if (!free) {
+      return {
+        error:
+          "The next 200 admission numbers are all taken. Raise the next sequence number in admission settings.",
+      };
     }
+    const sequence = free.sequence;
+    const candidate = free.admissionNumber;
 
     return {
       success: true,

@@ -60,23 +60,52 @@ export async function createTeacher(data: unknown) {
     ...rest
   } = parsed.data;
 
+  // D13: a removed teacher keeps their login email. Adding them again at the
+  // same school reactivates that account instead of failing on the email.
+  const existingUser = await prisma.user.findUnique({
+    where: { email: rest.email },
+    include: { teacher: { select: { id: true, schoolId: true } } },
+  });
+  const rehire =
+    existingUser &&
+    !existingUser.isActive &&
+    existingUser.schoolId === user.schoolId &&
+    existingUser.teacher?.schoolId === user.schoolId
+      ? { userId: existingUser.id, teacherId: existingUser.teacher.id }
+      : null;
+  if (existingUser && !rehire) {
+    return { error: "A user with this email already exists" };
+  }
+
   try {
     const tempPassword = generateTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
-        const newUser = await tx.user.create({
-          data: {
-            email: rest.email,
-            name: rest.name,
-            password: hashedPassword,
-            role: "TEACHER",
-            phone: rest.phone || null,
-            schoolId: user.schoolId,
-            mustChangePassword: true,
-          },
-        });
+        const accountData = {
+          name: rest.name,
+          password: hashedPassword,
+          role: "TEACHER" as const,
+          phone: rest.phone || null,
+          mustChangePassword: true,
+        };
+        const teacherUser = rehire
+          ? await tx.user.update({
+              where: { id: rehire.userId },
+              data: {
+                ...accountData,
+                isActive: true,
+                passwordChangedAt: new Date(),
+              },
+            })
+          : await tx.user.create({
+              data: {
+                ...accountData,
+                email: rest.email,
+                schoolId: user.schoolId,
+              },
+            });
 
         // Resolve sections
         const sectionRecords =
@@ -95,19 +124,32 @@ export async function createTeacher(data: unknown) {
         const primarySectionId =
           sectionRecords[0]?.id || assignedSectionId || null;
 
-        const teacher = await tx.teacher.create({
-          data: {
-            ...rest,
-            phone: rest.phone || null,
-            qualification: rest.qualification || null,
-            salary: salary ? salary : null,
-            joiningDate: joiningDate ? new Date(joiningDate) : null,
-            schoolId: user.schoolId,
-            userId: newUser.id,
-            assignedClassId: primaryClassId,
-            assignedSectionId: primarySectionId,
-          },
-        });
+        const teacherData = {
+          ...rest,
+          phone: rest.phone || null,
+          qualification: rest.qualification || null,
+          salary: salary ? salary : null,
+          joiningDate: joiningDate ? new Date(joiningDate) : null,
+          assignedClassId: primaryClassId,
+          assignedSectionId: primarySectionId,
+        };
+        const teacher = rehire
+          ? await tx.teacher.update({
+              where: { id: rehire.teacherId },
+              data: { ...teacherData, isActive: true },
+            })
+          : await tx.teacher.create({
+              data: {
+                ...teacherData,
+                schoolId: user.schoolId,
+                userId: teacherUser.id,
+              },
+            });
+        if (rehire) {
+          await tx.teacherSection.deleteMany({
+            where: { teacherId: teacher.id },
+          });
+        }
 
         if (sectionRecords.length > 0) {
           await tx.teacherSection.createMany({
@@ -129,7 +171,12 @@ export async function createTeacher(data: unknown) {
     revalidatePath("/teachers");
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
-    return { success: true, id: result.id, tempPassword };
+    return {
+      success: true,
+      id: result.id,
+      tempPassword,
+      reactivated: Boolean(rehire),
+    };
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "A user with this email already exists" };
@@ -232,19 +279,47 @@ export async function deleteTeacher(id: string) {
     });
     if (!teacher) return { error: "Teacher not found" };
 
-    await prisma.$transaction([
-      prisma.teacher.update({ where: { id }, data: { isActive: false } }),
+    // D13: a removed teacher stops being anyone's class teacher, stops
+    // holding section assignments, and frees their timetable periods.
+    // Salary slips and other history stay with the (inactive) record.
+    const [, , classTeacher, slots] = await prisma.$transaction([
+      prisma.teacher.update({
+        where: { id },
+        data: {
+          isActive: false,
+          assignedClassId: null,
+          assignedSectionId: null,
+        },
+      }),
       prisma.user.update({
         where: { id: teacher.userId },
         data: { isActive: false },
       }),
+      prisma.class.updateMany({
+        where: { classTeacherId: id, schoolId: user.schoolId },
+        data: { classTeacherId: null },
+      }),
+      prisma.timetableSlot.updateMany({
+        where: { teacherId: id, schoolId: user.schoolId },
+        data: { teacherId: null },
+      }),
+      prisma.teacherSection.deleteMany({ where: { teacherId: id } }),
     ]);
 
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateCache(`cache:${user.schoolId}:classes:*`),
+    ]);
     revalidatePath("/teachers");
     revalidatePath(`/teachers/${id}`);
     revalidatePath("/dashboard");
-    return { success: true };
+    revalidatePath("/classes");
+    revalidatePath("/timetable");
+    return {
+      success: true,
+      releasedClasses: classTeacher.count,
+      releasedPeriods: slots.count,
+    };
   } catch (e: any) {
     return { error: e.message };
   }

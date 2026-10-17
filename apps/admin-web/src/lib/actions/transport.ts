@@ -361,24 +361,61 @@ export async function updateRoute(
     if (!vehicle) return { error: "Vehicle not found in your school" };
   }
 
+  // D1: update stops in place. Deleting and recreating them used to cascade
+  // into every student enrollment on the route.
+  const existingStops = await prisma.routeStop.findMany({
+    where: { routeId: existingRoute.id },
+    select: {
+      id: true,
+      stopName: true,
+      _count: { select: { enrollments: true } },
+    },
+  });
+  const existingStopIds = new Set(existingStops.map((s) => s.id));
+  const keptStopIds = new Set(
+    stops.map((s) => s.id).filter((sid): sid is string => !!sid),
+  );
+  if ([...keptStopIds].some((sid) => !existingStopIds.has(sid))) {
+    return { error: "One or more stops don't belong to this route" };
+  }
+  const removedStops = existingStops.filter((s) => !keptStopIds.has(s.id));
+  const stopsInUse = removedStops.filter((s) => s._count.enrollments > 0);
+  if (stopsInUse.length > 0) {
+    return {
+      error: `Can't remove ${stopsInUse
+        .map((s) => `"${s.stopName}" (${s._count.enrollments} students)`)
+        .join(", ")}. Move those students to another stop first.`,
+    };
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.transportRoute.update({
       where: { id: existingRoute.id },
       data: routeData,
     });
 
-    await tx.routeStop.deleteMany({ where: { routeId: id } });
+    if (removedStops.length > 0) {
+      await tx.routeStop.deleteMany({
+        where: { id: { in: removedStops.map((s) => s.id) } },
+      });
+    }
 
-    await tx.routeStop.createMany({
-      data: stops.map((s, idx) => ({
-        routeId: id,
+    for (const [idx, s] of stops.entries()) {
+      const stopData = {
         stopName: s.stopName,
         sequenceOrder: s.sequenceOrder || idx + 1,
         pickupTime: s.pickupTime,
         dropTime: s.dropTime,
         distanceFromSchoolKm: s.distanceFromSchoolKm,
-      })),
-    });
+      };
+      if (s.id) {
+        await tx.routeStop.update({ where: { id: s.id }, data: stopData });
+      } else {
+        await tx.routeStop.create({
+          data: { ...stopData, routeId: existingRoute.id },
+        });
+      }
+    }
   });
 
   revalidatePath("/transport");
@@ -386,6 +423,11 @@ export async function updateRoute(
   return { success: true };
 }
 
+/**
+ * Deletes a route with no enrollment history. A route that students have used
+ * is deactivated instead, so their past enrollments are kept (D1). A route
+ * with active enrollments can't be removed until they are moved or cancelled.
+ */
 export async function deleteRoute(id: string) {
   const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
   if (!user) return { error: "Unauthorized" };
@@ -395,13 +437,39 @@ export async function deleteRoute(id: string) {
   });
   if (!existing) return { error: "Route not found in your school" };
 
-  await prisma.transportRoute.delete({
-    where: { id: existing.id },
-  });
+  const [activeEnrollments, pastEnrollments] = await Promise.all([
+    prisma.studentTransport.count({
+      where: { routeId: existing.id, status: TransportEnrollmentStatus.ACTIVE },
+    }),
+    prisma.studentTransport.count({
+      where: {
+        routeId: existing.id,
+        status: { not: TransportEnrollmentStatus.ACTIVE },
+      },
+    }),
+  ]);
+
+  if (activeEnrollments > 0) {
+    return {
+      error: `${activeEnrollments} students are enrolled on this route. Move them to another route or cancel their transport first.`,
+    };
+  }
+
+  let archived = false;
+  if (pastEnrollments > 0) {
+    await prisma.transportRoute.update({
+      where: { id: existing.id },
+      data: { status: RouteStatus.INACTIVE },
+    });
+    archived = true;
+  } else {
+    // Its stops are deleted with it; no enrollment references them.
+    await prisma.transportRoute.delete({ where: { id: existing.id } });
+  }
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
-  return { success: true };
+  return { success: true, archived };
 }
 
 // ─── Student Transport Enrollment Actions ───────────────────────────────────

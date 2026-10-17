@@ -226,4 +226,24 @@ describe("Feature Gating Matrix", () => {
       ).toBe(true);
     }
   });
+
+  it("D16: honours a stored EXPIRED status even without a period end", () => {
+    const result = evaluateSubscriptionValidity(
+      { plan: SubscriptionPlan.PRO, status: SubscriptionStatus.EXPIRED },
+      new Date("2026-09-01T12:00:00Z"),
+    );
+    expect(result.status).toBe(SubscriptionStatus.EXPIRED);
+    expect(result.isActive).toBe(false);
+    expect(result.isExpired).toBe(true);
+  });
+
+  it("D16: reports PAST_DUE without a period end as past due, not active", () => {
+    const result = evaluateSubscriptionValidity(
+      { plan: SubscriptionPlan.BASIC, status: SubscriptionStatus.PAST_DUE },
+      new Date("2026-09-01T12:00:00Z"),
+    );
+    expect(result.status).toBe(SubscriptionStatus.PAST_DUE);
+    expect(result.isPastDue).toBe(true);
+    expect(result.isActive).toBe(true);
+  });
 });

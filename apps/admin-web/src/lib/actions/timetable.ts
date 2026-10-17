@@ -110,22 +110,21 @@ export async function getTimetablePeriods() {
     orderBy: [{ periodNumber: "asc" }, { startTime: "asc" }],
   });
 
-  // If none configured yet, seed the default periods for this school
+  // If none configured yet, seed the default periods for this school.
+  // skipDuplicates: two first loads at once must not fail on the unique
+  // start time (D10).
   if (periods.length === 0) {
-    await prisma.$transaction(
-      DEFAULT_PERIODS.map((dp) =>
-        prisma.timetablePeriod.create({
-          data: {
-            schoolId,
-            periodNumber: dp.periodNumber,
-            name: dp.name,
-            startTime: dp.startTime,
-            endTime: dp.endTime,
-            isBreak: dp.isBreak,
-          },
-        }),
-      ),
-    );
+    await prisma.timetablePeriod.createMany({
+      data: DEFAULT_PERIODS.map((dp) => ({
+        schoolId,
+        periodNumber: dp.periodNumber,
+        name: dp.name,
+        startTime: dp.startTime,
+        endTime: dp.endTime,
+        isBreak: dp.isBreak,
+      })),
+      skipDuplicates: true,
+    });
 
     periods = await prisma.timetablePeriod.findMany({
       where: { schoolId },
@@ -136,6 +135,31 @@ export async function getTimetablePeriods() {
   return periods;
 }
 
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const periodSettingsSchema = z
+  .array(
+    z.object({
+      id: z.string().optional(),
+      name: z.string().trim().min(1, "Every period needs a name").max(50),
+      periodNumber: z.number().int().min(1),
+      startTime: z.string().regex(TIME_RE, "Times must be HH:MM"),
+      endTime: z.string().regex(TIME_RE, "Times must be HH:MM"),
+      isBreak: z.boolean(),
+    }),
+  )
+  .min(1, "Add at least one period");
+
+/**
+ * Saves the school's bell schedule.
+ *
+ * D7: periods are updated in place, and their scheduled classes move with
+ * them when their times change. This used to delete and recreate every
+ * period, which unlinked every class from its period and left classes at
+ * changed times off the grid. Removing a period that still has classes
+ * scheduled needs `removeScheduledClasses: true`; otherwise the save is
+ * refused with `code: "PERIOD_HAS_CLASSES"` and the number of classes.
+ */
 export async function savePeriodSettings(
   periodsData: Array<{
     id?: string;
@@ -145,35 +169,166 @@ export async function savePeriodSettings(
     endTime: string;
     isBreak: boolean;
   }>,
-) {
+  options: { removeScheduledClasses?: boolean } = {},
+): Promise<
+  | { success: true; removedClasses: number }
+  | {
+      success: false;
+      error: string;
+      code?: "PERIOD_HAS_CLASSES";
+      affectedClasses?: number;
+    }
+> {
   const { user } = await requireTimetableAccess([
     "SUPER_ADMIN",
     "SCHOOL_ADMIN",
   ]);
   const schoolId = user.schoolId;
 
-  await prisma.$transaction(async (tx) => {
-    // Delete existing periods and recreate them
-    await tx.timetablePeriod.deleteMany({
-      where: { schoolId },
-    });
+  const parsed = periodSettingsSchema.safeParse(periodsData);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.errors[0].message };
+  }
+  const incoming = parsed.data;
 
-    for (const p of periodsData) {
-      await tx.timetablePeriod.create({
-        data: {
-          schoolId,
+  const byStart = [...incoming].sort((a, b) =>
+    a.startTime.localeCompare(b.startTime),
+  );
+  for (const [i, p] of byStart.entries()) {
+    if (p.endTime <= p.startTime) {
+      return { success: false, error: `${p.name} must end after it starts` };
+    }
+    const next = byStart[i + 1];
+    if (next && next.startTime < p.endTime) {
+      return {
+        success: false,
+        error: `${p.name} (${p.startTime}–${p.endTime}) overlaps ${next.name} (${next.startTime}–${next.endTime})`,
+      };
+    }
+  }
+
+  const existing = await prisma.timetablePeriod.findMany({
+    where: { schoolId },
+    select: { id: true, startTime: true, endTime: true },
+  });
+  const existingById = new Map(existing.map((p) => [p.id, p]));
+  if (incoming.some((p) => p.id && !existingById.has(p.id))) {
+    return {
+      success: false,
+      error:
+        "The periods changed while you were editing. Reload and try again.",
+    };
+  }
+  const keptIds = new Set(incoming.map((p) => p.id).filter(Boolean));
+  const removed = existing.filter((p) => !keptIds.has(p.id));
+
+  // Classes scheduled in removed periods, matched by period or, for classes
+  // saved before periods were linked, by start time.
+  const affectedClasses =
+    removed.length > 0
+      ? await prisma.timetableSlot.count({
+          where: {
+            schoolId,
+            OR: [
+              { periodId: { in: removed.map((p) => p.id) } },
+              {
+                periodId: null,
+                startTime: { in: removed.map((p) => p.startTime) },
+              },
+            ],
+          },
+        })
+      : 0;
+  if (affectedClasses > 0 && !options.removeScheduledClasses) {
+    return {
+      success: false,
+      code: "PERIOD_HAS_CLASSES",
+      affectedClasses,
+      error: `${affectedClasses} scheduled class${affectedClasses === 1 ? " is" : "es are"} in the periods you removed. Saving will delete ${affectedClasses === 1 ? "it" : "them"} from the timetable.`,
+    };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 1. Link classes saved before periods were linked, by start time.
+      for (const p of existing) {
+        await tx.timetableSlot.updateMany({
+          where: { schoolId, periodId: null, startTime: p.startTime },
+          data: { periodId: p.id },
+        });
+      }
+
+      // 2. Remove dropped periods and (confirmed above) their classes.
+      if (removed.length > 0) {
+        await tx.timetableSlot.deleteMany({
+          where: { schoolId, periodId: { in: removed.map((p) => p.id) } },
+        });
+        await tx.timetablePeriod.deleteMany({
+          where: { id: { in: removed.map((p) => p.id) } },
+        });
+      }
+
+      // 3. Move retimed periods and their classes. Two steps, through a
+      //    temporary start time, so swapping two periods' times can't hit
+      //    the unique start-time constraints halfway through.
+      const retimed = incoming.filter((p) => {
+        const before = p.id ? existingById.get(p.id) : undefined;
+        return before && before.startTime !== p.startTime;
+      });
+      for (const p of retimed) {
+        await tx.timetablePeriod.update({
+          where: { id: p.id },
+          data: { startTime: `~${p.id}` },
+        });
+        await tx.timetableSlot.updateMany({
+          where: { schoolId, periodId: p.id },
+          data: { startTime: `~${p.id}` },
+        });
+      }
+
+      for (const p of incoming) {
+        const periodData = {
           name: p.name,
           periodNumber: p.periodNumber,
           startTime: p.startTime,
           endTime: p.endTime,
           isBreak: p.isBreak,
-        },
-      });
+        };
+        if (p.id) {
+          await tx.timetablePeriod.update({
+            where: { id: p.id },
+            data: periodData,
+          });
+          const before = existingById.get(p.id)!;
+          if (
+            before.startTime !== p.startTime ||
+            before.endTime !== p.endTime
+          ) {
+            await tx.timetableSlot.updateMany({
+              where: { schoolId, periodId: p.id },
+              data: { startTime: p.startTime, endTime: p.endTime },
+            });
+          }
+        } else {
+          await tx.timetablePeriod.create({
+            data: { ...periodData, schoolId },
+          });
+        }
+      }
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      return {
+        success: false,
+        error:
+          "Some classes are scheduled at a time that no longer matches a period. Clear them from the timetable and try again.",
+      };
     }
-  });
+    throw e;
+  }
 
   revalidatePath("/timetable");
-  return { success: true };
+  return { success: true, removedClasses: affectedClasses };
 }
 
 export async function getTimetable(filter: {
@@ -332,38 +487,50 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
     };
   }
 
-  const slot = await prisma.timetableSlot.upsert({
-    where: {
-      schoolId_sectionId_dayOfWeek_startTime: {
-        schoolId,
-        sectionId: data.sectionId,
-        dayOfWeek: data.dayOfWeek,
-        startTime: data.startTime,
-      },
-    },
-    create: {
-      schoolId,
-      classId: data.classId,
-      sectionId: data.sectionId,
-      teacherId: data.teacherId || null,
-      periodId: periodId || null,
-      dayOfWeek: data.dayOfWeek,
-      startTime: data.startTime,
-      endTime: data.endTime,
-      subjectName: data.subjectName,
-      room: data.room || null,
-      academicYear: data.academicYear || null,
-    },
-    update: {
-      classId: data.classId,
-      teacherId: data.teacherId || null,
-      periodId: periodId || null,
-      endTime: data.endTime,
-      subjectName: data.subjectName,
-      room: data.room || null,
-      academicYear: data.academicYear || null,
-    },
-  });
+  const slotData = {
+    classId: data.classId,
+    sectionId: data.sectionId,
+    teacherId: data.teacherId || null,
+    periodId: periodId || null,
+    dayOfWeek: data.dayOfWeek,
+    startTime: data.startTime,
+    endTime: data.endTime,
+    subjectName: data.subjectName,
+    room: data.room || null,
+    academicYear: data.academicYear || null,
+  };
+
+  // D8: an edit updates the slot it came from, so moving it to another day
+  // or time moves it instead of leaving a copy behind.
+  let slot;
+  try {
+    if (data.id) {
+      const existing = await prisma.timetableSlot.findFirst({
+        where: { id: data.id, schoolId },
+        select: { id: true },
+      });
+      if (!existing) {
+        return { success: false, error: "Timetable slot not found" };
+      }
+      slot = await prisma.timetableSlot.update({
+        where: { id: existing.id },
+        data: slotData,
+      });
+    } else {
+      slot = await prisma.timetableSlot.create({
+        data: { ...slotData, schoolId },
+      });
+    }
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      return {
+        success: false,
+        error: "This section already has a class at that day and time",
+        conflictType: "SECTION" as const,
+      };
+    }
+    throw e;
+  }
 
   revalidatePath("/timetable");
   return { success: true, slot };
@@ -501,12 +668,6 @@ export async function generateAutomatedTimetableAction(params: {
   }
 
   // Persist slots in database using single fast round-trip
-  if (params.replaceExisting) {
-    await prisma.timetableSlot.deleteMany({
-      where: { schoolId, sectionId: params.sectionId },
-    });
-  }
-
   const recordsToCreate = result.slots
     .filter((slot) => !slot.isLocked)
     .map((slot) => {
@@ -533,12 +694,21 @@ export async function generateAutomatedTimetableAction(params: {
       };
     });
 
-  if (recordsToCreate.length > 0) {
-    await prisma.timetableSlot.createMany({
-      data: recordsToCreate,
-      skipDuplicates: true,
-    });
-  }
+  // D9: replace atomically, so a failed insert can't leave the section with
+  // no timetable at all.
+  await prisma.$transaction(async (tx) => {
+    if (params.replaceExisting) {
+      await tx.timetableSlot.deleteMany({
+        where: { schoolId, sectionId: params.sectionId },
+      });
+    }
+    if (recordsToCreate.length > 0) {
+      await tx.timetableSlot.createMany({
+        data: recordsToCreate,
+        skipDuplicates: true,
+      });
+    }
+  });
 
   revalidatePath("/timetable");
 
@@ -725,12 +895,6 @@ export async function generateAiTimetableAction(params: {
   }
 
   // 3. Persist clash-free slots in database
-  if (params.replaceExisting) {
-    await prisma.timetableSlot.deleteMany({
-      where: { schoolId, sectionId: params.sectionId },
-    });
-  }
-
   const recordsToCreate = result.slots
     .filter((slot) => !slot.isLocked)
     .map((slot) => {
@@ -757,12 +921,21 @@ export async function generateAiTimetableAction(params: {
       };
     });
 
-  if (recordsToCreate.length > 0) {
-    await prisma.timetableSlot.createMany({
-      data: recordsToCreate,
-      skipDuplicates: true,
-    });
-  }
+  // D9: replace atomically, so a failed insert can't leave the section with
+  // no timetable at all.
+  await prisma.$transaction(async (tx) => {
+    if (params.replaceExisting) {
+      await tx.timetableSlot.deleteMany({
+        where: { schoolId, sectionId: params.sectionId },
+      });
+    }
+    if (recordsToCreate.length > 0) {
+      await tx.timetableSlot.createMany({
+        data: recordsToCreate,
+        skipDuplicates: true,
+      });
+    }
+  });
 
   revalidatePath("/timetable");
 

@@ -1,4 +1,12 @@
-import { PrismaClient, UserRole, PlanType, AttendanceStatus, FeeStatus, NoticePriority, NoticeTarget } from "../src/generated";
+import {
+  PrismaClient,
+  UserRole,
+  PlanType,
+  AttendanceStatus,
+  FeeStatus,
+  NoticePriority,
+  NoticeTarget,
+} from "../src/generated";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -90,8 +98,8 @@ async function main() {
         where: { schoolId_name: { schoolId: school1.id, name: g.name } },
         update: {},
         create: { schoolId: school1.id, ...g },
-      })
-    )
+      }),
+    ),
   );
 
   // ── Sections for Grade 8 ──────────────────────────────────
@@ -99,7 +107,13 @@ async function main() {
   const sections = await Promise.all(
     ["A", "B", "C"].map((s) =>
       prisma.section.upsert({
-        where: { schoolId_classId_name: { schoolId: school1.id, classId: grade8.id, name: s } },
+        where: {
+          schoolId_classId_name: {
+            schoolId: school1.id,
+            classId: grade8.id,
+            name: s,
+          },
+        },
         update: {},
         create: {
           schoolId: school1.id,
@@ -108,8 +122,8 @@ async function main() {
           displayName: `Section ${s}`,
           capacity: 42,
         },
-      })
-    )
+      }),
+    ),
   );
   const sectionA = sections[0];
   const sectionB = sections[1];
@@ -119,11 +133,23 @@ async function main() {
   const grade9Sections = await Promise.all(
     ["A", "B"].map((s) =>
       prisma.section.upsert({
-        where: { schoolId_classId_name: { schoolId: school1.id, classId: grade9.id, name: s } },
+        where: {
+          schoolId_classId_name: {
+            schoolId: school1.id,
+            classId: grade9.id,
+            name: s,
+          },
+        },
         update: {},
-        create: { schoolId: school1.id, classId: grade9.id, name: s, displayName: `Section ${s}`, capacity: 40 },
-      })
-    )
+        create: {
+          schoolId: school1.id,
+          classId: grade9.id,
+          name: s,
+          displayName: `Section ${s}`,
+          capacity: 40,
+        },
+      }),
+    ),
   );
 
   // ── Subjects ──────────────────────────────────────────────
@@ -143,18 +169,42 @@ async function main() {
         where: { schoolId_code: { schoolId: school1.id, code: s.code } },
         update: {},
         create: { schoolId: school1.id, ...s },
-      })
-    )
+      }),
+    ),
   );
 
   // ── Teachers ──────────────────────────────────────────────
   const teacherPassword = await bcrypt.hash("teacher123", 12);
 
   const teacherData = [
-    { name: "Priya Nair", email: "priya.nair@dps.schoolos.com", emp: "EMP001", spec: "Mathematics", sectionId: sectionA.id },
-    { name: "Rahul Verma", email: "rahul.verma@dps.schoolos.com", emp: "EMP002", spec: "Science", sectionId: sectionB.id },
-    { name: "Anita Roy", email: "anita.roy@dps.schoolos.com", emp: "EMP003", spec: "English", sectionId: grade9Sections[0].id },
-    { name: "Suresh Kumar", email: "suresh.kumar@dps.schoolos.com", emp: "EMP004", spec: "Hindi", sectionId: null },
+    {
+      name: "Priya Nair",
+      email: "priya.nair@dps.schoolos.com",
+      emp: "EMP001",
+      spec: "Mathematics",
+      sectionId: sectionA.id,
+    },
+    {
+      name: "Rahul Verma",
+      email: "rahul.verma@dps.schoolos.com",
+      emp: "EMP002",
+      spec: "Science",
+      sectionId: sectionB.id,
+    },
+    {
+      name: "Anita Roy",
+      email: "anita.roy@dps.schoolos.com",
+      emp: "EMP003",
+      spec: "English",
+      sectionId: grade9Sections[0].id,
+    },
+    {
+      name: "Suresh Kumar",
+      email: "suresh.kumar@dps.schoolos.com",
+      emp: "EMP004",
+      spec: "Hindi",
+      sectionId: null,
+    },
   ];
 
   const teachers: any[] = [];
@@ -194,23 +244,88 @@ async function main() {
 
   // ── Students for Grade 8A ─────────────────────────────────
   const studentData = [
-    { first: "Aarav", last: "Patel", roll: "8A-001", parent: "Ravi Patel", parentPhone: "+91-98765-43210" },
-    { first: "Bhavna", last: "Sharma", roll: "8A-002", parent: "Sita Sharma", parentPhone: "+91-98765-43211" },
-    { first: "Chirag", last: "Kumar", roll: "8A-003", parent: "Sunil Kumar", parentPhone: "+91-98765-43212" },
-    { first: "Diya", last: "Mishra", roll: "8A-004", parent: "Pradeep Mishra", parentPhone: "+91-98765-43213" },
-    { first: "Eshan", last: "Jain", roll: "8A-005", parent: "Manish Jain", parentPhone: "+91-98765-43214" },
-    { first: "Fatima", last: "Ghazi", roll: "8A-006", parent: "Ahmed Ghazi", parentPhone: "+91-98765-43215" },
-    { first: "Gaurav", last: "Singh", roll: "8A-007", parent: "Harpal Singh", parentPhone: "+91-98765-43216" },
-    { first: "Hina", last: "Kapoor", roll: "8A-008", parent: "Vikram Kapoor", parentPhone: "+91-98765-43217" },
-    { first: "Ishaan", last: "Mehta", roll: "8A-009", parent: "Rajesh Mehta", parentPhone: "+91-98765-43218" },
-    { first: "Jyoti", last: "Yadav", roll: "8A-010", parent: "Ramesh Yadav", parentPhone: "+91-98765-43219" },
+    {
+      first: "Aarav",
+      last: "Patel",
+      roll: "8A-001",
+      parent: "Ravi Patel",
+      parentPhone: "+91-98765-43210",
+    },
+    {
+      first: "Bhavna",
+      last: "Sharma",
+      roll: "8A-002",
+      parent: "Sita Sharma",
+      parentPhone: "+91-98765-43211",
+    },
+    {
+      first: "Chirag",
+      last: "Kumar",
+      roll: "8A-003",
+      parent: "Sunil Kumar",
+      parentPhone: "+91-98765-43212",
+    },
+    {
+      first: "Diya",
+      last: "Mishra",
+      roll: "8A-004",
+      parent: "Pradeep Mishra",
+      parentPhone: "+91-98765-43213",
+    },
+    {
+      first: "Eshan",
+      last: "Jain",
+      roll: "8A-005",
+      parent: "Manish Jain",
+      parentPhone: "+91-98765-43214",
+    },
+    {
+      first: "Fatima",
+      last: "Ghazi",
+      roll: "8A-006",
+      parent: "Ahmed Ghazi",
+      parentPhone: "+91-98765-43215",
+    },
+    {
+      first: "Gaurav",
+      last: "Singh",
+      roll: "8A-007",
+      parent: "Harpal Singh",
+      parentPhone: "+91-98765-43216",
+    },
+    {
+      first: "Hina",
+      last: "Kapoor",
+      roll: "8A-008",
+      parent: "Vikram Kapoor",
+      parentPhone: "+91-98765-43217",
+    },
+    {
+      first: "Ishaan",
+      last: "Mehta",
+      roll: "8A-009",
+      parent: "Rajesh Mehta",
+      parentPhone: "+91-98765-43218",
+    },
+    {
+      first: "Jyoti",
+      last: "Yadav",
+      roll: "8A-010",
+      parent: "Ramesh Yadav",
+      parentPhone: "+91-98765-43219",
+    },
   ];
 
   const students: any[] = [];
   let admNum = 1001;
   for (const sd of studentData) {
     const s = await prisma.student.upsert({
-      where: { admissionNumber: `DPS-2024-${admNum}` },
+      where: {
+        schoolId_admissionNumber: {
+          schoolId: school1.id,
+          admissionNumber: `DPS-2024-${admNum}`,
+        },
+      },
       update: {},
       create: {
         schoolId: school1.id,
@@ -237,10 +352,21 @@ async function main() {
 
     for (const student of students) {
       const rand = Math.random();
-      const status = rand > 0.15 ? AttendanceStatus.PRESENT : rand > 0.05 ? AttendanceStatus.ABSENT : AttendanceStatus.LATE;
+      const status =
+        rand > 0.15
+          ? AttendanceStatus.PRESENT
+          : rand > 0.05
+            ? AttendanceStatus.ABSENT
+            : AttendanceStatus.LATE;
 
       await prisma.attendance.upsert({
-        where: { schoolId_studentId_date: { schoolId: school1.id, studentId: student.id, date: dateOnly } },
+        where: {
+          schoolId_studentId_date: {
+            schoolId: school1.id,
+            studentId: student.id,
+            date: dateOnly,
+          },
+        },
         update: {},
         create: {
           schoolId: school1.id,
@@ -255,7 +381,18 @@ async function main() {
   }
 
   // ── Fees ──────────────────────────────────────────────────
-  const feeStatuses = [FeeStatus.PAID, FeeStatus.PAID, FeeStatus.PENDING, FeeStatus.PAID, FeeStatus.OVERDUE, FeeStatus.PAID, FeeStatus.PAID, FeeStatus.PENDING, FeeStatus.PAID, FeeStatus.PAID];
+  const feeStatuses = [
+    FeeStatus.PAID,
+    FeeStatus.PAID,
+    FeeStatus.PENDING,
+    FeeStatus.PAID,
+    FeeStatus.OVERDUE,
+    FeeStatus.PAID,
+    FeeStatus.PAID,
+    FeeStatus.PENDING,
+    FeeStatus.PAID,
+    FeeStatus.PAID,
+  ];
   for (let i = 0; i < students.length; i++) {
     await prisma.fee.create({
       data: {
@@ -280,7 +417,8 @@ async function main() {
         schoolId: school1.id,
         teacherId: teacherPriya.id,
         title: "Annual Sports Day — 20 May 2025",
-        content: "All students are required to participate in the Annual Sports Day. Students should report in sports attire by 7:30 AM on the school ground.",
+        content:
+          "All students are required to participate in the Annual Sports Day. Students should report in sports attire by 7:30 AM on the school ground.",
         target: NoticeTarget.ALL,
         priority: NoticePriority.HIGH,
         isPublished: true,
@@ -292,7 +430,8 @@ async function main() {
         teacherId: teacherPriya.id,
         sectionId: sectionA.id,
         title: "Mid-Term Exam Timetable",
-        content: "Mid-term examinations for Grade 8A will be held from June 2-10. Please download the timetable from the portal.",
+        content:
+          "Mid-term examinations for Grade 8A will be held from June 2-10. Please download the timetable from the portal.",
         target: NoticeTarget.CLASS,
         priority: NoticePriority.MEDIUM,
         isPublished: true,
@@ -301,7 +440,8 @@ async function main() {
       {
         schoolId: school1.id,
         title: "Parent-Teacher Meeting — Grade 8 & 9",
-        content: "Parent-Teacher Meeting is scheduled for Saturday, May 25. Parents of Grade 8 and 9 students are requested to attend between 10 AM and 1 PM.",
+        content:
+          "Parent-Teacher Meeting is scheduled for Saturday, May 25. Parents of Grade 8 and 9 students are requested to attend between 10 AM and 1 PM.",
         target: NoticeTarget.PARENTS,
         priority: NoticePriority.MEDIUM,
         isPublished: true,
@@ -319,7 +459,8 @@ async function main() {
         teacherId: teacherPriya.id,
         sectionId: sectionA.id,
         title: "Chapter 5 - Algebra Exercises",
-        description: "Complete all exercises from Chapter 5 (Page 78-85). Show full working for each problem.",
+        description:
+          "Complete all exercises from Chapter 5 (Page 78-85). Show full working for each problem.",
         subject: "Mathematics",
         dueDate: new Date("2024-05-20"),
       },
@@ -328,7 +469,8 @@ async function main() {
         teacherId: teacherPriya.id,
         sectionId: sectionA.id,
         title: "Geometry Project",
-        description: "Create a poster showing at least 5 real-world examples of geometric shapes with measurements.",
+        description:
+          "Create a poster showing at least 5 real-world examples of geometric shapes with measurements.",
         subject: "Mathematics",
         dueDate: new Date("2024-05-28"),
       },
@@ -401,5 +543,10 @@ async function main() {
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(async () => { await prisma.$disconnect(); });
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

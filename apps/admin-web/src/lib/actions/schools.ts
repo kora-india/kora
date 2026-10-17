@@ -197,10 +197,18 @@ export async function updateSchoolPlan(schoolId: string, plan: string) {
   if (!validPlans.includes(plan)) return { error: "Invalid plan" };
 
   try {
-    const school = await prisma.school.update({
-      where: { id: schoolId },
-      data: { plan: plan as any },
-    });
+    // D16: limits read school.plan while the layout and feature checks read
+    // subscription.plan, so change both together.
+    await prisma.$transaction([
+      prisma.school.update({
+        where: { id: schoolId },
+        data: { plan: plan as any },
+      }),
+      prisma.subscription.updateMany({
+        where: { schoolId },
+        data: { plan: plan as any },
+      }),
+    ]);
 
     logger.info("School plan updated", { schoolId, plan, updatedBy: user.id });
     await invalidateCache(`cache:${schoolId}:school:*`);

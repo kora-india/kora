@@ -281,7 +281,9 @@ export function ReportCardModal({
                               ? "text-emerald-600"
                               : card.summary.result === "COMPARTMENT"
                                 ? "text-amber-600"
-                                : "text-rose-600"
+                                : card.summary.result === "PENDING"
+                                  ? "text-muted-foreground"
+                                  : "text-rose-600"
                           }`}
                         >
                           {card.summary.result === "PASSED" ? (
@@ -321,19 +323,25 @@ export function ReportCardModal({
                         ? "text-emerald-600"
                         : card.summary.result === "COMPARTMENT"
                           ? "text-amber-600"
-                          : "text-rose-600"
+                          : card.summary.result === "PENDING"
+                            ? "text-muted-foreground"
+                            : "text-rose-600"
                     }`}
                   >
                     {card.summary.result === "PASSED"
                       ? "PROMOTED / PASSED"
                       : card.summary.result === "COMPARTMENT"
                         ? "ELIGIBLE FOR COMPARTMENT"
-                        : "NEEDS IMPROVEMENT"}
+                        : card.summary.result === "PENDING"
+                          ? "RESULT PENDING"
+                          : "NEEDS IMPROVEMENT"}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {card.summary.failedSubjectsCount === 0
-                      ? "Cleared all scholastic subjects"
-                      : `${card.summary.failedSubjectsCount} subject(s) below passing mark`}
+                    {card.summary.result === "PENDING"
+                      ? "Marks are still being entered for some subjects"
+                      : card.summary.failedSubjectsCount === 0
+                        ? "Cleared all scholastic subjects"
+                        : `${card.summary.failedSubjectsCount} subject(s) below passing mark`}
                   </p>
                 </div>
 

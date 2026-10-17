@@ -51,6 +51,10 @@ vi.mock("@/lib/redis", () => ({
   ),
   invalidateCache: vi.fn().mockResolvedValue(undefined),
   invalidateFeesCache: vi.fn().mockResolvedValue(undefined),
+  invalidateStudentsCache: vi.fn().mockResolvedValue(undefined),
+  invalidateClassesCache: vi.fn().mockResolvedValue(undefined),
+  invalidateDashboardCache: vi.fn().mockResolvedValue(undefined),
+  invalidateTransportCache: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock Ratelimiting: every limiter allows every request.

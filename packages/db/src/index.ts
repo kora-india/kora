@@ -27,10 +27,13 @@ function createPrismaClient(): PrismaClient {
             query: e.query,
             params: e.params,
           },
-          `[Slow Query] ${e.duration}ms: ${e.query.slice(0, 120)}`
+          `[Slow Query] ${e.duration}ms: ${e.query.slice(0, 120)}`,
         );
       } else if (process.env.LOG_ALL_QUERIES === "true") {
-        dbLogger.debug({ durationMs: e.duration, query: e.query }, `Prisma Query (${e.duration}ms)`);
+        dbLogger.debug(
+          { durationMs: e.duration, query: e.query },
+          `Prisma Query (${e.duration}ms)`,
+        );
       }
     } catch {
       // Ignore logging failures to prevent disrupting active queries
@@ -39,7 +42,10 @@ function createPrismaClient(): PrismaClient {
 
   (client as any).$on("error", (e: Prisma.LogEvent) => {
     try {
-      dbLogger.error({ target: e.target, message: e.message }, "[Prisma Database Error]");
+      dbLogger.error(
+        { target: e.target, message: e.message },
+        "[Prisma Database Error]",
+      );
     } catch {
       // Ignore logging failures
     }
@@ -47,7 +53,10 @@ function createPrismaClient(): PrismaClient {
 
   (client as any).$on("warn", (e: Prisma.LogEvent) => {
     try {
-      dbLogger.warn({ target: e.target, message: e.message }, "[Prisma Database Warning]");
+      dbLogger.warn(
+        { target: e.target, message: e.message },
+        "[Prisma Database Warning]",
+      );
     } catch {
       // Ignore logging failures
     }
@@ -58,7 +67,10 @@ function createPrismaClient(): PrismaClient {
 
 export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    if (!globalThis.__prisma || (prop === "staff" && !("staff" in globalThis.__prisma))) {
+    if (
+      !globalThis.__prisma ||
+      (prop === "staff" && !("staff" in globalThis.__prisma))
+    ) {
       globalThis.__prisma = createPrismaClient();
     }
     const client = globalThis.__prisma as any;
@@ -71,3 +83,4 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 });
 
 export * from "@prisma/client";
+export { purgeSchool } from "./purge-school";

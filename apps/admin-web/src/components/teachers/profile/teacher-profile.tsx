@@ -38,6 +38,7 @@ import { PayrollTab } from "../payroll/payroll-tab";
 import { OverviewTab } from "./overview-tab";
 import { ClassesTab } from "./classes-tab";
 import { initials, type ProfileSchool, type ProfileTeacher } from "./types";
+import { describeReleasedAssignments } from "../released-assignments";
 
 const TABS = ["overview", "classes", "payroll"] as const;
 type Tab = (typeof TABS)[number];
@@ -135,7 +136,9 @@ export function TeacherProfile({
       toast.error(res.error);
       return;
     }
-    toast.success(`${teacher.name} has been deactivated`);
+    toast.success(
+      `${teacher.name} has been deactivated.${describeReleasedAssignments(res)}`,
+    );
     router.push("/teachers");
     router.refresh();
   };

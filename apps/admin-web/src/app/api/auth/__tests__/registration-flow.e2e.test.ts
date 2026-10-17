@@ -5,7 +5,7 @@ import { POST as sendOtp } from "../send-otp/route";
 import { POST as register } from "../register/route";
 import { POST as checkSubdomain } from "../../school/check-subdomain/route";
 import { POST as createSchool } from "../../school/create/route";
-import { prisma } from "@schoolos/db";
+import { prisma, purgeSchool } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 
 // End-to-end style test chaining the real onboarding sequence:
@@ -35,7 +35,7 @@ describe("Full registration flow (send-otp -> register -> school/create)", () =>
     const school = await prisma.school.findUnique({ where: { subdomain } });
     if (school) {
       await prisma.subscription.deleteMany({ where: { schoolId: school.id } });
-      await prisma.school.delete({ where: { id: school.id } });
+      await purgeSchool(prisma, school.id);
     }
     await prisma.otp.deleteMany({ where: { email } });
     await prisma.user.deleteMany({

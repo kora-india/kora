@@ -8,7 +8,7 @@ import {
   vi,
 } from "vitest";
 import { bulkImportStudents } from "../student-import";
-import { prisma } from "@schoolos/db";
+import { prisma, purgeSchool } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 
 const schoolId = "import-school-" + Math.random().toString(36).substring(7);
@@ -23,7 +23,7 @@ describe("Bulk Student Import", () => {
     } as any);
 
     // Clean DB
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
 
     // Create required initial data
     await prisma.school.create({
@@ -58,7 +58,7 @@ describe("Bulk Student Import", () => {
   });
 
   afterAll(async () => {
-    await prisma.school.deleteMany({ where: { id: schoolId } });
+    await purgeSchool(prisma, schoolId);
   });
 
   it("should successfully bulk import students", async () => {
@@ -159,5 +159,93 @@ describe("Bulk Student Import", () => {
 
     const students = await prisma.student.findMany({ where: { schoolId } });
     expect(students.length).toBe(2); // The existing one + the valid one
+  });
+
+  it("D5: reads DD/MM/YYYY and Excel dates, and reports dates it can't read", async () => {
+    const row = (
+      name: string,
+      dateOfBirth: string | number,
+      rollNumber: string,
+    ) => ({
+      name,
+      classId,
+      sectionId,
+      parentName: "Parent",
+      parentPhone: "1234567890",
+      rollNumber,
+      dateOfBirth,
+    });
+    const result = await bulkImportStudents([
+      row("Indian Date", "05/06/2010", "11"),
+      row("Excel Date", 40321, "12"),
+      row("Bad Date", "31/02/2010", "13"),
+    ]);
+    expect(result.imported).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.errors.join(" ")).toMatch(
+      /Row 3: Date of birth "31\/02\/2010"/,
+    );
+
+    const indian = await prisma.student.findFirstOrThrow({
+      where: { schoolId, name: "Indian Date" },
+    });
+    // 5 June, not 6 May
+    expect(indian.dateOfBirth?.toISOString().slice(0, 10)).toBe("2010-06-05");
+    const excel = await prisma.student.findFirstOrThrow({
+      where: { schoolId, name: "Excel Date" },
+    });
+    expect(excel.dateOfBirth?.toISOString().slice(0, 10)).toBe("2010-05-23");
+  });
+
+  it("D6: reports duplicates instead of silently dropping students", async () => {
+    await prisma.student.create({
+      data: {
+        schoolId,
+        classId,
+        sectionId,
+        name: "Holder",
+        parentName: "Parent",
+        parentPhone: "123",
+        admissionNumber: "HOLD-" + Math.random().toString(36).slice(2, 7),
+        rollNumber: "21",
+      },
+    });
+    const adm = "SAME-" + Math.random().toString(36).slice(2, 7);
+    const base = {
+      classId,
+      sectionId,
+      parentName: "Parent",
+      parentPhone: "1234567890",
+    };
+    const result = await bulkImportStudents([
+      { ...base, name: "First Copy", admissionNumber: adm, rollNumber: "22" },
+      { ...base, name: "Second Copy", admissionNumber: adm, rollNumber: "23" },
+      { ...base, name: "Roll Clash", rollNumber: "21" },
+    ]);
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(2);
+    const messages = result.errors.join(" ");
+    expect(messages).toMatch(/Row 2: .*more than once/);
+    expect(messages).toMatch(
+      /Row 3: .*roll number 21 is already used by Holder/,
+    );
+  });
+
+  it("D6: matches a class however the sheet writes it", async () => {
+    const result = await bulkImportStudents([
+      {
+        name: "Class Spelling",
+        classId: "Class 10", // the school's class is "Grade 10"
+        sectionId: "A",
+        parentName: "Parent",
+        parentPhone: "1234567890",
+      },
+    ]);
+    expect(result.imported).toBe(1);
+    const student = await prisma.student.findFirstOrThrow({
+      where: { schoolId, name: "Class Spelling" },
+    });
+    expect(student.classId).toBe(classId);
+    expect(await prisma.class.count({ where: { schoolId } })).toBe(1);
   });
 });

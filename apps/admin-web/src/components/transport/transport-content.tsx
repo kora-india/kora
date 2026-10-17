@@ -137,7 +137,7 @@ export function TransportContent({
   const handleDeleteRoute = async (id: string) => {
     if (
       !confirm(
-        "Are you sure you want to delete this route? This will unassign any active stops.",
+        "Delete this route? Routes with students on them can't be deleted. If students used it in the past, it is deactivated instead so their records are kept.",
       )
     )
       return;
@@ -148,7 +148,12 @@ export function TransportContent({
       if (res.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success("Route deleted successfully", { id: toastId });
+        toast.success(
+          res.archived
+            ? "Route deactivated. It has past enrollments, so it was kept for the records."
+            : "Route deleted successfully",
+          { id: toastId },
+        );
         refreshData();
       }
     } catch {

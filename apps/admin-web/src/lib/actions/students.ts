@@ -10,6 +10,10 @@ import { recomputeChargeStatus } from "@/lib/fees/charge-status";
 import { todayInTimeZone } from "@/lib/fees/timezone";
 import { waiveChargeItemInTx } from "@/lib/fees/waive";
 import {
+  admissionSettingsFor,
+  sequenceOfAdmissionNumber,
+} from "@/lib/admission-number";
+import {
   calculateSubjectGrade,
   calculateReportCardSummary,
 } from "@/lib/grading";
@@ -45,6 +49,35 @@ async function getStaffSession() {
     "ACCOUNTANT",
     "TEACHER",
   ]);
+}
+
+/**
+ * D4: roll numbers are per section, and only active students hold them, so a
+ * withdrawn student's number can be reused. Returns the name of the active
+ * student already using the roll number, if any.
+ */
+async function activeRollHolder(
+  schoolId: string,
+  sectionId: string,
+  rollNumber: string,
+  excludeStudentId?: string,
+): Promise<string | null> {
+  const holder = await prisma.student.findFirst({
+    where: {
+      schoolId,
+      sectionId,
+      isActive: true,
+      rollNumber: { equals: rollNumber.trim(), mode: "insensitive" },
+      ...(excludeStudentId ? { id: { not: excludeStudentId } } : {}),
+    },
+    select: { name: true },
+  });
+  return holder?.name ?? null;
+}
+
+function duplicateStudentError(e: any, admissionNumber: string) {
+  if (e?.code !== "P2002") return null;
+  return `Admission number ${admissionNumber} is already used in your school`;
 }
 
 export async function searchStudents(query: string = "", limit: number = 25) {
@@ -130,6 +163,17 @@ export async function createStudent(data: unknown) {
   });
   if (!sectionObj) return { error: "Section not found for this class" };
 
+  const rollHolder = await activeRollHolder(
+    user.schoolId,
+    parsed.data.sectionId,
+    parsed.data.rollNumber,
+  );
+  if (rollHolder) {
+    return {
+      error: `Roll number ${parsed.data.rollNumber} is already used by ${rollHolder} in this section`,
+    };
+  }
+
   try {
     const student = await prisma.student.create({
       data: {
@@ -139,15 +183,36 @@ export async function createStudent(data: unknown) {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
     });
-    // Advance school's next admission number sequence
-    await prisma.school
-      .update({
-        where: { id: user.schoolId },
-        data: {
-          nextAdmissionNumber: { increment: 1 },
-        },
-      })
-      .catch(() => {});
+
+    // D3: advance the school's admission sequence only past a number it
+    // actually produced; numbers typed in by hand leave it alone.
+    const school = await prisma.school.findUnique({
+      where: { id: user.schoolId },
+      select: {
+        admissionNumberPrefix: true,
+        admissionNumberFormat: true,
+        subdomain: true,
+        nextAdmissionNumber: true,
+      },
+    });
+    if (school) {
+      const { prefix, format } = admissionSettingsFor(school);
+      const usedSequence = sequenceOfAdmissionNumber(
+        student.admissionNumber,
+        format,
+        prefix,
+        school.nextAdmissionNumber,
+      );
+      if (usedSequence !== null) {
+        await prisma.school.updateMany({
+          where: {
+            id: user.schoolId,
+            nextAdmissionNumber: { lte: usedSequence },
+          },
+          data: { nextAdmissionNumber: usedSequence + 1 },
+        });
+      }
+    }
 
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
@@ -160,10 +225,8 @@ export async function createStudent(data: unknown) {
     revalidatePath("/analytics");
     return { success: true, id: student.id };
   } catch (e: any) {
-    if (e.code === "P2002")
-      return {
-        error: "A student with this admission or roll number already exists",
-      };
+    const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
+    if (duplicate) return { error: duplicate };
     return { error: e.message };
   }
 }
@@ -196,6 +259,18 @@ export async function updateStudent(id: string, data: unknown) {
   });
   if (!sectionObj) return { error: "Section not found for this class" };
 
+  const rollHolder = await activeRollHolder(
+    user.schoolId,
+    parsed.data.sectionId,
+    parsed.data.rollNumber,
+    existing.id,
+  );
+  if (rollHolder) {
+    return {
+      error: `Roll number ${parsed.data.rollNumber} is already used by ${rollHolder} in this section`,
+    };
+  }
+
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 
   try {
@@ -218,18 +293,17 @@ export async function updateStudent(id: string, data: unknown) {
     revalidatePath("/analytics");
     return { success: true, id: student.id };
   } catch (e: any) {
-    if (e.code === "P2002")
-      return {
-        error: "A student with this admission or roll number already exists",
-      };
+    const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
+    if (duplicate) return { error: duplicate };
     return { error: e.message };
   }
 }
 
 /**
- * Withdraws a student (they are deactivated, never deleted). With
- * `waiveOpenCharges`, everything they still owe is waived in the same
- * transaction (B16), so withdrawn students don't stay on the dues lists.
+ * Withdraws a student (they are deactivated, never deleted) and ends their
+ * transport. With `waiveOpenCharges`, everything they still owe is waived in
+ * the same transaction (B16), so withdrawn students don't stay on dues lists.
+ * Their roll number is freed for reuse in the section (D4/D13).
  */
 export async function deleteStudent(
   id: string,
@@ -254,6 +328,12 @@ export async function deleteStudent(
       await tx.student.update({
         where: { id: existing.id },
         data: { isActive: false },
+      });
+
+      // D13: a withdrawn student no longer rides the bus.
+      await tx.studentTransport.updateMany({
+        where: { studentId: existing.id, status: "ACTIVE" },
+        data: { status: "INACTIVE", endDate: new Date() },
       });
 
       if (!options.waiveOpenCharges) return 0;
@@ -283,6 +363,7 @@ export async function deleteStudent(
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
       invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:transport:*`),
       ...(waivedCount > 0 ? [invalidateFeesCache(user.schoolId)] : []),
     ]);
     revalidatePath("/students");

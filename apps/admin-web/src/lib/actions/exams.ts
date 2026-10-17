@@ -414,11 +414,23 @@ export async function getExamMarksSheet(
       sections: examSubject.class.sections,
       examName: examSubject.exam.name,
       gradingSystem: examSubject.exam.gradingSystem,
+      isPublished: examSubject.exam.isPublished,
     },
     students: marksheet,
+    // Sent back with saves, so a save can't silently overwrite marks someone
+    // else entered after this sheet was loaded (D11).
+    loadedAt: new Date().toISOString(),
   };
 }
 
+/**
+ * Saves marks for one exam subject. Only send the rows that changed.
+ *
+ * D11: invalid marks are rejected instead of being turned into 0 or the
+ * maximum, marks can't change once results are published, and with `since`
+ * (the sheet's `loadedAt`) the save is refused if someone else changed any of
+ * these students' marks after the sheet was loaded.
+ */
 export async function saveBatchMarks(
   examSubjectId: string,
   entries: {
@@ -427,7 +439,16 @@ export async function saveBatchMarks(
     isAbsent?: boolean;
     remarks?: string;
   }[],
-) {
+  options: { since?: string } = {},
+): Promise<
+  | { success: true; savedCount: number }
+  | {
+      success: false;
+      error: string;
+      invalidStudentIds?: string[];
+      conflictStudentIds?: string[];
+    }
+> {
   const { user } = await requireExamAccess([
     "SUPER_ADMIN",
     "SCHOOL_ADMIN",
@@ -439,10 +460,23 @@ export async function saveBatchMarks(
       id: examSubjectId,
       exam: { schoolId: user.schoolId },
     },
-    select: { id: true, maxMarks: true, classId: true, subjectName: true },
+    select: {
+      id: true,
+      maxMarks: true,
+      classId: true,
+      subjectName: true,
+      exam: { select: { isPublished: true } },
+    },
   });
 
   if (!examSubject) throw new Error("Exam subject not found");
+  if (examSubject.exam.isPublished) {
+    return {
+      success: false,
+      error:
+        "Results for this exam are published. Unpublish the exam to change marks.",
+    };
+  }
 
   // A1: Allow teachers to enter marks only for subjects and sections they teach
   if (user.role === "TEACHER") {
@@ -505,7 +539,7 @@ export async function saveBatchMarks(
 
   const maxMarks = Number(examSubject.maxMarks);
 
-  // Validate inputs and sanitize
+  const invalidStudentIds: string[] = [];
   const cleanEntries = entries.map((e) => {
     let marks: number | null = null;
     if (
@@ -513,16 +547,19 @@ export async function saveBatchMarks(
       e.marksObtained !== null &&
       e.marksObtained !== undefined
     ) {
-      const parsed = Number(e.marksObtained);
-      if (isNaN(parsed) || parsed < 0) {
-        marks = 0;
-      } else if (parsed > maxMarks) {
-        marks = maxMarks;
+      const value = Number(e.marksObtained);
+      const twoDecimals = Math.round(value * 100) === value * 100;
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > maxMarks ||
+        !twoDecimals
+      ) {
+        invalidStudentIds.push(e.studentId);
       } else {
-        marks = Number(parsed.toFixed(2));
+        marks = value;
       }
     }
-
     return {
       studentId: e.studentId,
       marksObtained: marks,
@@ -530,6 +567,39 @@ export async function saveBatchMarks(
       remarks: e.remarks?.trim() || null,
     };
   });
+
+  if (invalidStudentIds.length > 0) {
+    return {
+      success: false,
+      error: `${invalidStudentIds.length} mark(s) are not valid. Marks must be between 0 and ${maxMarks}, with at most 2 decimals.`,
+      invalidStudentIds,
+    };
+  }
+
+  if (options.since) {
+    const since = new Date(options.since);
+    if (!isNaN(since.getTime())) {
+      const changed = await prisma.examMark.findMany({
+        where: {
+          examSubjectId,
+          studentId: { in: cleanEntries.map((e) => e.studentId) },
+          updatedAt: { gt: since },
+        },
+        select: { studentId: true, student: { select: { name: true } } },
+      });
+      if (changed.length > 0) {
+        return {
+          success: false,
+          error: `Someone else changed marks for ${changed
+            .map((c) => c.student.name)
+            .join(
+              ", ",
+            )} after you opened this sheet. Reload to see their changes before saving.`,
+          conflictStudentIds: changed.map((c) => c.studentId),
+        };
+      }
+    }
+  }
 
   // Upsert all marks in a transaction
   await prisma.$transaction(
