@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import Link from "next/link";
 import { ArrowLeft, Search } from "lucide-react";
+import { compareRollNumbers } from "@schoolos/types";
 
 export default async function StudentsPage() {
   const session = await auth();
@@ -32,6 +33,8 @@ export default async function StudentsPage() {
         orderBy: { rollNumber: "asc" },
       })
     : [];
+
+  students.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
 
   return (
     <div className="min-h-screen bg-background pb-20 max-w-lg mx-auto">

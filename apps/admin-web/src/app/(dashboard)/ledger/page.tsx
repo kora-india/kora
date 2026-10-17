@@ -10,7 +10,13 @@ export const metadata = {
     "Non-editable immutable source of truth for all school financial transactions, inflows, outflows, and advance settlements.",
 };
 
-export default async function LedgerPage() {
+export default async function LedgerPage(props: {
+  searchParams?: Promise<{
+    from?: string;
+    to?: string;
+    limit?: string;
+  }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
@@ -21,6 +27,29 @@ export default async function LedgerPage() {
     user.role,
   );
   if (!canView) redirect("/dashboard");
+
+  const searchParams = props.searchParams ? await props.searchParams : {};
+  const fromDate = searchParams.from ? new Date(searchParams.from) : null;
+  const toDate = searchParams.to ? new Date(searchParams.to) : null;
+  const limit = Math.min(
+    Math.max(parseInt(searchParams.limit || "200", 10), 20),
+    500,
+  );
+
+  // Default active window: 12 months for bounded caching and fast rendering
+  const defaultCutoff = new Date();
+  defaultCutoff.setFullYear(defaultCutoff.getFullYear() - 1);
+  defaultCutoff.setHours(0, 0, 0, 0);
+
+  const dateFilter =
+    fromDate && toDate && !isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())
+      ? { gte: fromDate, lte: toDate }
+      : { gte: defaultCutoff };
+
+  const cacheKeySuffix =
+    fromDate && toDate
+      ? `${fromDate.toISOString().slice(0, 10)}_${toDate.toISOString().slice(0, 10)}`
+      : "recent";
 
   // Parallel data fetching with Redis cache fallback
   const [
@@ -40,71 +69,90 @@ export default async function LedgerPage() {
         select: { name: true },
       }),
     ),
-    getCache(`cache:${schoolId}:ledger:transactions`, () =>
-      prisma.paymentTransaction.findMany({
-        where: { schoolId },
-        include: {
-          student: {
-            select: {
-              id: true,
-              name: true,
-              rollNumber: true,
-              classId: true,
-              class: { select: { id: true, name: true, grade: true } },
+    getCache(
+      `cache:${schoolId}:ledger:transactions:${cacheKeySuffix}:${limit}`,
+      () =>
+        prisma.paymentTransaction.findMany({
+          where: { schoolId, date: dateFilter },
+          take: limit,
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                rollNumber: true,
+                classId: true,
+                class: { select: { id: true, name: true, grade: true } },
+              },
             },
-          },
-          allocations: {
-            include: {
-              chargeItem: {
-                include: {
-                  component: true,
-                  charge: {
-                    select: {
-                      id: true,
-                      title: true,
-                      dueDate: true,
-                      sessionId: true,
+            allocations: {
+              include: {
+                chargeItem: {
+                  include: {
+                    component: true,
+                    charge: {
+                      select: {
+                        id: true,
+                        title: true,
+                        dueDate: true,
+                        sessionId: true,
+                      },
                     },
                   },
                 },
               },
             },
           },
-        },
-        orderBy: { date: "desc" },
-      }),
+          orderBy: { date: "desc" },
+        }),
     ),
-    getCache(`cache:${schoolId}:ledger:advances`, () =>
-      prisma.advanceLedger.findMany({
-        where: { student: { schoolId } },
-        include: {
-          student: {
-            select: {
-              id: true,
-              name: true,
-              rollNumber: true,
-              classId: true,
-              class: { select: { id: true, name: true } },
-            },
+    getCache(
+      `cache:${schoolId}:ledger:advances:${cacheKeySuffix}:${limit}`,
+      () =>
+        prisma.advanceLedger.findMany({
+          where: {
+            student: { schoolId },
+            createdAt: dateFilter,
           },
-          component: true,
-        },
-        orderBy: { createdAt: "desc" },
-      }),
+          take: limit,
+          include: {
+            student: {
+              select: {
+                id: true,
+                name: true,
+                rollNumber: true,
+                classId: true,
+                class: { select: { id: true, name: true } },
+              },
+            },
+            component: true,
+          },
+          orderBy: { createdAt: "desc" },
+        }),
     ),
-    getCache(`cache:${schoolId}:ledger:expenses`, () =>
-      prisma.expense.findMany({
-        where: { schoolId },
-        include: {
-          category: true,
-          recordedBy: { select: { name: true } },
-        },
-        orderBy: { date: "desc" },
-      }),
+    getCache(
+      `cache:${schoolId}:ledger:expenses:${cacheKeySuffix}:${limit}`,
+      () =>
+        prisma.expense.findMany({
+          where: { schoolId, date: dateFilter },
+          take: limit,
+          include: {
+            category: true,
+            recordedBy: { select: { name: true } },
+          },
+          orderBy: { date: "desc" },
+        }),
     ),
-    getCache(`cache:${schoolId}:ledger:feeChargeItems:v3`, () =>
+    getCache(`cache:${schoolId}:ledger:feeChargeItems:active`, () =>
       prisma.feeChargeItem.findMany({
-        where: { charge: { schoolId } },
+        where: {
+          charge: { schoolId },
+          OR: [
+            { charge: { dueDate: dateFilter } },
+            { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+          ],
+        },
+        take: 1000,
         select: {
           id: true,
           amount: true,

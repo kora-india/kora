@@ -36,17 +36,54 @@ export async function GET(request: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    // Get all active schools with autoFeeGeneration enabled
+    const url = new URL(request.url);
+    const targetSchoolId = url.searchParams.get("schoolId");
+    const cursor = url.searchParams.get("cursor");
+    const limit = Math.min(
+      Math.max(parseInt(url.searchParams.get("limit") || "10", 10), 1),
+      50,
+    );
+
+    // Get active schools with autoFeeGeneration enabled
+    // Supports single-school targeting (fan-out / worker) and cursor-based batching
+    const whereClause: any = { isActive: true, autoFeeGeneration: true };
+    if (targetSchoolId) {
+      whereClause.id = targetSchoolId;
+    } else if (cursor) {
+      whereClause.id = { gt: cursor };
+    }
+
     const schools = await prisma.school.findMany({
-      where: { isActive: true, autoFeeGeneration: true },
+      where: whereClause,
       select: { id: true, name: true, timezone: true },
+      orderBy: { id: "asc" },
+      take: targetSchoolId ? 1 : limit,
     });
 
     let totalGenerated = 0;
     const results = [];
     const now = new Date();
+    const MAX_EXECUTION_MS = 50_000; // 50s budget to prevent serverless function timeouts
+    let hitTimeout = false;
+    let nextCursor: string | null = null;
 
-    for (const school of schools) {
+    for (let i = 0; i < schools.length; i++) {
+      const school = schools[i];
+
+      // Time budget guard: stop cleanly before function timeout so caller can resume
+      if (performance.now() - start > MAX_EXECUTION_MS && !targetSchoolId) {
+        cronLogger.warn(
+          {
+            elapsedMs: Math.round(performance.now() - start),
+            nextSchoolId: school.id,
+          },
+          "Time limit approaching during cron fee generation; pausing for next cursor resumption",
+        );
+        hitTimeout = true;
+        nextCursor = i > 0 ? schools[i - 1].id : school.id;
+        break;
+      }
+
       // The billing month is the current month in the school's own time zone;
       // the charge is due on the 10th of it.
       const periodKey = calendarDateInTimeZone(
@@ -103,20 +140,28 @@ export async function GET(request: Request) {
       });
     }
 
+    if (!hitTimeout && !targetSchoolId && schools.length === limit) {
+      nextCursor = schools[schools.length - 1].id;
+    }
+
     const durationMs = Math.round(performance.now() - start);
     cronLogger.info(
       {
-        schoolsCount: schools.length,
+        schoolsCount: results.length,
         totalChargesGenerated: totalGenerated,
         durationMs,
+        resumable: Boolean(nextCursor),
+        nextCursor,
       },
-      `[Cron Fee Generation Completed] Generated ${totalGenerated} charges across ${schools.length} schools in ${durationMs}ms`,
+      `[Cron Fee Generation Completed] Generated ${totalGenerated} charges across ${results.length} schools in ${durationMs}ms`,
     );
 
     return NextResponse.json({
       success: true,
       totalChargesGenerated: totalGenerated,
       details: results,
+      resumable: Boolean(nextCursor),
+      nextCursor,
       durationMs,
     });
   } catch (error: any) {

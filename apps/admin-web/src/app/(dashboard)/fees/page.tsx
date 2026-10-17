@@ -18,98 +18,115 @@ export default async function FeesPage() {
     user.role,
   );
 
-  // Fetch V2 configuration data
-  const school = await getCache(`cache:${schoolId}:school:full`, () =>
-    prisma.school.findUnique({ where: { id: schoolId } }),
-  );
-
-  const academicSessions = await getCache(
-    `cache:${schoolId}:academicSessions:list`,
-    () =>
+  // Fetch configuration data and recent transactions in parallel with selected lightweight fields
+  const [
+    school,
+    academicSessions,
+    feeComponents,
+    feeStructures,
+    classes,
+    students,
+    recentCharges,
+    transactions,
+  ] = await Promise.all([
+    getCache(`cache:${schoolId}:school:full`, () =>
+      prisma.school.findUnique({ where: { id: schoolId } }),
+    ),
+    getCache(`cache:${schoolId}:academicSessions:list`, () =>
       prisma.academicSession.findMany({
-        where: { schoolId: schoolId },
+        where: { schoolId },
         orderBy: { startDate: "desc" },
       }),
-  );
-
-  const feeComponents = await getCache(
-    `cache:${schoolId}:feeComponents:list`,
-    () =>
+    ),
+    getCache(`cache:${schoolId}:feeComponents:list`, () =>
       prisma.feeComponent.findMany({
-        where: { schoolId: schoolId },
+        where: { schoolId },
         orderBy: { name: "asc" },
       }),
-  );
-
-  const feeStructures = await getCache(
-    `cache:${schoolId}:feeStructures:list`,
-    () =>
+    ),
+    getCache(`cache:${schoolId}:feeStructures:list`, () =>
       prisma.feeStructure.findMany({
-        where: { schoolId: schoolId },
+        where: { schoolId },
         include: { items: { include: { component: true } } },
         orderBy: { createdAt: "desc" },
       }),
-  );
-
-  const classes = await getCache(
-    `cache:${schoolId}:classes:withFeeStructures`,
-    () =>
+    ),
+    getCache(`cache:${schoolId}:classes:withFeeStructures`, () =>
       prisma.class.findMany({
-        where: { schoolId: schoolId },
+        where: { schoolId },
         include: {
           sections: { select: { id: true, name: true } },
           classFeeStructures: true,
         },
         orderBy: { grade: "asc" },
       }),
-  );
-
-  const students = await getCache(`cache:${schoolId}:students:feesList`, () =>
-    prisma.student.findMany({
-      where: { schoolId: schoolId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        rollNumber: true,
-        classId: true,
-        advanceLedgers: true,
-        transports: {
-          where: { status: "ACTIVE" },
-          include: {
-            route: { select: { name: true } },
-            stop: { select: { stopName: true, distanceFromSchoolKm: true } },
-          },
+    ),
+    // Select only lightweight list fields for student dropdown; full details load dynamically on demand
+    getCache(`cache:${schoolId}:students:feesList:compact`, () =>
+      prisma.student.findMany({
+        where: { schoolId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          rollNumber: true,
+          classId: true,
         },
-      },
-      orderBy: { name: "asc" },
-    }),
-  );
-
-  const recentCharges = await getCache(
-    `cache:${schoolId}:feeCharges:recent`,
-    () =>
+        orderBy: { name: "asc" },
+      }),
+    ),
+    // Select only needed fields for recent charges list
+    getCache(`cache:${schoolId}:feeCharges:recent:compact`, () =>
       prisma.feeCharge.findMany({
-        where: { schoolId: schoolId },
-        include: {
-          student: true,
-          items: true,
+        where: { schoolId },
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          status: true,
+          studentId: true,
+          student: {
+            select: { id: true, name: true, rollNumber: true, classId: true },
+          },
+          items: {
+            select: {
+              id: true,
+              amount: true,
+              paidAmount: true,
+              status: true,
+              componentId: true,
+            },
+          },
+          createdAt: true,
         },
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
-  );
-
-  const transactions = await getCache(
-    `cache:${schoolId}:transactions:recent`,
-    () =>
+    ),
+    // Select only needed fields for recent transactions list
+    getCache(`cache:${schoolId}:transactions:recent:compact`, () =>
       prisma.paymentTransaction.findMany({
-        where: { schoolId: schoolId },
-        include: {
-          student: true,
+        where: { schoolId },
+        select: {
+          id: true,
+          amount: true,
+          method: true,
+          reference: true,
+          receiptNo: true,
+          createdAt: true,
+          studentId: true,
+          student: {
+            select: { id: true, name: true, rollNumber: true },
+          },
           allocations: {
-            include: {
+            select: {
+              id: true,
+              amount: true,
               chargeItem: {
-                include: { component: true, charge: true },
+                select: {
+                  id: true,
+                  component: { select: { id: true, name: true } },
+                  charge: { select: { id: true, title: true } },
+                },
               },
             },
           },
@@ -117,7 +134,8 @@ export default async function FeesPage() {
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
-  );
+    ),
+  ]);
 
   return (
     <FeesContent

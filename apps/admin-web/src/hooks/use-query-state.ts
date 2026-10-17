@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 
 /**
@@ -20,7 +20,6 @@ export function useQueryTab<T extends string>({
   defaultTab: T;
 }): [T, (newTab: T) => void] {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   const getValidTab = useCallback((): T => {
@@ -56,12 +55,11 @@ export function useQueryTab<T extends string>({
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", newUrl);
         }
-        router.replace(newUrl, { scroll: false });
       } catch {
         // Fallback for SSR or non-browser environments
       }
     },
-    [pathname, paramKey, router, searchParams],
+    [pathname, paramKey, searchParams],
   );
 
   return [activeTab, setActiveTab];
@@ -78,7 +76,6 @@ export function useQueryState<T extends string = string>(
   defaultValue: string = "",
 ): [T, (valOrFn: T | ((prev: T) => T)) => void] {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   const getVal = useCallback((): T => {
@@ -118,14 +115,13 @@ export function useQueryState<T extends string = string>(
           if (typeof window !== "undefined") {
             window.history.replaceState(null, "", newUrl);
           }
-          router.replace(newUrl, { scroll: false });
         } catch {
           // Fallback for SSR or non-browser environments
         }
         return newVal;
       });
     },
-    [pathname, key, defaultValue, router, searchParams],
+    [pathname, key, defaultValue, searchParams],
   );
 
   return [state, setQueryState];
@@ -136,7 +132,6 @@ export function useQueryState<T extends string = string>(
  */
 export function useQueryParams() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   const getParam = useCallback(
@@ -167,12 +162,11 @@ export function useQueryParams() {
         if (typeof window !== "undefined") {
           window.history.replaceState(null, "", newUrl);
         }
-        router.replace(newUrl, { scroll: false });
       } catch {
         // Fallback for SSR or non-browser environments
       }
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   return { getParam, setParams, searchParams };

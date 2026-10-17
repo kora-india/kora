@@ -6,6 +6,7 @@ import { auth } from "@schoolos/auth";
 import { revalidatePath } from "next/cache";
 import { calculateReportCardSummary, calculateSubjectGrade } from "../grading";
 import { invalidateStudentsCache } from "@/lib/redis";
+import { compareRollNumbers } from "@schoolos/types";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -369,6 +370,14 @@ export async function getExamMarksSheet(
       },
     }),
   ]);
+
+  students.sort((a, b) => {
+    const secComp = (a.section?.name ?? "").localeCompare(
+      b.section?.name ?? "",
+    );
+    if (secComp !== 0) return secComp;
+    return compareRollNumbers(a.rollNumber, b.rollNumber);
+  });
 
   const marksMap = new Map(existingMarks.map((m) => [m.studentId, m]));
 
@@ -748,6 +757,79 @@ export async function getStudentReportCard(examId: string, studentId: string) {
     select: { status: true },
   });
 
+  return buildStudentReportCardPayload({
+    school,
+    exam,
+    student,
+    classSubjects,
+    marksMap,
+    attendances,
+  });
+}
+
+function buildStudentReportCardPayload({
+  school,
+  exam,
+  student,
+  classSubjects,
+  marksMap,
+  attendances,
+}: {
+  school: any;
+  exam: any;
+  student: any;
+  classSubjects: any[];
+  marksMap: Map<string, any>;
+  attendances: { status: string }[];
+}) {
+  const subjectsWithMarks = classSubjects.map((subject) => {
+    const markRecord = marksMap.get(subject.id);
+    const marksObtained =
+      markRecord?.marksObtained !== null &&
+      markRecord?.marksObtained !== undefined
+        ? Number(markRecord.marksObtained)
+        : null;
+    const isAbsent = markRecord?.isAbsent ?? false;
+
+    const gradeInfo = calculateSubjectGrade(
+      marksObtained,
+      Number(subject.maxMarks),
+      Number(subject.passMarks),
+      isAbsent,
+      exam.gradingSystem as any,
+    );
+
+    const percentage =
+      marksObtained !== null && Number(subject.maxMarks) > 0
+        ? Number(((marksObtained / Number(subject.maxMarks)) * 100).toFixed(1))
+        : 0;
+
+    return {
+      subjectId: subject.id,
+      subjectName: subject.subjectName,
+      maxMarks: Number(subject.maxMarks),
+      passMarks: Number(subject.passMarks),
+      marksObtained,
+      isAbsent,
+      percentage,
+      grade: gradeInfo.grade,
+      gradePoint: gradeInfo.gradePoint,
+      remark: gradeInfo.remark,
+      isPass: gradeInfo.isPass,
+      examRemarks: markRecord?.remarks ?? "",
+    };
+  });
+
+  const summary = calculateReportCardSummary(
+    subjectsWithMarks.map((s) => ({
+      maxMarks: s.maxMarks,
+      passMarks: s.passMarks,
+      marksObtained: s.marksObtained,
+      isAbsent: s.isAbsent,
+    })),
+    exam.gradingSystem as any,
+  );
+
   const totalWorkingDays = attendances.length;
   const presentDays = attendances.filter(
     (a) =>
@@ -775,8 +857,8 @@ export async function getStudentReportCard(examId: string, studentId: string) {
       name: student.name,
       rollNumber: student.rollNumber,
       admissionNumber: student.admissionNumber,
-      className: student.class.name,
-      sectionName: student.section.name,
+      className: student.class?.name ?? "",
+      sectionName: student.section?.name ?? "",
       parentName: student.parentName,
       dob: student.dateOfBirth,
       photoUrl: student.photoUrl,
@@ -794,27 +876,116 @@ export async function getStudentReportCard(examId: string, studentId: string) {
 
 export async function getSectionReportCards(examId: string, sectionId: string) {
   const { user } = await requireExamAccess();
+  const schoolId = user.schoolId;
 
-  const section = await prisma.section.findFirst({
-    where: { id: sectionId, schoolId: user.schoolId },
-    select: { id: true, classId: true },
-  });
+  const [school, exam, section, rawStudents] = await Promise.all([
+    prisma.school.findUnique({
+      where: { id: schoolId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        pincode: true,
+        logoUrl: true,
+      },
+    }),
+    prisma.exam.findFirst({
+      where: { id: examId, schoolId },
+      include: {
+        subjects: {
+          orderBy: { order: "asc" },
+        },
+      },
+    }),
+    prisma.section.findFirst({
+      where: { id: sectionId, schoolId },
+      select: { id: true, classId: true },
+    }),
+    prisma.student.findMany({
+      where: {
+        schoolId,
+        sectionId,
+        isActive: true,
+      },
+      include: {
+        class: true,
+        section: true,
+      },
+    }),
+  ]);
 
+  if (!exam) throw new Error("Exam not found");
   if (!section) throw new Error("Section not found");
 
-  const students = await prisma.student.findMany({
-    where: {
-      schoolId: user.schoolId,
-      sectionId,
-      isActive: true,
-    },
-    select: { id: true },
-    orderBy: { rollNumber: "asc" },
-  });
-
-  const reportCards = await Promise.all(
-    students.map((st) => getStudentReportCard(examId, st.id)),
+  // Sort students naturally by numeric roll number
+  const students = [...rawStudents].sort((a, b) =>
+    compareRollNumbers(a.rollNumber, b.rollNumber),
   );
+
+  const studentIds = students.map((s) => s.id);
+  const classSubjects = exam.subjects.filter(
+    (s) => s.classId === section.classId,
+  );
+  const subjectIds = classSubjects.map((s) => s.id);
+
+  const [allMarks, allAttendances] = await Promise.all([
+    prisma.examMark.findMany({
+      where: {
+        examSubjectId: { in: subjectIds },
+        studentId: { in: studentIds },
+      },
+    }),
+    prisma.attendance.findMany({
+      where: {
+        studentId: { in: studentIds },
+        date: {
+          gte: exam.startDate,
+          lte: exam.endDate,
+        },
+      },
+      select: { studentId: true, status: true },
+    }),
+  ]);
+
+  // Group marks by studentId -> (examSubjectId -> mark)
+  const studentMarksMap = new Map<
+    string,
+    Map<string, (typeof allMarks)[number]>
+  >();
+  for (const mark of allMarks) {
+    if (!studentMarksMap.has(mark.studentId)) {
+      studentMarksMap.set(mark.studentId, new Map());
+    }
+    studentMarksMap.get(mark.studentId)!.set(mark.examSubjectId, mark);
+  }
+
+  // Group attendances by studentId
+  const studentAttendancesMap = new Map<string, { status: string }[]>();
+  for (const att of allAttendances) {
+    const list = studentAttendancesMap.get(att.studentId);
+    if (list) {
+      list.push({ status: att.status });
+    } else {
+      studentAttendancesMap.set(att.studentId, [{ status: att.status }]);
+    }
+  }
+
+  const reportCards = students.map((st) => {
+    const marksMap = studentMarksMap.get(st.id) ?? new Map();
+    const attendances = studentAttendancesMap.get(st.id) ?? [];
+    return buildStudentReportCardPayload({
+      school,
+      exam,
+      student: st,
+      classSubjects,
+      marksMap,
+      attendances,
+    });
+  });
 
   return reportCards;
 }

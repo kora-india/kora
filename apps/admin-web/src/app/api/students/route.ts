@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { compareRollNumbers } from "@schoolos/types";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = session.user;
-  if (!user.schoolId) return NextResponse.json({ error: "No school" }, { status: 403 });
+  if (!user.schoolId)
+    return NextResponse.json({ error: "No school" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q");
@@ -34,6 +37,8 @@ export async function GET(req: NextRequest) {
     orderBy: { rollNumber: "asc" },
     take: 100,
   });
+
+  students.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
 
   return NextResponse.json({ students });
 }

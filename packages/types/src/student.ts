@@ -28,3 +28,22 @@ export const CreateStudentSchema = StudentSchema.omit({
 
 export type Student = z.infer<typeof StudentSchema>;
 export type CreateStudentInput = z.infer<typeof CreateStudentSchema>;
+
+/**
+ * Natural / numeric comparator for student roll numbers.
+ * Sorts "1", "2", "10" correctly instead of lexicographical "1", "10", "2".
+ */
+export function compareRollNumbers(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
+  const normA = (a ?? "").trim();
+  const normB = (b ?? "").trim();
+  if (!normA && !normB) return 0;
+  if (!normA) return 1;
+  if (!normB) return -1;
+  return normA.localeCompare(normB, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}

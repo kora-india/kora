@@ -264,24 +264,28 @@ export async function allocatePayment(rawInput: {
 
         // 2. Allocate Month-wise payments if provided (FIFO: oldest due date first)
         if (data.monthPayments && data.monthPayments.length > 0) {
-          const chargeDates = await tx.feeCharge.findMany({
+          const charges = await tx.feeCharge.findMany({
             where: {
               id: { in: data.monthPayments.map((m) => m.chargeId) },
               schoolId: user.schoolId,
               studentId: data.studentId,
             },
-            select: { id: true, dueDate: true },
+            include: {
+              items: {
+                include: { component: true },
+              },
+            },
           });
-          const chargeDateMap = new Map<string, number>();
-          chargeDates.forEach((c) =>
-            chargeDateMap.set(c.id, new Date(c.dueDate).getTime() || 0),
-          );
+          const chargeMap = new Map(charges.map((c) => [c.id, c]));
 
           const sortedMonthPayments = [...data.monthPayments].sort((a, b) => {
-            return (
-              (chargeDateMap.get(a.chargeId) || 0) -
-              (chargeDateMap.get(b.chargeId) || 0)
-            );
+            const dateA = chargeMap.get(a.chargeId)?.dueDate
+              ? new Date(chargeMap.get(a.chargeId)!.dueDate).getTime()
+              : 0;
+            const dateB = chargeMap.get(b.chargeId)?.dueDate
+              ? new Date(chargeMap.get(b.chargeId)!.dueDate).getTime()
+              : 0;
+            return dateA - dateB;
           });
 
           for (const mp of sortedMonthPayments) {
@@ -289,18 +293,7 @@ export async function allocatePayment(rawInput: {
             if (enteredAmount <= 0) continue;
 
             // B7: Fail closed if charge not found
-            const charge = await tx.feeCharge.findFirst({
-              where: {
-                id: mp.chargeId,
-                schoolId: user.schoolId,
-                studentId: data.studentId,
-              },
-              include: {
-                items: {
-                  include: { component: true },
-                },
-              },
-            });
+            const charge = chargeMap.get(mp.chargeId);
 
             if (!charge) {
               throw new Error(
@@ -374,25 +367,22 @@ export async function allocatePayment(rawInput: {
 
               remainingForCharge = roundMoney(remainingForCharge - allocAmount);
 
-              // B5: Atomic increment on feeChargeItem paidAmount
-              const updatedItem = await tx.feeChargeItem.update({
-                where: { id: item.id },
-                data: { paidAmount: { increment: allocAmount } },
-                select: { id: true, amount: true, paidAmount: true },
-              });
-
-              const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
-              const originalAmt = roundMoney(Number(updatedItem.amount));
+              const currentPaid = roundMoney(Number(item.paidAmount));
+              const originalAmt = roundMoney(Number(item.amount));
+              const updatedPaid = roundMoney(currentPaid + allocAmount);
               if (updatedPaid > originalAmt + 0.001) {
                 throw new Error(`Overpayment detected on fee item ${item.id}`);
               }
-
               const newItemStatus =
                 updatedPaid >= originalAmt ? FeeStatus.PAID : FeeStatus.PARTIAL;
 
+              // Combined atomic increment and status update (1 query instead of 2)
               await tx.feeChargeItem.update({
                 where: { id: item.id },
-                data: { status: newItemStatus },
+                data: {
+                  paidAmount: { increment: allocAmount },
+                  status: newItemStatus,
+                },
               });
             }
 
@@ -413,21 +403,25 @@ export async function allocatePayment(rawInput: {
 
         // 3. Allocate item-wise payments if provided
         if (data.itemPayments && data.itemPayments.length > 0) {
+          const itemIds = data.itemPayments.map((ip) => ip.chargeItemId);
+          const foundItems = await tx.feeChargeItem.findMany({
+            where: {
+              id: { in: itemIds },
+              charge: {
+                schoolId: user.schoolId,
+                studentId: data.studentId,
+              },
+            },
+            include: { charge: true },
+          });
+          const itemsMap = new Map(foundItems.map((it) => [it.id, it]));
+
           for (const ip of data.itemPayments) {
             const itemAmount = roundMoney(ip.amount);
             if (itemAmount <= 0) continue;
 
             // B7: Fail closed if item not found
-            const item = await tx.feeChargeItem.findFirst({
-              where: {
-                id: ip.chargeItemId,
-                charge: {
-                  schoolId: user.schoolId,
-                  studentId: data.studentId,
-                },
-              },
-              include: { charge: true },
-            });
+            const item = itemsMap.get(ip.chargeItemId);
 
             if (!item) {
               throw new Error(
@@ -463,25 +457,22 @@ export async function allocatePayment(rawInput: {
                 amount: allocAmount,
               });
 
-              // B5: Atomic increment
-              const updatedItem = await tx.feeChargeItem.update({
-                where: { id: item.id },
-                data: { paidAmount: { increment: allocAmount } },
-                select: { id: true, amount: true, paidAmount: true },
-              });
-
-              const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
-              const originalAmt = roundMoney(Number(updatedItem.amount));
+              const currentPaid = roundMoney(Number(item.paidAmount));
+              const originalAmt = roundMoney(Number(item.amount));
+              const updatedPaid = roundMoney(currentPaid + allocAmount);
               if (updatedPaid > originalAmt + 0.001) {
                 throw new Error(`Overpayment detected on fee item ${item.id}`);
               }
-
               const newItemStatus =
                 updatedPaid >= originalAmt ? FeeStatus.PAID : FeeStatus.PARTIAL;
 
+              // Combined atomic increment and status update (1 query instead of 2)
               await tx.feeChargeItem.update({
                 where: { id: item.id },
-                data: { status: newItemStatus },
+                data: {
+                  paidAmount: { increment: allocAmount },
+                  status: newItemStatus,
+                },
               });
 
               affectedChargeIds.add(item.chargeId);
@@ -502,14 +493,18 @@ export async function allocatePayment(rawInput: {
 
         // 4. Allocate component-wise payments if provided
         if (data.componentPayments && data.componentPayments.length > 0) {
+          const compIds = data.componentPayments.map((cp) => cp.componentId);
+          const foundComps = await tx.feeComponent.findMany({
+            where: { id: { in: compIds }, schoolId: user.schoolId },
+          });
+          const compMap = new Map(foundComps.map((c) => [c.id, c]));
+
           for (const cp of data.componentPayments) {
             const compAmount = roundMoney(cp.amount);
             if (compAmount <= 0) continue;
 
             // B7: Verify component exists
-            const comp = await tx.feeComponent.findFirst({
-              where: { id: cp.componentId, schoolId: user.schoolId },
-            });
+            const comp = compMap.get(cp.componentId);
             if (!comp) {
               throw new Error(
                 `Fee component ${cp.componentId} not found in your school`,
@@ -567,29 +562,26 @@ export async function allocatePayment(rawInput: {
 
                 remainingAmount = roundMoney(remainingAmount - allocAmount);
 
-                // B5: Atomic increment
-                const updatedItem = await tx.feeChargeItem.update({
-                  where: { id: item.id },
-                  data: { paidAmount: { increment: allocAmount } },
-                  select: { id: true, amount: true, paidAmount: true },
-                });
-
-                const updatedPaid = roundMoney(Number(updatedItem.paidAmount));
-                const originalAmt = roundMoney(Number(updatedItem.amount));
+                const currentPaid = roundMoney(Number(item.paidAmount));
+                const originalAmt = roundMoney(Number(item.amount));
+                const updatedPaid = roundMoney(currentPaid + allocAmount);
                 if (updatedPaid > originalAmt + 0.001) {
                   throw new Error(
                     `Overpayment detected on fee item ${item.id}`,
                   );
                 }
-
                 const newItemStatus =
                   updatedPaid >= originalAmt
                     ? FeeStatus.PAID
                     : FeeStatus.PARTIAL;
 
+                // Combined atomic increment and status update
                 await tx.feeChargeItem.update({
                   where: { id: item.id },
-                  data: { status: newItemStatus },
+                  data: {
+                    paidAmount: { increment: allocAmount },
+                    status: newItemStatus,
+                  },
                 });
 
                 affectedChargeIds.add(item.chargeId);

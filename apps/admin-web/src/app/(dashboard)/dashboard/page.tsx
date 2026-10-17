@@ -8,87 +8,120 @@ import { getCache } from "@/lib/redis";
 export const metadata = { title: "Dashboard" };
 
 async function getDashboardData(schoolId: string) {
-  const totalStudents = await prisma.student.count({
-    where: { schoolId, isActive: true },
-  });
-  const totalTeachers = await prisma.teacher.count({
-    where: { schoolId, isActive: true },
-  });
-  const totalClasses = await prisma.class.count({ where: { schoolId } });
-  const pendingFeeItems = await prisma.feeChargeItem.findMany({
-    where: {
-      charge: { schoolId, student: { isActive: true } },
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
-    },
-    select: { amount: true, paidAmount: true },
-  });
-  const totalPendingFees = pendingFeeItems.reduce(
-    (acc, item) => acc + (Number(item.amount) - Number(item.paidAmount)),
-    0,
-  );
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const present = await prisma.attendance.count({
-    where: { schoolId, date: today, status: "PRESENT" },
-  });
-  const total = await prisma.attendance.count({
-    where: { schoolId, date: today },
-  });
-  const todayAttendance = { present, total };
 
-  const recentActivity = await prisma.student.findMany({
-    where: { schoolId, isActive: true },
-    orderBy: { createdAt: "desc" },
-    take: 6,
-    include: {
-      class: { select: { name: true } },
-      section: { select: { name: true } },
-      feeCharges: {
-        select: { status: true },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
-    },
-  });
-
-  const notices = await prisma.notice.findMany({
-    where: { schoolId, isPublished: true },
-    orderBy: { createdAt: "desc" },
-    take: 4,
-  });
-
-  // Revenue by month (last 6 months)
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
   sixMonthsAgo.setHours(0, 0, 0, 0);
 
-  const payments = await prisma.paymentTransaction.findMany({
-    where: { schoolId, date: { gte: sixMonthsAgo }, status: "SUCCESS" },
-    select: { amount: true, date: true },
-  });
-
-  const pendingFeeRows = await prisma.feeChargeItem.findMany({
-    where: {
-      charge: {
-        schoolId,
-        student: { isActive: true },
-        dueDate: { gte: sixMonthsAgo },
+  const [
+    totalStudents,
+    totalTeachers,
+    totalClasses,
+    pendingFeeAgg,
+    presentAttendanceCount,
+    totalAttendanceCount,
+    recentActivity,
+    notices,
+    payments,
+    pendingFeeRows,
+    expensesList,
+    classesList,
+    school,
+  ] = await Promise.all([
+    prisma.student.count({
+      where: { schoolId, isActive: true },
+    }),
+    prisma.teacher.count({
+      where: { schoolId, isActive: true },
+    }),
+    prisma.class.count({ where: { schoolId } }),
+    prisma.feeChargeItem.aggregate({
+      where: {
+        charge: { schoolId, student: { isActive: true } },
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
       },
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
-    },
-    select: {
-      amount: true,
-      paidAmount: true,
-      charge: { select: { dueDate: true } },
-    },
-  });
+      _sum: {
+        amount: true,
+        paidAmount: true,
+      },
+    }),
+    prisma.attendance.count({
+      where: { schoolId, date: today, status: "PRESENT" },
+    }),
+    prisma.attendance.count({
+      where: { schoolId, date: today },
+    }),
+    prisma.student.findMany({
+      where: { schoolId, isActive: true },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      include: {
+        class: { select: { name: true } },
+        section: { select: { name: true } },
+        feeCharges: {
+          select: { status: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    }),
+    prisma.notice.findMany({
+      where: { schoolId, isPublished: true },
+      orderBy: { createdAt: "desc" },
+      take: 4,
+    }),
+    prisma.paymentTransaction.findMany({
+      where: { schoolId, date: { gte: sixMonthsAgo }, status: "SUCCESS" },
+      select: { amount: true, date: true },
+    }),
+    prisma.feeChargeItem.findMany({
+      where: {
+        charge: {
+          schoolId,
+          student: { isActive: true },
+          dueDate: { gte: sixMonthsAgo },
+        },
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      },
+      select: {
+        amount: true,
+        paidAmount: true,
+        charge: { select: { dueDate: true } },
+      },
+    }),
+    prisma.expense.findMany({
+      where: { schoolId, date: { gte: sixMonthsAgo } },
+      select: { amount: true, date: true },
+    }),
+    prisma.class.findMany({
+      where: { schoolId },
+      take: 4,
+      orderBy: { grade: "asc" },
+      include: {
+        _count: { select: { students: true } },
+        attendances: {
+          where: { date: today },
+          select: { status: true },
+        },
+      },
+    }),
+    prisma.school.findUnique({
+      where: { id: schoolId },
+      select: { name: true, plan: true, subscription: true },
+    }),
+  ]);
 
-  const expensesList = await prisma.expense.findMany({
-    where: { schoolId, date: { gte: sixMonthsAgo } },
-    select: { amount: true, date: true },
-  });
+  const totalPendingFees =
+    Number(pendingFeeAgg._sum.amount ?? 0) -
+    Number(pendingFeeAgg._sum.paidAmount ?? 0);
+
+  const todayAttendance = {
+    present: presentAttendanceCount,
+    total: totalAttendanceCount,
+  };
 
   const monthKey = (d: Date) =>
     new Intl.DateTimeFormat("en-IN", {
@@ -144,20 +177,6 @@ async function getDashboardData(schoolId: string) {
     };
   });
 
-  // Class-wise attendance
-  const classesList = await prisma.class.findMany({
-    where: { schoolId },
-    take: 4,
-    orderBy: { grade: "asc" },
-    include: {
-      _count: { select: { students: true } },
-      attendances: {
-        where: { date: today },
-        select: { status: true },
-      },
-    },
-  });
-
   const attendancePercentage =
     todayAttendance.total > 0
       ? Math.round((todayAttendance.present / todayAttendance.total) * 100)
@@ -177,11 +196,6 @@ async function getDashboardData(schoolId: string) {
       pct,
       students: totalStudents,
     };
-  });
-
-  const school = await prisma.school.findUnique({
-    where: { id: schoolId },
-    select: { name: true, plan: true, subscription: true },
   });
 
   const { evaluateSubscriptionValidity } = await import("@/lib/subscription");

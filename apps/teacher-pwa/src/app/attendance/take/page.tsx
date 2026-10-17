@@ -3,9 +3,10 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AttendanceTaker } from "@/components/attendance/attendance-taker";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { compareRollNumbers } from "@schoolos/types";
 
 export const metadata = { title: "Take Attendance" };
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export default async function TakeAttendancePage() {
   const session = await auth();
@@ -26,14 +27,16 @@ export default async function TakeAttendancePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 pb-20">
         <div className="text-center">
-          <p className="text-muted-foreground text-sm">No class assigned. Contact admin.</p>
+          <p className="text-muted-foreground text-sm">
+            No class assigned. Contact admin.
+          </p>
         </div>
         <BottomNav />
       </div>
     );
   }
 
-  const students = await prisma.student.findMany({
+  const rawStudents = await prisma.student.findMany({
     where: {
       schoolId: user.schoolId,
       classId: teacher.assignedClassId,
@@ -43,7 +46,11 @@ export default async function TakeAttendancePage() {
     orderBy: { rollNumber: "asc" },
   });
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const students = [...rawStudents].sort((a, b) =>
+    compareRollNumbers(a.rollNumber, b.rollNumber),
+  );
+
+  const todayStr = new Date().toLocaleDateString("en-CA");
   const today = new Date(todayStr);
 
   const existing = await prisma.attendance.findMany({
@@ -56,7 +63,9 @@ export default async function TakeAttendancePage() {
   });
 
   const existingMap: Record<string, string> = {};
-  existing.forEach((r: { studentId: string; status: string }) => { existingMap[r.studentId] = r.status; });
+  existing.forEach((r: { studentId: string; status: string }) => {
+    existingMap[r.studentId] = r.status;
+  });
 
   return (
     <div className="min-h-screen bg-background pb-20">

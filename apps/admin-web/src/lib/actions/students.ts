@@ -17,6 +17,7 @@ import {
   calculateSubjectGrade,
   calculateReportCardSummary,
 } from "@/lib/grading";
+import { compareRollNumbers } from "@schoolos/types";
 
 const StudentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -123,6 +124,16 @@ export async function searchStudents(query: string = "", limit: number = 25) {
         { name: "asc" },
       ],
       take: Math.min(Math.max(1, limit), 50),
+    });
+
+    students.sort((a, b) => {
+      const classComp = (a.class?.name || "").localeCompare(
+        b.class?.name || "",
+      );
+      if (classComp !== 0) return classComp;
+      const rollComp = compareRollNumbers(a.rollNumber, b.rollNumber);
+      if (rollComp !== 0) return rollComp;
+      return a.name.localeCompare(b.name);
     });
 
     return { success: true, students };
