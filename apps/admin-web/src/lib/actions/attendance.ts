@@ -4,7 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { invalidateCache } from "@/lib/redis";
+import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
 
 const AttendanceRecordSchema = z.object({
   studentId: z.string(),
@@ -124,6 +124,7 @@ export async function markAttendance(data: unknown) {
 
     const results = await prisma.$transaction(upserts);
     await Promise.all([
+      invalidateStudentsCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
       invalidateCache(`cache:${user.schoolId}:analytics`),
     ]);

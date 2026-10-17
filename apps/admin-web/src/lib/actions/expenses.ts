@@ -4,7 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCache, invalidateCache } from "@/lib/redis";
+import { getCache, invalidateCache, invalidateLedgerCache } from "@/lib/redis";
 
 const ExpenseCategorySchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -81,6 +81,7 @@ export async function createExpense(data: unknown) {
 
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
+      invalidateLedgerCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
       invalidateCache(`cache:${user.schoolId}:analytics`),
     ]);
@@ -110,6 +111,7 @@ export async function deleteExpense(id: string) {
 
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
+      invalidateLedgerCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
       invalidateCache(`cache:${user.schoolId}:analytics`),
     ]);

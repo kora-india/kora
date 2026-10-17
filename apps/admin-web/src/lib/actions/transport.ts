@@ -59,7 +59,7 @@ export async function getTransportData() {
   if (!user) return { error: "Unauthorized" };
   const schoolId = user.schoolId;
 
-  return getCache(
+  const data = await getCache(
     `cache:${schoolId}:transport:data`,
     async () => {
       // 1. Get active session
@@ -181,11 +181,15 @@ export async function getTransportData() {
               ? Math.round((totalEnrolled / totalCapacity) * 100)
               : 0,
         },
-        userRole: user.role,
       };
     },
     300,
   );
+
+  return {
+    ...data,
+    userRole: user.role,
+  };
 }
 
 // ─── Vehicle Fleet Actions ──────────────────────────────────────────────────

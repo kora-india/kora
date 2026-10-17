@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { checkTeacherLimit, planLimitMessage } from "@/lib/plan-limits";
-import { invalidateCache } from "@/lib/redis";
+import { invalidateCache, invalidateTeachersCache } from "@/lib/redis";
 
 const TeacherSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -167,7 +167,7 @@ export async function createTeacher(data: unknown) {
       },
     );
 
-    await invalidateCache(`cache:${user.schoolId}:dashboard`);
+    await invalidateTeachersCache(user.schoolId);
     revalidatePath("/teachers");
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
@@ -260,6 +260,10 @@ export async function updateTeacher(id: string, data: unknown) {
       }
     });
 
+    await Promise.all([
+      invalidateTeachersCache(user.schoolId),
+      invalidateCache(`cache:${user.schoolId}:classes:*`),
+    ]);
     revalidatePath("/teachers");
     revalidatePath(`/teachers/${id}`);
     revalidatePath("/attendance");
@@ -307,7 +311,7 @@ export async function deleteTeacher(id: string) {
     ]);
 
     await Promise.all([
-      invalidateCache(`cache:${user.schoolId}:dashboard`),
+      invalidateTeachersCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:classes:*`),
     ]);
     revalidatePath("/teachers");

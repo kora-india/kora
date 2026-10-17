@@ -11,6 +11,7 @@ import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
 import crypto from "crypto";
 import { seedInitialSchoolData } from "@/lib/onboarding";
+import { invalidateSuperAdminCache } from "@/lib/redis";
 
 const schoolLogger = createLogger("school-create");
 
@@ -372,6 +373,8 @@ export async function POST(req: Request) {
       { schoolId: school.id, subdomain, plan, userId: session.user.id },
       `[School Created] ${name} (${subdomain}) on plan ${plan}`,
     );
+
+    await invalidateSuperAdminCache();
 
     return NextResponse.json({ success: true, schoolId: school.id });
   } catch (error) {

@@ -34,7 +34,7 @@ export default async function LedgerPage() {
     feeComponents,
     expenseCategories,
   ] = await Promise.all([
-    getCache(`cache:${schoolId}:school:details`, () =>
+    getCache(`cache:${schoolId}:school:name`, () =>
       prisma.school.findUnique({
         where: { id: schoolId },
         select: { name: true },
@@ -136,7 +136,7 @@ export default async function LedgerPage() {
         orderBy: { startDate: "desc" },
       }),
     ),
-    getCache(`cache:${schoolId}:classes:list`, () =>
+    getCache(`cache:${schoolId}:classes:basic`, () =>
       prisma.class.findMany({
         where: { schoolId },
         select: { id: true, name: true, grade: true },

@@ -4,7 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { z } from "zod";
-import { invalidateCache } from "@/lib/redis";
+import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
 
 const attendanceLogger = createLogger("attendance-api");
 
@@ -146,7 +146,10 @@ export async function POST(req: NextRequest) {
       ),
     );
 
-    await invalidateCache(`cache:${schoolId}:dashboard`);
+    await Promise.all([
+      invalidateStudentsCache(schoolId),
+      invalidateCache(`cache:${schoolId}:dashboard`),
+    ]);
 
     attendanceLogger.info(
       {

@@ -5,6 +5,7 @@ import { prisma, ExamType, GradingSystem } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 import { revalidatePath } from "next/cache";
 import { calculateReportCardSummary, calculateSubjectGrade } from "../grading";
+import { invalidateStudentsCache } from "@/lib/redis";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -627,6 +628,7 @@ export async function saveBatchMarks(
     ),
   );
 
+  await invalidateStudentsCache(user.schoolId);
   revalidatePath("/exams");
   return { success: true, savedCount: cleanEntries.length };
 }
