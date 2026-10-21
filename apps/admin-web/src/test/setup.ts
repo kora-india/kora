@@ -79,6 +79,7 @@ vi.mock("@/lib/ratelimit", () => {
     subdomainRatelimit: allowAll(),
     schoolCreateRatelimit: allowAll(),
     apiRatelimit: allowAll(),
+    uploadRatelimit: allowAll(),
     createRateLimitResponse: vi.fn(),
   };
 });

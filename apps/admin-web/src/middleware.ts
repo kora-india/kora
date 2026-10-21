@@ -75,12 +75,8 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/schools", req.url));
   }
 
-  const res = NextResponse.next();
-  // Security headers
-  res.headers.set("X-Frame-Options", "DENY");
-  res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  return res;
+  // Security headers are set for every route in next.config.js.
+  return NextResponse.next();
 });
 
 export const config = {

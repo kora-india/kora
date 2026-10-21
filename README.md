@@ -10,13 +10,15 @@ A production-ready, premium School Management Platform built with **Next.js 15**
 schoolos/
 ├── apps/
 │   ├── admin-web       → Admin Dashboard (port 3000)
-│   └── teacher-pwa     → Mobile Teacher PWA (port 3001)
+│   ├── teacher-pwa     → Mobile Teacher PWA (port 3001)
+│   └── desktop         → Electron wrapper for the admin dashboard
 └── packages/
     ├── ui              → Shared UI components
     ├── db              → Prisma ORM + seed data
     ├── auth            → Auth.js v5 + RBAC
     ├── types           → Zod schemas + TypeScript types
     ├── utils           → Shared utilities
+    ├── logger          → Structured logging (pino)
     └── config          → TSConfig + Tailwind base
 ```
 
@@ -40,16 +42,24 @@ pnpm install
 
 ```bash
 cp .env.example .env
-# Edit .env with your DATABASE_URL and NEXTAUTH_SECRET
+# Set DATABASE_URL and AUTH_SECRET (32+ characters) to start.
 ```
+
+When the server starts it lists any other settings that are missing and what
+won't work without them (payments, email, scheduled fee jobs, Redis, uploads).
 
 ### 4. Database setup
 
 ```bash
 pnpm db:generate    # Generate Prisma client
-pnpm db:push        # Push schema to database
+pnpm db:deploy      # Apply the migrations
 pnpm db:seed        # Seed with demo data
 ```
+
+To change the schema, edit `schema.prisma` and run `pnpm db:migrate` against
+your **local** database; it creates a migration to commit. Deployments run
+`pnpm db:deploy`. Don't use `db push` on a shared or production database: it
+skips the migrations' data fixes and can drop data.
 
 ### 5. Run development
 
@@ -61,6 +71,21 @@ This starts both apps:
 
 - Admin Dashboard: http://localhost:3000
 - Teacher PWA: http://localhost:3001
+
+---
+
+## 🧩 What's included
+
+- Students, staff and teachers, with spreadsheet import
+- Daily attendance (admin dashboard and Teacher PWA)
+- Fees: structures, monthly generation, collection, receipts, late fees, advances
+- Transaction ledger and expenses
+- Transport routes, stops and bus fees
+- Exams, marks entry and report cards
+- Timetable, with conflict checks and optional AI scheduling
+- Payroll and salary slips
+- Notices and homework
+- Plans, a 14-day free trial and online billing
 
 ---
 
@@ -83,7 +108,7 @@ The Teacher PWA is a mobile-first Progressive Web App designed for:
 - ✅ **Bottom navigation** — Native app feel
 - ✅ **Works offline** — a service worker keeps the app openable without a connection, and attendance saved offline is queued on the phone and sent when it reconnects
 - ✅ **Installable** — Add to home screen on Android/iOS
-- ✅ **Class-scoped** — Teachers only see their assigned class
+- ✅ **Class-scoped** — Teachers see the sections they're assigned or are class teacher of
 
 ### Install as PWA
 
@@ -166,12 +191,10 @@ await prisma.attendance.findMany({ where: { schoolId: user.schoolId } });
 
 ## 🧪 Coming in V2
 
-- [ ] Exam & gradebook module
 - [ ] Parent portal
 - [ ] SMS/Email notifications
 - [ ] Biometric attendance integration
 - [ ] Custom report builder
-- [ ] Timetable generator
 - [ ] Library management
 
 ---

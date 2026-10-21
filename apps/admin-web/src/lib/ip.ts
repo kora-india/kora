@@ -1,24 +1,45 @@
 import { NextRequest } from "next/server";
 
+const firstEntry = (value: string | null) =>
+  value?.split(",")[0]?.trim() || null;
+
 /**
- * Extracts client IP address from request headers with support for standard proxies
+ * The client's IP address, for rate limits (sec 9).
+ *
+ * Proxy headers are only as trustworthy as the proxy that sets them; the
+ * client can put anything in `X-Forwarded-For` itself. So:
+ * - `CLIENT_IP_HEADER` (e.g. "cf-connecting-ip") names one header your
+ *   proxy always sets, and only that is read.
+ * - On Vercel, whose edge replaces `X-Forwarded-For`, its first entry is
+ *   the client.
+ * - `TRUSTED_PROXY_COUNT` (behind your own load balancer, usually 1) takes
+ *   the address your outermost proxy saw, counted from the right, which a
+ *   client can't forge.
+ * - Otherwise the last entry, which the nearest proxy added.
  */
 export function getClientIp(req: Request | NextRequest): string {
   const headers = req.headers;
 
-  // Standard proxy headers
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    // x-forwarded-for may contain a comma-separated list of IPs: "client, proxy1, proxy2"
-    const clientIp = forwardedFor.split(",")[0]?.trim();
-    if (clientIp) return clientIp;
+  const named = process.env.CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (named) return firstEntry(headers.get(named)) ?? "unknown";
+
+  const forwarded = (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+
+  if (process.env.VERCEL) {
+    return forwarded[0] ?? firstEntry(headers.get("x-real-ip")) ?? "unknown";
   }
 
-  const realIp = headers.get("x-real-ip");
-  if (realIp) return realIp.trim();
+  const trusted = Number.parseInt(process.env.TRUSTED_PROXY_COUNT ?? "", 10);
+  if (Number.isFinite(trusted) && trusted > 0 && forwarded.length > 0) {
+    return forwarded[Math.max(0, forwarded.length - trusted)];
+  }
 
-  const cfConnectingIp = headers.get("cf-connecting-ip");
-  if (cfConnectingIp) return cfConnectingIp.trim();
-
-  return "127.0.0.1";
+  return (
+    forwarded[forwarded.length - 1] ??
+    firstEntry(headers.get("x-real-ip")) ??
+    "unknown"
+  );
 }

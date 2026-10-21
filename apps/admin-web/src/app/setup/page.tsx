@@ -302,6 +302,10 @@ export default function SetupSchoolPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("The logo can be up to 5 MB.");
+      return;
+    }
     setIsUploading(true);
     const formData = new FormData();
     formData.append("file", file);
@@ -314,7 +318,7 @@ export default function SetupSchoolPage() {
       if (res.ok && data.url) {
         setValue("logoUrl", data.url);
         toast.success("Logo uploaded successfully");
-      } else toast.error("Failed to upload logo");
+      } else toast.error(data.error || "Failed to upload logo");
     } catch (err) {
       toast.error("Error uploading logo");
     } finally {
@@ -777,7 +781,7 @@ export default function SetupSchoolPage() {
                           </label>
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/png,image/jpeg,image/webp"
                             className="hidden"
                             ref={fileInputRef}
                             onChange={handleLogoUpload}

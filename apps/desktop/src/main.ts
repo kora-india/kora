@@ -12,6 +12,22 @@ const BASE_URL =
   (IS_DEV ? "http://localhost:3000" : "https://kora-admin-web.vercel.app");
 // Direct to /login so the landing page is completely bypassed
 const LOGIN_URL = `${BASE_URL}/login`;
+const APP_ORIGIN = new URL(BASE_URL).origin;
+
+/**
+ * Whether a URL belongs to the app (sec 9). Compares parsed origins:
+ * a prefix check let "https://kora-admin-web.vercel.app.example.com"
+ * through.
+ */
+function isAppUrl(url: string): boolean {
+  try {
+    return new URL(url).origin === APP_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+const isWebUrl = (url: string) => /^https?:\/\//i.test(url);
 
 const MIN_SPLASH_DISPLAY_MS = 1400; // Ensures smooth, non-flickering splash experience
 const splashStartTime = Date.now();
@@ -141,13 +157,17 @@ function createMainWindow() {
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://") || url.startsWith("http://")) {
-      if (url.startsWith(BASE_URL)) {
-        return { action: "allow" };
-      }
-      shell.openExternal(url);
-    }
+    if (isAppUrl(url)) return { action: "allow" };
+    if (isWebUrl(url)) shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // The window itself only ever shows the app; other sites open in the
+  // browser instead of replacing it (sec 9).
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (isAppUrl(url)) return;
+    event.preventDefault();
+    if (isWebUrl(url)) shell.openExternal(url);
   });
 
   connectToApp();

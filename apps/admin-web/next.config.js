@@ -3,6 +3,29 @@ const path = require("node:path");
 const { withSentryConfig } = require("@sentry/nextjs");
 const isProd = process.env.NODE_ENV === "production";
 
+// Server Actions compare `allowedOrigins` with the request's host, so this
+// must be "app.example.com", not "https://app.example.com" (sec 9). Empty
+// means Next.js's own same-host check.
+const appHost = (() => {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "").host;
+  } catch {
+    return "";
+  }
+})();
+
+// Every route, including /login and /register: no framing (clickjacking),
+// no MIME sniffing, no plugins, no <base> hijacking (sec 9).
+const securityHeaders = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Content-Security-Policy",
+    value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+  },
+];
+
 const nextConfig = {
   // @schoolos/db intentionally excluded — Prisma must not be bundled by webpack
   // or it loses the __dirname reference needed to locate the native .node engine.
@@ -36,7 +59,9 @@ const nextConfig = {
   experimental: {
     serverActions: {
       allowedOrigins: isProd
-        ? [process.env.NEXT_PUBLIC_APP_URL ?? ""]
+        ? appHost
+          ? [appHost]
+          : []
         : ["localhost:3000", "localhost:3001"],
     },
   },
@@ -59,6 +84,7 @@ const nextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+          ...securityHeaders,
         ],
       },
     ];

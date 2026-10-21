@@ -10,13 +10,29 @@ const isRedisConfigured =
   Boolean(process.env.UPSTASH_REDIS_REST_TOKEN) &&
   !process.env.UPSTASH_REDIS_REST_URL?.includes("fake.upstash.io");
 
-// In-memory sliding window fallback map for dev / offline mode
-const memoryStore = new Map<string, { count: number; resetAt: number }>();
+// Without Upstash each server instance counts on its own and forgets on a
+// cold start, so in production the limits barely hold (sec 9). Say so loudly.
+if (process.env.NODE_ENV === "production" && !isRedisConfigured) {
+  rateLimitLogger.error(
+    "UPSTASH_REDIS_REST_URL/TOKEN are not set: rate limits are per server instance and reset on cold starts, so they don't protect login, OTP or payment endpoints",
+  );
+}
 
+/**
+ * In-memory fixed-window fallback for development. Each limiter keeps its
+ * own counts (they used to share one map, so login attempts counted against
+ * the payment limit), and expired entries are dropped as it grows.
+ */
 function createInMemoryLimiter(maxRequests: number, windowSeconds: number) {
+  const memoryStore = new Map<string, { count: number; resetAt: number }>();
   return {
     async limit(identifier: string) {
       const now = Date.now();
+      if (memoryStore.size > 10_000) {
+        for (const [key, entry] of memoryStore) {
+          if (now > entry.resetAt) memoryStore.delete(key);
+        }
+      }
       const record = memoryStore.get(identifier);
 
       if (!record || now > record.resetAt) {
@@ -51,6 +67,18 @@ function createInMemoryLimiter(maxRequests: number, windowSeconds: number) {
     },
   };
 }
+
+/**
+ * File uploads (sec 9): 20 per 10 minutes per user.
+ */
+export const uploadRatelimit = isRedisConfigured
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, "10 m"),
+      analytics: true,
+      prefix: "ratelimit:upload",
+    })
+  : createInMemoryLimiter(20, 600);
 
 /**
  * OTP Dispatch Rate Limiter: Max 3 requests per 10 minutes per Email
