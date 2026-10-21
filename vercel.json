@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/generate-fees",
-      "schedule": "0 0 1 * *"
+      "schedule": "0 0 1-5 * *"
     },
     {
       "path": "/api/cron/apply-late-fees",

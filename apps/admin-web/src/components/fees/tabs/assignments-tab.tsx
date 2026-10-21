@@ -524,10 +524,12 @@ export function AssignmentsTab({
                   const studentClass = classes.find(
                     (c: any) => c.id === s.classId,
                   );
-                  const advanceTotal = s.advanceLedgers?.reduce(
-                    (sum: number, l: any) => sum + Number(l.amount || 0),
-                    0,
-                  );
+                  const advanceTotal =
+                    s.advanceBalance ??
+                    s.advanceLedgers?.reduce(
+                      (sum: number, l: any) => sum + Number(l.amount || 0),
+                      0,
+                    );
 
                   return (
                     <tr

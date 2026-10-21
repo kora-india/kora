@@ -3,7 +3,8 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { UserRole } from "@schoolos/types";
-import { getPlanLimits, getAllPlanLimitsMap } from "@/lib/plan-limits";
+import { getAllPlanLimitsMap } from "@/lib/plan-limits";
+import { monthlyCollections, recentMonths } from "@/lib/reports/monthly-totals";
 
 const TIER_PRICES: Record<string, number> = {
   FREE: 0,
@@ -256,40 +257,36 @@ export async function getSuperAdminAnalyticsData() {
     throw new Error("Unauthorized — Super Admin access required");
   }
 
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
-  sixMonthsAgo.setHours(0, 0, 0, 0);
-
-  // 1. Total schools & users
-  const totalSchools = await prisma.school.count();
-  const totalStudents = await prisma.student.count({
-    where: { isActive: true },
-  });
-  const totalTeachers = await prisma.teacher.count({
-    where: { isActive: true },
-  });
-  const totalStaff = await prisma.staff.count({ where: { isActive: true } });
-
-  // 2. Module adoption rate (How many schools use each feature)
-  const schoolsWithStudents = await prisma.school.count({
-    where: { students: { some: {} } },
-  });
-  const schoolsWithAttendance = await prisma.school.count({
-    where: { attendances: { some: {} } },
-  });
-  const schoolsWithFees = await prisma.school.count({
-    where: { feeCharges: { some: {} } },
-  });
-  const schoolsWithNotices = await prisma.school.count({
-    where: { notices: { some: {} } },
-  });
-  const schoolsWithAssignments = await prisma.school.count({
-    where: { assignments: { some: {} } },
-  });
-  const schoolsWithExpenses = await prisma.school.count({
-    where: { expenses: { some: {} } },
-  });
+  // P3: every count and the monthly volume run in parallel; the volume is
+  // summed in SQL instead of loading six months of platform payments.
+  const months = recentMonths(6, "Asia/Kolkata");
+  const [
+    totalSchools,
+    totalStudents,
+    totalTeachers,
+    totalStaff,
+    schoolsWithStudents,
+    schoolsWithAttendance,
+    schoolsWithFees,
+    schoolsWithNotices,
+    schoolsWithAssignments,
+    schoolsWithExpenses,
+    volumeByMonth,
+    planDistribution,
+  ] = await Promise.all([
+    prisma.school.count(),
+    prisma.student.count({ where: { isActive: true } }),
+    prisma.teacher.count({ where: { isActive: true } }),
+    prisma.staff.count({ where: { isActive: true } }),
+    prisma.school.count({ where: { students: { some: {} } } }),
+    prisma.school.count({ where: { attendances: { some: {} } } }),
+    prisma.school.count({ where: { feeCharges: { some: {} } } }),
+    prisma.school.count({ where: { notices: { some: {} } } }),
+    prisma.school.count({ where: { assignments: { some: {} } } }),
+    prisma.school.count({ where: { expenses: { some: {} } } }),
+    monthlyCollections(null, months, "Asia/Kolkata"),
+    prisma.school.groupBy({ by: ["plan"], _count: { id: true } }),
+  ]);
 
   const calculatePct = (count: number) =>
     totalSchools > 0 ? Math.round((count / totalSchools) * 100) : 0;
@@ -333,41 +330,10 @@ export async function getSuperAdminAnalyticsData() {
     },
   ];
 
-  // 3. Platform Monthly Transaction Volume (last 6 months)
-  const payments = await prisma.paymentTransaction.findMany({
-    where: { date: { gte: sixMonthsAgo }, status: "SUCCESS" },
-    select: { amount: true, date: true },
-  });
-
-  const monthKey = (d: Date) =>
-    new Intl.DateTimeFormat("en-IN", {
-      month: "short",
-      year: "numeric",
-    }).format(d);
-  const monthlyVolumeMap: Record<string, number> = {};
-  payments.forEach((p) => {
-    const key = monthKey(new Date(p.date));
-    monthlyVolumeMap[key] = (monthlyVolumeMap[key] ?? 0) + Number(p.amount);
-  });
-
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    const label = new Intl.DateTimeFormat("en-IN", { month: "short" }).format(
-      d,
-    );
-    const key = monthKey(d);
-    return {
-      month: label,
-      volume: monthlyVolumeMap[key] ?? 0,
-    };
-  });
-
-  // 4. Plan breakdown
-  const planDistribution = await prisma.school.groupBy({
-    by: ["plan"],
-    _count: { id: true },
-  });
+  const monthlyVolume = months.map(({ key, label }) => ({
+    month: label,
+    volume: volumeByMonth.get(key) ?? 0,
+  }));
 
   const plans = planDistribution.map((p) => ({
     name: p.plan,
@@ -382,7 +348,7 @@ export async function getSuperAdminAnalyticsData() {
     totalTeachers,
     totalStaff,
     moduleAdoption,
-    monthlyVolume: months,
+    monthlyVolume,
     plans,
   };
 }

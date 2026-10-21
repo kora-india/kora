@@ -134,6 +134,8 @@ interface Props {
     sections: { id: string; name: string }[];
   }[];
   canEdit: boolean;
+  /** The search, class and section filters the server used to load `students`. */
+  appliedFilters?: { q: string; classId: string; sectionId: string };
 }
 
 const PAGE_SIZE = 20;
@@ -142,6 +144,7 @@ export function StudentsContent({
   students,
   classes,
   canEdit,
+  appliedFilters,
 }: Readonly<Props>) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
@@ -165,6 +168,20 @@ export function StudentsContent({
     "all",
   );
   const [sortBy, setSortBy] = useQueryState("sortBy", "default");
+
+  // Filter changes only update the URL (no server round trip, P8). The server
+  // narrows the list by search, class and section, so when those drift from
+  // what it last applied, ask it to reload the list for the current URL.
+  useEffect(() => {
+    if (!appliedFilters) return;
+    const inSync =
+      search.trim() === appliedFilters.q &&
+      selectedClass === appliedFilters.classId &&
+      selectedSection === appliedFilters.sectionId;
+    if (inSync) return;
+    const timer = setTimeout(() => router.refresh(), 400);
+    return () => clearTimeout(timer);
+  }, [search, selectedClass, selectedSection, appliedFilters, router]);
   const [page, setPage] = useState(1);
 
   const [dialog, setDialog] = useState<"closed" | "create" | "edit" | "import">(

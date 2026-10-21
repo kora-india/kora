@@ -49,6 +49,8 @@ model School {
   receiptFormat               String?              @default("{PREFIX}-{YYYY}-{SEQ:5}")
   nextReceiptNumber           Int                  @default(1)
   autoFeeGeneration           Boolean              @default(true)
+  /// Billing month ("YYYY-MM") the monthly cron last finished for this school (P6).
+  lastAutoFeePeriod           String?
   maxLateFeeCap               Decimal?             @db.Decimal(10, 2)
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt

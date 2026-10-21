@@ -415,4 +415,40 @@ describe("Fee Allocator Actions", () => {
       await prisma.paymentTransaction.count({ where: { studentId: other.id } }),
     ).toBe(0);
   });
+  // P5: with the same charge or item twice, the batched update would apply
+  // only one of the amounts while the receipt records both.
+  it("rejects a payment that lists the same month twice", async () => {
+    const response = await allocatePayment({
+      studentId,
+      monthPayments: [
+        { chargeId, amount: 400 },
+        { chargeId, amount: 300 },
+      ],
+      method: "CASH",
+    });
+    expect(response.error).toBe(
+      "Each month can appear only once in a payment.",
+    );
+    expect(
+      await prisma.paymentTransaction.count({ where: { studentId } }),
+    ).toBe(0);
+  });
+
+  it("rejects a payment that lists the same fee item twice", async () => {
+    const response = await allocatePayment({
+      studentId,
+      itemPayments: [
+        { chargeItemId, amount: 400 },
+        { chargeItemId, amount: 300 },
+      ],
+      method: "CASH",
+    });
+    expect(response.error).toBe(
+      "Each fee item can appear only once in a payment.",
+    );
+    const item = await prisma.feeChargeItem.findUniqueOrThrow({
+      where: { id: chargeItemId },
+    });
+    expect(Number(item.paidAmount)).toBe(0);
+  });
 });

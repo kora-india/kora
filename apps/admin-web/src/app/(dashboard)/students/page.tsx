@@ -93,6 +93,15 @@ export default async function StudentsPage({
   );
 
   return (
-    <StudentsContent students={students} classes={classes} canEdit={canEdit} />
+    <StudentsContent
+      students={students}
+      classes={classes}
+      canEdit={canEdit}
+      appliedFilters={{
+        q: query ?? "",
+        classId: classId ?? "",
+        sectionId: sectionId ?? "",
+      }}
+    />
   );
 }

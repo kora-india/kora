@@ -4,17 +4,24 @@ import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { UserRole } from "@schoolos/types";
 import { getCache } from "@/lib/redis";
+import { todayInTimeZone } from "@/lib/fees/timezone";
+import {
+  monthlyCollections,
+  monthlyExpenses,
+  monthlyPendingDues,
+  recentMonths,
+} from "@/lib/reports/monthly-totals";
 
 export const metadata = { title: "Dashboard" };
 
 async function getDashboardData(schoolId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
-  sixMonthsAgo.setHours(0, 0, 0, 0);
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { name: true, plan: true, subscription: true, timezone: true },
+  });
+  // "Today" and the chart's months are the school's, not the server's.
+  const today = todayInTimeZone(school?.timezone);
+  const months = recentMonths(6, school?.timezone);
 
   const [
     totalStudents,
@@ -25,11 +32,10 @@ async function getDashboardData(schoolId: string) {
     totalAttendanceCount,
     recentActivity,
     notices,
-    payments,
-    pendingFeeRows,
-    expensesList,
+    collectedByMonth,
+    pendingByMonth,
+    expenseByMonth,
     classesList,
-    school,
   ] = await Promise.all([
     prisma.student.count({
       where: { schoolId, isActive: true },
@@ -73,29 +79,10 @@ async function getDashboardData(schoolId: string) {
       orderBy: { createdAt: "desc" },
       take: 4,
     }),
-    prisma.paymentTransaction.findMany({
-      where: { schoolId, date: { gte: sixMonthsAgo }, status: "SUCCESS" },
-      select: { amount: true, date: true },
-    }),
-    prisma.feeChargeItem.findMany({
-      where: {
-        charge: {
-          schoolId,
-          student: { isActive: true },
-          dueDate: { gte: sixMonthsAgo },
-        },
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
-      },
-      select: {
-        amount: true,
-        paidAmount: true,
-        charge: { select: { dueDate: true } },
-      },
-    }),
-    prisma.expense.findMany({
-      where: { schoolId, date: { gte: sixMonthsAgo } },
-      select: { amount: true, date: true },
-    }),
+    // P1: six months of totals, summed in SQL
+    monthlyCollections(schoolId, months, school?.timezone),
+    monthlyPendingDues(schoolId, months),
+    monthlyExpenses(schoolId, months, school?.timezone),
     prisma.class.findMany({
       where: { schoolId },
       take: 4,
@@ -108,10 +95,6 @@ async function getDashboardData(schoolId: string) {
         },
       },
     }),
-    prisma.school.findUnique({
-      where: { id: schoolId },
-      select: { name: true, plan: true, subscription: true },
-    }),
   ]);
 
   const totalPendingFees =
@@ -123,45 +106,11 @@ async function getDashboardData(schoolId: string) {
     total: totalAttendanceCount,
   };
 
-  const monthKey = (d: Date) =>
-    new Intl.DateTimeFormat("en-IN", {
-      month: "short",
-      year: "numeric",
-    }).format(d);
-
-  const revenueByMonth: Record<string, number> = {};
-  payments.forEach((p: (typeof payments)[number]) => {
-    const key = monthKey(new Date(p.date));
-    revenueByMonth[key] = (revenueByMonth[key] ?? 0) + Number(p.amount);
-  });
-
-  const pendingByMonth: Record<string, number> = {};
-  pendingFeeRows.forEach((f: (typeof pendingFeeRows)[number]) => {
-    const key = monthKey(new Date(f.charge.dueDate));
-    pendingByMonth[key] =
-      (pendingByMonth[key] ?? 0) + (Number(f.amount) - Number(f.paidAmount));
-  });
-
-  const expenseByMonth: Record<string, number> = {};
-  expensesList.forEach((e: (typeof expensesList)[number]) => {
-    const key = monthKey(new Date(e.date));
-    expenseByMonth[key] = (expenseByMonth[key] ?? 0) + Number(e.amount);
-  });
-
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (5 - i));
-    return {
-      label: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d),
-      key: monthKey(d),
-    };
-  });
-
   const revenueAreaData: { month: string; type: string; amount: number }[] = [];
   const revenueData = months.map(({ label, key }) => {
-    const collected = revenueByMonth[key] ?? 0;
-    const expenses = expenseByMonth[key] ?? 0;
-    const pending = pendingByMonth[key] ?? 0;
+    const collected = collectedByMonth.get(key) ?? 0;
+    const expenses = expenseByMonth.get(key) ?? 0;
+    const pending = pendingByMonth.get(key) ?? 0;
     revenueAreaData.push({
       month: label,
       type: "Collected",

@@ -446,11 +446,14 @@ export async function processClassFeeGeneration(
 
     return { success: true, generatedCount, alreadyGenerated };
   } catch (e: any) {
+    // retryable: unlike the checks above, these can succeed on a second run;
+    // the monthly cron leaves the school unbilled so it is tried again.
     if (e?.code === "P2002") {
       return {
         error: `Fees for ${formatPeriodLabel(periodKey)} were generated for some of these students at the same time by another run. Refresh and try again.`,
+        retryable: true,
       };
     }
-    return { error: e?.message || "Fee generation failed" };
+    return { error: e?.message || "Fee generation failed", retryable: true };
   }
 }

@@ -86,51 +86,66 @@ export interface FeeReceiptData {
   lateFeeTotal?: number;
 }
 
-const allocatePaymentInputSchema = z.object({
-  studentId: z.string().min(1, "Student ID is required"),
-  monthPayments: z
-    .array(
-      z.object({
-        chargeId: z.string().min(1),
-        amount: z
-          .number()
-          .positive("Payment amount must be greater than zero.")
-          .max(10_000_000),
-      }),
-    )
-    .optional(),
-  itemPayments: z
-    .array(
-      z.object({
-        chargeItemId: z.string().min(1),
-        amount: z
-          .number()
-          .positive("Payment amount must be greater than zero.")
-          .max(10_000_000),
-      }),
-    )
-    .optional(),
-  componentPayments: z
-    .array(
-      z.object({
-        componentId: z.string().min(1),
-        amount: z
-          .number()
-          .positive("Payment amount must be greater than zero.")
-          .max(10_000_000),
-      }),
-    )
-    .optional(),
-  generalAdvanceAmount: z
-    .number()
-    .positive("Payment amount must be greater than zero.")
-    .max(10_000_000)
-    .optional(),
-  method: z.nativeEnum(PaymentMethod),
-  reference: z.string().optional(),
-  remarks: z.string().optional(),
-  idempotencyKey: z.string().optional(),
-});
+const allocatePaymentInputSchema = z
+  .object({
+    studentId: z.string().min(1, "Student ID is required"),
+    monthPayments: z
+      .array(
+        z.object({
+          chargeId: z.string().min(1),
+          amount: z
+            .number()
+            .positive("Payment amount must be greater than zero.")
+            .max(10_000_000),
+        }),
+      )
+      .optional(),
+    itemPayments: z
+      .array(
+        z.object({
+          chargeItemId: z.string().min(1),
+          amount: z
+            .number()
+            .positive("Payment amount must be greater than zero.")
+            .max(10_000_000),
+        }),
+      )
+      .optional(),
+    componentPayments: z
+      .array(
+        z.object({
+          componentId: z.string().min(1),
+          amount: z
+            .number()
+            .positive("Payment amount must be greater than zero.")
+            .max(10_000_000),
+        }),
+      )
+      .optional(),
+    generalAdvanceAmount: z
+      .number()
+      .positive("Payment amount must be greater than zero.")
+      .max(10_000_000)
+      .optional(),
+    method: z.nativeEnum(PaymentMethod),
+    reference: z.string().optional(),
+    remarks: z.string().optional(),
+    idempotencyKey: z.string().optional(),
+  })
+  // Charges and items are read once up front (P5), so the same one listed
+  // twice would be allocated from stale balances. One entry each.
+  .refine(
+    (d) =>
+      new Set((d.monthPayments ?? []).map((m) => m.chargeId)).size ===
+      (d.monthPayments ?? []).length,
+    { message: "Each month can appear only once in a payment." },
+  )
+  .refine(
+    (d) =>
+      new Set((d.itemPayments ?? []).map((i) => i.chargeItemId)).size ===
+      (d.itemPayments ?? []).length,
+    { message: "Each fee item can appear only once in a payment." },
+  );
 
 export async function allocatePayment(rawInput: {
   studentId: string;

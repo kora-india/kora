@@ -143,11 +143,15 @@ export function CollectionTab({
           )
         : [];
 
+  // Full advance rows arrive with the student's details; until then the
+  // list carries a pre-summed balance.
   const advanceBalance =
     currentStudent?.advanceLedgers?.reduce(
       (sum: number, l: any) => sum + Number(l.amount),
       0,
-    ) || 0;
+    ) ??
+    currentStudent?.advanceBalance ??
+    0;
 
   const effectiveSchool = dynamicStudent?.school || school || {};
   const feePaymentMode = effectiveSchool.feePaymentMode || "ALLOW_PARTIAL";

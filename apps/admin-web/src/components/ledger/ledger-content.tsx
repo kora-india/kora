@@ -1,17 +1,19 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Download, FileSpreadsheet, Scale, Printer } from "lucide-react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useTransition,
+} from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Download, Printer } from "lucide-react";
 import { Button, ConfigProvider, theme as antTheme } from "antd";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { formatCurrency } from "@schoolos/utils";
-import {
-  LedgerFilterBar,
-  type LedgerFilterState,
-  type DatePreset,
-  type StreamFilter,
-} from "./ledger-filter-bar";
+import dayjs from "dayjs";
+import { LedgerFilterBar, type LedgerFilterState } from "./ledger-filter-bar";
 import { LedgerStatCards, type LedgerMetrics } from "./ledger-stat-cards";
 import { LedgerTable } from "./ledger-table";
 import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
@@ -20,24 +22,25 @@ import {
   type FeeReceiptData,
 } from "@/lib/actions/fee-allocator";
 import {
-  isToday,
-  isYesterday,
-  isThisWeek,
-  isThisMonth,
-  subMonths,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-  isWithinInterval,
-} from "date-fns";
+  DEFAULT_LEDGER_QUERY,
+  LEDGER_MAX_ROWS,
+  LEDGER_PAGE_SIZE,
+  ledgerQueryToSearch,
+  type LedgerQuery,
+} from "@/lib/reports/ledger-query";
+import type { LedgerTotals } from "@/lib/reports/ledger";
 
 interface Props {
   school: { name?: string; currency?: string } | null;
+  /** The filters the server applied (from the URL). */
+  query: LedgerQuery;
+  /** Totals over every matching row. */
+  metrics: LedgerMetrics;
+  /** Matching rows per stream; the lists below hold the newest `query.limit`. */
+  totals: LedgerTotals;
   transactions: any[];
   advanceLedgers: any[];
   expenses: any[];
-  feeChargeItems: any[];
   academicSessions: any[];
   classes: any[];
   feeComponents: any[];
@@ -50,12 +53,44 @@ interface Props {
 // new collections, or the same rupee would be counted twice.
 const isCollection = (tx: any) => tx.status !== "ADJUSTMENT";
 
+const toFilters = (q: LedgerQuery): LedgerFilterState => ({
+  search: q.q,
+  datePreset: q.period,
+  customDateRange:
+    q.period === "custom" && (q.from || q.to)
+      ? [q.from ? dayjs(q.from) : null, q.to ? dayjs(q.to) : null]
+      : null,
+  stream: q.stream,
+  paymentMethod: q.method,
+  sessionId: q.sessionId,
+  classId: q.classId,
+  componentOrCategory: q.item,
+});
+
+const toQuery = (f: LedgerFilterState, limit: number): LedgerQuery => {
+  const [from, to] = f.customDateRange ?? [null, null];
+  return {
+    period: f.datePreset,
+    from: f.datePreset === "custom" && from ? from.format("YYYY-MM-DD") : null,
+    to: f.datePreset === "custom" && to ? to.format("YYYY-MM-DD") : null,
+    stream: f.stream,
+    method: f.paymentMethod,
+    sessionId: f.sessionId,
+    classId: f.classId,
+    item: f.componentOrCategory,
+    q: f.search,
+    limit,
+  };
+};
+
 export function LedgerContent({
   school,
+  query,
+  metrics: calculatedMetrics,
+  totals,
   transactions,
   advanceLedgers,
   expenses,
-  feeChargeItems,
   academicSessions,
   classes,
   feeComponents,
@@ -64,6 +99,9 @@ export function LedgerContent({
 }: Readonly<Props>) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
 
   // Receipt Modal State
   const [receiptModal, setReceiptModal] = useState<{
@@ -84,37 +122,73 @@ export function LedgerContent({
     }
   };
 
-  // Filter State
-  const [filters, setFilters] = useState<LedgerFilterState>({
-    search: "",
-    datePreset: "all",
-    customDateRange: null,
-    stream: "all",
-    paymentMethod: "all",
-    sessionId: "all",
-    classId: "all",
-    componentOrCategory: "all",
-  });
+  // Filter State. The server filters (P2): each change updates the URL and
+  // the page re-renders with matching rows and totals.
+  const [filters, setFiltersState] = useState<LedgerFilterState>(() =>
+    toFilters(query),
+  );
+  // The filter bar can fire two changes in a row (preset, then range), so
+  // each change builds on the latest filters, not on this render's.
+  const latestFilters = useRef(filters);
+  const setFilters = (next: LedgerFilterState) => {
+    latestFilters.current = next;
+    setFiltersState(next);
+  };
+  const requested = useRef(ledgerQueryToSearch(query));
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const navigate = (next: LedgerQuery) => {
+    const search = ledgerQueryToSearch(next);
+    if (search === requested.current) return;
+    requested.current = search;
+    startTransition(() => {
+      router.replace(`${pathname}${search}`, { scroll: false });
+    });
+  };
+
+  // The URL changed from outside (a link, back/forward): show its filters.
+  const appliedSearch = ledgerQueryToSearch(query);
+  useEffect(() => {
+    if (appliedSearch !== requested.current) {
+      requested.current = appliedSearch;
+      setFilters(toFilters(query));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedSearch]);
+
+  useEffect(() => () => clearTimeout(searchTimer.current), []);
 
   const handleFilterChange = <K extends keyof LedgerFilterState>(
     key: K,
     value: LedgerFilterState[K],
   ) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    const next = { ...latestFilters.current, [key]: value };
+    setFilters(next);
+    clearTimeout(searchTimer.current);
+    // A new filter starts again from the first page of rows.
+    const go = () => navigate(toQuery(next, LEDGER_PAGE_SIZE));
+    // Typing waits for a pause; picking a custom period waits for dates.
+    if (key === "search") searchTimer.current = setTimeout(go, 400);
+    else if (!(next.datePreset === "custom" && !next.customDateRange)) go();
   };
 
   const handleResetFilters = () => {
-    setFilters({
-      search: "",
-      datePreset: "all",
-      customDateRange: null,
-      stream: "all",
-      paymentMethod: "all",
-      sessionId: "all",
-      classId: "all",
-      componentOrCategory: "all",
-    });
+    clearTimeout(searchTimer.current);
+    setFilters(toFilters(DEFAULT_LEDGER_QUERY));
+    navigate(DEFAULT_LEDGER_QUERY);
   };
+
+  const shownCount =
+    transactions.length + expenses.length + advanceLedgers.length;
+  const matchingCount = totals.transactions + totals.expenses + totals.advances;
+  const truncated = shownCount < matchingCount;
+  const canLoadMore = truncated && query.limit < LEDGER_MAX_ROWS;
+
+  const handleLoadMore = () =>
+    navigate({
+      ...query,
+      limit: Math.min(query.limit + LEDGER_PAGE_SIZE, LEDGER_MAX_ROWS),
+    });
 
   // Extract all distinct payment methods from existing records + standard defaults
   const availablePaymentMethods = useMemo(() => {
@@ -139,541 +213,6 @@ export function LedgerContent({
     return Array.from(methods);
   }, [transactions, expenses]);
 
-  // Helper to test if a date satisfies the active date preset / custom range
-  const matchesDateFilter = (
-    dateInput: string | Date | null | undefined,
-  ): boolean => {
-    if (filters.datePreset === "all" && !filters.customDateRange) return true;
-    if (!dateInput) return false;
-
-    const date = new Date(dateInput);
-    if (isNaN(date.getTime())) return false;
-
-    // Custom range check
-    if (filters.datePreset === "custom" && filters.customDateRange) {
-      const [start, end] = filters.customDateRange;
-      if (!start && !end) return true;
-      const startDate = start ? start.startOf("day").toDate() : new Date(0);
-      const endDate = end
-        ? end.endOf("day").toDate()
-        : new Date(8640000000000000);
-      return date >= startDate && date <= endDate;
-    }
-
-    switch (filters.datePreset) {
-      case "today":
-        return isToday(date);
-      case "yesterday":
-        return isYesterday(date);
-      case "this_week":
-        return isThisWeek(date, { weekStartsOn: 1 });
-      case "this_month":
-        return isThisMonth(date);
-      case "last_month": {
-        const lastMonthDate = subMonths(new Date(), 1);
-        return isWithinInterval(date, {
-          start: startOfMonth(lastMonthDate),
-          end: endOfMonth(lastMonthDate),
-        });
-      }
-      case "this_year": {
-        const now = new Date();
-        return isWithinInterval(date, {
-          start: startOfYear(now),
-          end: endOfYear(now),
-        });
-      }
-      default:
-        return true;
-    }
-  };
-
-  // -------------------------------------------------------------
-  // Filtered Datasets
-  // -------------------------------------------------------------
-
-  // 1. Filtered Transactions (Inflows)
-  const filteredTransactions = useMemo(() => {
-    if (filters.stream === "outflow" || filters.stream === "advance") {
-      return [];
-    }
-
-    return transactions.filter((tx) => {
-      // Date filter
-      if (!matchesDateFilter(tx.date || tx.createdAt)) return false;
-
-      // Payment method
-      if (
-        filters.paymentMethod !== "all" &&
-        tx.method?.toUpperCase() !== filters.paymentMethod.toUpperCase()
-      ) {
-        return false;
-      }
-
-      // Class filter
-      if (filters.classId !== "all") {
-        const studentClassId = tx.student?.classId || tx.student?.class?.id;
-        if (studentClassId !== filters.classId) return false;
-      }
-
-      // Session filter
-      if (filters.sessionId !== "all") {
-        const hasSessionAlloc = tx.allocations?.some(
-          (a: any) => a.chargeItem?.charge?.sessionId === filters.sessionId,
-        );
-        if (!hasSessionAlloc) return false;
-      }
-
-      // Component filter
-      if (filters.componentOrCategory.startsWith("comp_")) {
-        const compId = filters.componentOrCategory.replace("comp_", "");
-        const hasCompAlloc = tx.allocations?.some(
-          (a: any) => a.chargeItem?.componentId === compId,
-        );
-        if (!hasCompAlloc) return false;
-      } else if (filters.componentOrCategory.startsWith("cat_")) {
-        // Expense category selected, transactions don't match
-        return false;
-      }
-
-      // Search term
-      if (filters.search.trim()) {
-        const q = filters.search.toLowerCase();
-        const receiptMatch = tx.receiptNo?.toLowerCase().includes(q);
-        const studentMatch = tx.student?.name?.toLowerCase().includes(q);
-        const rollMatch = tx.student?.rollNumber?.toLowerCase().includes(q);
-        const refMatch = tx.reference?.toLowerCase().includes(q);
-        const remarksMatch = tx.remarks?.toLowerCase().includes(q);
-        if (
-          !receiptMatch &&
-          !studentMatch &&
-          !rollMatch &&
-          !refMatch &&
-          !remarksMatch
-        ) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [transactions, filters]);
-
-  // 2. Filtered Expenses (Outflows)
-  const filteredExpenses = useMemo(() => {
-    if (filters.stream === "inflow" || filters.stream === "advance") {
-      return [];
-    }
-
-    return expenses.filter((exp) => {
-      // Date filter
-      if (!matchesDateFilter(exp.date || exp.createdAt)) return false;
-
-      // Payment method
-      if (
-        filters.paymentMethod !== "all" &&
-        exp.paymentMethod?.toUpperCase() !== filters.paymentMethod.toUpperCase()
-      ) {
-        return false;
-      }
-
-      // Class filter (expenses are school-wide, so if a class is chosen, exclude expenses)
-      if (filters.classId !== "all") {
-        return false;
-      }
-
-      // Category / Component filter
-      if (filters.componentOrCategory.startsWith("cat_")) {
-        const catId = filters.componentOrCategory.replace("cat_", "");
-        if (exp.category?.id !== catId && exp.categoryId !== catId) {
-          return false;
-        }
-      } else if (filters.componentOrCategory.startsWith("comp_")) {
-        // Fee component selected, expenses don't match
-        return false;
-      }
-
-      // Search term
-      if (filters.search.trim()) {
-        const q = filters.search.toLowerCase();
-        const titleMatch = exp.title?.toLowerCase().includes(q);
-        const descMatch = exp.description?.toLowerCase().includes(q);
-        const refMatch = exp.referenceNo?.toLowerCase().includes(q);
-        const catMatch = exp.category?.name?.toLowerCase().includes(q);
-        const userMatch = exp.recordedBy?.name?.toLowerCase().includes(q);
-        if (!titleMatch && !descMatch && !refMatch && !catMatch && !userMatch) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [expenses, filters]);
-
-  // 3. Filtered Advance Ledger Entries
-  const filteredAdvances = useMemo(() => {
-    if (filters.stream === "outflow") {
-      return [];
-    }
-
-    return advanceLedgers.filter((adv) => {
-      // Date filter
-      if (!matchesDateFilter(adv.createdAt)) return false;
-
-      // Class filter
-      if (filters.classId !== "all") {
-        const studentClassId = adv.student?.classId || adv.student?.class?.id;
-        if (studentClassId !== filters.classId) return false;
-      }
-
-      // Component filter
-      if (filters.componentOrCategory.startsWith("comp_")) {
-        const compId = filters.componentOrCategory.replace("comp_", "");
-        if (adv.componentId && adv.componentId !== compId) return false;
-      } else if (filters.componentOrCategory.startsWith("cat_")) {
-        return false;
-      }
-
-      // Search term
-      if (filters.search.trim()) {
-        const q = filters.search.toLowerCase();
-        const studentMatch = adv.student?.name?.toLowerCase().includes(q);
-        const rollMatch = adv.student?.rollNumber?.toLowerCase().includes(q);
-        const descMatch = adv.description?.toLowerCase().includes(q);
-        if (!studentMatch && !rollMatch && !descMatch) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [advanceLedgers, filters]);
-
-  // 4. Filtered Fee Charge Items (Receivables)
-  const filteredChargeItems = useMemo(() => {
-    return feeChargeItems.filter((item) => {
-      // Date filter based on charge due date or creation date
-      if (
-        !matchesDateFilter(
-          item.charge?.dueDate || (item.charge as any)?.createdAt,
-        )
-      )
-        return false;
-
-      // Session filter
-      if (
-        filters.sessionId !== "all" &&
-        item.charge?.sessionId !== filters.sessionId
-      ) {
-        return false;
-      }
-
-      // Component filter
-      if (filters.componentOrCategory.startsWith("comp_")) {
-        const compId = filters.componentOrCategory.replace("comp_", "");
-        if (item.component?.id !== compId && item.componentId !== compId) {
-          return false;
-        }
-      } else if (filters.componentOrCategory.startsWith("cat_")) {
-        return false;
-      }
-
-      // Class filter
-      if (filters.classId !== "all") {
-        const itemClassId = item.charge?.student?.classId;
-        if (itemClassId !== filters.classId) return false;
-      }
-
-      return true;
-    });
-  }, [feeChargeItems, filters]);
-
-  // -------------------------------------------------------------
-  // Comprehensive Metrics Calculation
-  // -------------------------------------------------------------
-  const calculatedMetrics: LedgerMetrics = useMemo(() => {
-    // 1. Inflows
-    const collections = filteredTransactions.filter(isCollection);
-    const totalInflow = collections.reduce(
-      (sum, tx) => sum + Number(tx.amount || 0),
-      0,
-    );
-    const inflowCount = collections.length;
-    const avgInflow = inflowCount > 0 ? totalInflow / inflowCount : 0;
-
-    // 2. Outflows
-    const totalOutflow = filteredExpenses.reduce(
-      (sum, exp) => sum + Number(exp.amount || 0),
-      0,
-    );
-    const outflowCount = filteredExpenses.length;
-    const avgOutflow = outflowCount > 0 ? totalOutflow / outflowCount : 0;
-
-    // 3. Net Position
-    const netPosition = totalInflow - totalOutflow;
-
-    // 4. Advance Ledger Balances
-    const totalAdvanceBalance = filteredAdvances.reduce(
-      (sum, adv) => sum + Number(adv.amount || 0),
-      0,
-    );
-    const advanceEntriesCount = filteredAdvances.length;
-
-    // 5. Billed Fees & Receivables
-    let totalBilledFees = 0;
-    let totalPaidFromCharges = 0;
-    filteredChargeItems.forEach((item) => {
-      if (item.status === "WAIVED") return;
-      const amt = Number(item.amount || 0);
-      const paid = Number(item.paidAmount || 0);
-      totalBilledFees += amt;
-      totalPaidFromCharges += paid;
-    });
-
-    const totalReceivables = Math.max(
-      0,
-      totalBilledFees - totalPaidFromCharges,
-    );
-    const collectionRate =
-      totalBilledFees > 0
-        ? Math.round((totalPaidFromCharges / totalBilledFees) * 1000) / 10
-        : 0;
-
-    // 6. Total Transactions Count & Active Velocity
-    const totalTransactionsCount =
-      inflowCount + outflowCount + advanceEntriesCount;
-    const activePeriodDays =
-      filters.datePreset === "today" || filters.datePreset === "yesterday"
-        ? 1
-        : filters.datePreset === "this_week"
-          ? 7
-          : filters.datePreset === "this_month" ||
-              filters.datePreset === "last_month"
-            ? 30
-            : filters.datePreset === "this_year"
-              ? 365
-              : 30;
-
-    // 7. Payment Methods Breakdown
-    const methodStats = {
-      cash: { inflow: 0, outflow: 0, net: 0, count: 0 },
-      upi: { inflow: 0, count: 0 },
-      bankTransfer: { inflow: 0, count: 0 },
-      cheque: { inflow: 0, count: 0 },
-      card: { inflow: 0, count: 0 },
-      other: { inflow: 0, count: 0 },
-    };
-
-    collections.forEach((tx) => {
-      const m = (tx.method || "OTHER").toUpperCase();
-      const amt = Number(tx.amount || 0);
-
-      if (m === "CASH") {
-        methodStats.cash.inflow += amt;
-        methodStats.cash.count++;
-      } else if (m === "UPI") {
-        methodStats.upi.inflow += amt;
-        methodStats.upi.count++;
-      } else if (["BANK_TRANSFER", "NEFT", "RTGS", "IMPS"].includes(m)) {
-        methodStats.bankTransfer.inflow += amt;
-        methodStats.bankTransfer.count++;
-      } else if (m === "CHEQUE" || m === "DD") {
-        methodStats.cheque.inflow += amt;
-        methodStats.cheque.count++;
-      } else if (["CREDIT_CARD", "DEBIT_CARD", "CARD"].includes(m)) {
-        methodStats.card.inflow += amt;
-        methodStats.card.count++;
-      } else {
-        methodStats.other.inflow += amt;
-        methodStats.other.count++;
-      }
-    });
-
-    filteredExpenses.forEach((exp) => {
-      const m = (exp.paymentMethod || "OTHER").toUpperCase();
-      const amt = Number(exp.amount || 0);
-      if (m === "CASH") {
-        methodStats.cash.outflow += amt;
-        methodStats.cash.count++;
-      }
-    });
-
-    methodStats.cash.net = methodStats.cash.inflow - methodStats.cash.outflow;
-
-    // 8. Fee Component Distribution
-    const compMap = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        category?: string;
-        amount: number;
-        count: number;
-      }
-    >();
-
-    filteredTransactions.forEach((tx) => {
-      tx.allocations?.forEach((alloc: any) => {
-        const comp = alloc.chargeItem?.component;
-        if (!comp) return;
-        const compId = comp.id;
-        const amt = Number(alloc.amount || 0);
-        const existing = compMap.get(compId) || {
-          id: compId,
-          name: comp.name,
-          category: comp.category,
-          amount: 0,
-          count: 0,
-        };
-        existing.amount += amt;
-        existing.count++;
-        compMap.set(compId, existing);
-      });
-    });
-
-    const totalAllocatedAmount = Array.from(compMap.values()).reduce(
-      (sum, c) => sum + c.amount,
-      0,
-    );
-
-    const componentDistribution = Array.from(compMap.values())
-      .map((c) => ({
-        ...c,
-        percentage:
-          totalAllocatedAmount > 0
-            ? Math.round((c.amount / totalAllocatedAmount) * 1000) / 10
-            : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-
-    // 9. Expense Category Distribution
-    const catMap = new Map<
-      string,
-      { id: string; name: string; amount: number; count: number }
-    >();
-
-    filteredExpenses.forEach((exp) => {
-      const cat = exp.category;
-      const catId = cat?.id || "uncategorized";
-      const catName = cat?.name || "General Operational";
-      const amt = Number(exp.amount || 0);
-
-      const existing = catMap.get(catId) || {
-        id: catId,
-        name: catName,
-        amount: 0,
-        count: 0,
-      };
-      existing.amount += amt;
-      existing.count++;
-      catMap.set(catId, existing);
-    });
-
-    const categoryDistribution = Array.from(catMap.values())
-      .map((c) => ({
-        ...c,
-        percentage:
-          totalOutflow > 0
-            ? Math.round((c.amount / totalOutflow) * 1000) / 10
-            : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-
-    // 10. Class Level Breakdown
-    const classMap = new Map<
-      string,
-      {
-        classId: string;
-        className: string;
-        grade: number;
-        collectedAmount: number;
-        receivables: number;
-        transactionCount: number;
-      }
-    >();
-
-    classes.forEach((c) => {
-      classMap.set(c.id, {
-        classId: c.id,
-        className: c.name,
-        grade: c.grade ?? 0,
-        collectedAmount: 0,
-        receivables: 0,
-        transactionCount: 0,
-      });
-    });
-
-    filteredTransactions.filter(isCollection).forEach((tx) => {
-      const cId = tx.student?.classId || tx.student?.class?.id;
-      if (cId && classMap.has(cId)) {
-        const item = classMap.get(cId)!;
-        item.collectedAmount += Number(tx.amount || 0);
-        item.transactionCount++;
-      }
-    });
-
-    // Populate Pending Dues (Receivables) for each class from filteredChargeItems
-    filteredChargeItems.forEach((item) => {
-      const cId = item.charge?.student?.classId;
-      if (cId && classMap.has(cId) && item.status !== "WAIVED") {
-        const due = Math.max(
-          0,
-          Number(item.amount || 0) - Number(item.paidAmount || 0),
-        );
-        classMap.get(cId)!.receivables += due;
-      }
-    });
-
-    const classBreakdown = Array.from(classMap.values())
-      .map((item) => {
-        const totalBilled = item.collectedAmount + item.receivables;
-        return {
-          ...item,
-          recoveryRate:
-            totalBilled > 0
-              ? Math.round((item.collectedAmount / totalBilled) * 100)
-              : 0,
-        };
-      })
-      .sort((a, b) => {
-        const activeA = a.collectedAmount > 0 || a.receivables > 0 ? 1 : 0;
-        const activeB = b.collectedAmount > 0 || b.receivables > 0 ? 1 : 0;
-        if (activeA !== activeB) return activeB - activeA;
-        if (b.collectedAmount !== a.collectedAmount) {
-          return b.collectedAmount - a.collectedAmount;
-        }
-        return b.receivables - a.receivables;
-      });
-
-    return {
-      totalInflow,
-      inflowCount,
-      avgInflow,
-      totalOutflow,
-      outflowCount,
-      avgOutflow,
-      netPosition,
-      totalAdvanceBalance,
-      advanceEntriesCount,
-      totalReceivables,
-      totalBilledFees,
-      collectionRate,
-      totalTransactionsCount,
-      activePeriodDays,
-      methodStats,
-      componentDistribution,
-      categoryDistribution,
-      classBreakdown,
-    };
-  }, [
-    filteredTransactions,
-    filteredExpenses,
-    filteredAdvances,
-    filteredChargeItems,
-    classes,
-    filters.datePreset,
-  ]);
-
   // -------------------------------------------------------------
   // Export Summary Statement (CSV)
   // -------------------------------------------------------------
@@ -686,6 +225,12 @@ export function LedgerContent({
       rows.push(["Active Filter Period:", filters.datePreset.toUpperCase()]);
       rows.push(["Active Stream:", filters.stream.toUpperCase()]);
       rows.push(["Active Payment Mode:", filters.paymentMethod]);
+      if (truncated) {
+        rows.push([
+          "Entries Listed:",
+          `Latest ${shownCount} of ${matchingCount} (totals cover all ${matchingCount})`,
+        ]);
+      }
       rows.push([]);
 
       // Section 1: Executive Position
@@ -784,7 +329,7 @@ export function LedgerContent({
         "Amount (INR)",
       ]);
 
-      filteredTransactions.filter(isCollection).forEach((tx) => {
+      transactions.filter(isCollection).forEach((tx) => {
         rows.push([
           new Date(tx.date || tx.createdAt).toLocaleDateString("en-IN"),
           "INFLOW (Collection)",
@@ -798,7 +343,7 @@ export function LedgerContent({
         ]);
       });
 
-      filteredExpenses.forEach((exp) => {
+      expenses.forEach((exp) => {
         rows.push([
           new Date(exp.date || exp.createdAt).toLocaleDateString("en-IN"),
           "OUTFLOW (Expense)",
@@ -910,19 +455,45 @@ export function LedgerContent({
           />
         </div>
 
-        {/* Statistics Cards */}
-        <div id="tour-ledger-summary">
-          <LedgerStatCards metrics={calculatedMetrics} />
-        </div>
+        <div
+          aria-busy={isPending}
+          className={`space-y-6 transition-opacity ${isPending ? "opacity-60" : ""}`}
+        >
+          {/* Statistics Cards */}
+          <div id="tour-ledger-summary">
+            <LedgerStatCards metrics={calculatedMetrics} />
+          </div>
 
-        {/* Transaction & Expense Audit Logs Table */}
-        <div id="tour-ledger-table">
-          <LedgerTable
-            transactions={filteredTransactions}
-            expenses={filteredExpenses}
-            advances={filteredAdvances}
-            onViewReceipt={handleOpenReceipt}
-          />
+          {truncated && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+              <p>
+                Showing the latest {shownCount.toLocaleString("en-IN")} of{" "}
+                {matchingCount.toLocaleString("en-IN")} entries. The totals
+                above include all of them.
+                {!canLoadMore && " Narrow the dates to see older entries."}
+              </p>
+              {canLoadMore && (
+                <Button
+                  size="small"
+                  onClick={handleLoadMore}
+                  loading={isPending}
+                  className="text-xs font-semibold"
+                >
+                  Load older entries
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Transaction & Expense Audit Logs Table */}
+          <div id="tour-ledger-table">
+            <LedgerTable
+              transactions={transactions}
+              expenses={expenses}
+              advances={advanceLedgers}
+              onViewReceipt={handleOpenReceipt}
+            />
+          </div>
         </div>
 
         {/* Fee Receipt & Invoice Modal */}

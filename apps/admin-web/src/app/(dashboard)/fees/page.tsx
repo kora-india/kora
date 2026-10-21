@@ -28,6 +28,7 @@ export default async function FeesPage() {
     students,
     recentCharges,
     transactions,
+    advanceBalances,
   ] = await Promise.all([
     getCache(`cache:${schoolId}:school:full`, () =>
       prisma.school.findUnique({ where: { id: schoolId } }),
@@ -112,6 +113,10 @@ export default async function FeesPage() {
           method: true,
           reference: true,
           receiptNo: true,
+          // status: the logs tab leaves advance settlements (ADJUSTMENT)
+          // out of collection totals.
+          status: true,
+          date: true,
           createdAt: true,
           studentId: true,
           student: {
@@ -124,8 +129,13 @@ export default async function FeesPage() {
               chargeItem: {
                 select: {
                   id: true,
-                  component: { select: { id: true, name: true } },
-                  charge: { select: { id: true, title: true } },
+                  // Item and charge status drive the "partial" badge; the
+                  // category drives "Late fine included".
+                  status: true,
+                  component: {
+                    select: { id: true, name: true, category: true },
+                  },
+                  charge: { select: { id: true, title: true, status: true } },
                 },
               },
             },
@@ -135,7 +145,24 @@ export default async function FeesPage() {
         take: 100,
       }),
     ),
+    // Each student's advance balance, summed in SQL (the overrides table
+    // shows it) instead of shipping every advance row.
+    getCache(`cache:${schoolId}:students:advanceBalances`, () =>
+      prisma.advanceLedger.groupBy({
+        by: ["studentId"],
+        where: { student: { schoolId, isActive: true } },
+        _sum: { amount: true },
+      }),
+    ),
   ]);
+
+  const advanceByStudent = new Map(
+    advanceBalances.map((a) => [a.studentId, Number(a._sum.amount ?? 0)]),
+  );
+  const studentsWithAdvance = students.map((s) => ({
+    ...s,
+    advanceBalance: advanceByStudent.get(s.id) ?? 0,
+  }));
 
   return (
     <FeesContent
@@ -143,7 +170,7 @@ export default async function FeesPage() {
       components={JSON.parse(JSON.stringify(feeComponents))}
       structures={JSON.parse(JSON.stringify(feeStructures))}
       classes={classes}
-      students={JSON.parse(JSON.stringify(students))}
+      students={JSON.parse(JSON.stringify(studentsWithAdvance))}
       recentCharges={JSON.parse(JSON.stringify(recentCharges))}
       transactions={JSON.parse(JSON.stringify(transactions))}
       school={JSON.parse(JSON.stringify(school))}
