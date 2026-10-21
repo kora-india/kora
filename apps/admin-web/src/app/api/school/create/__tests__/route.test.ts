@@ -170,7 +170,7 @@ describe("POST /api/school/create", () => {
     const order = await prisma.subscriptionOrder.findUnique({
       where: { orderId: payload.razorpay_order_id },
     });
-    expect(order!.status).toBe("PAID");
+    expect(order!.status).toBe("COMPLETED");
     expect(order!.paymentId).toBe(payload.razorpay_payment_id);
     expect(order!.schoolId).toBe(body.schoolId);
   }, 60000);
@@ -214,8 +214,10 @@ describe("POST /api/school/create", () => {
     const res = await POST(makeRequest(second));
     const body = await res.json();
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(body.error).toMatch(/already taken/i);
+    // U3: the second admin's payment is recorded, not lost.
+    expect(body.paymentSaved).toBe(true);
 
     // Only one Subscription should exist for that subdomain's school, not two.
     const school = await prisma.school.findUnique({
@@ -372,4 +374,132 @@ describe("POST /api/school/create", () => {
       process.env.RAZORPAY_KEY_SECRET = origSecret;
     }
   });
+
+  // U3: a payment that couldn't create a school is kept and reused.
+  it("lets a paid admin finish with another subdomain using the same payment", async () => {
+    const taken = await signedPayload({ subdomain: "held-" + runId });
+    expect((await POST(makeRequest(taken))).status).toBe(200);
+
+    userId = await createOnboardingAdmin();
+    signInAs(userId);
+    const paid = await signedPayload({ subdomain: "held-" + runId });
+    const first = await POST(makeRequest(paid));
+    expect(first.status).toBe(409);
+
+    const order = await prisma.subscriptionOrder.findUnique({
+      where: { orderId: paid.razorpay_order_id },
+    });
+    expect(order).toMatchObject({
+      status: "PAID",
+      paymentId: paid.razorpay_payment_id,
+      schoolId: null,
+    });
+
+    const retry = await POST(
+      makeRequest({ ...paid, subdomain: "held-retry-" + runId }),
+    );
+    const body = await retry.json();
+    expect(retry.status).toBe(200);
+    const done = await prisma.subscriptionOrder.findUnique({
+      where: { orderId: paid.razorpay_order_id },
+    });
+    expect(done).toMatchObject({
+      status: "COMPLETED",
+      schoolId: body.schoolId,
+    });
+  }, 60000);
+
+  it("won't reuse a saved payment with a different payment id", async () => {
+    const paid = await signedPayload({
+      subdomain: "reuse-" + runId,
+      orderStatus: "PAID",
+    });
+    await prisma.subscriptionOrder.update({
+      where: { orderId: paid.razorpay_order_id },
+      data: { paymentId: "pay_someone_else_" + runId },
+    });
+    const res = await POST(makeRequest(paid));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/already been consumed/i);
+  });
+
+  it("refuses another admin's subdomain while their checkout is open", async () => {
+    const holder = await createOnboardingAdmin();
+    await prisma.subscriptionOrder.create({
+      data: {
+        orderId: "order_hold_" + runId,
+        userId: holder,
+        plan: "PRO",
+        amount: 199900,
+        purpose: "SETUP",
+        subdomain: "checkout-" + runId,
+      },
+    });
+    const payload = await signedPayload({ subdomain: "checkout-" + runId });
+    const res = await POST(makeRequest(payload));
+    expect(res.status).toBe(409);
+  });
+
+  // U2: the advertised trial.
+  it("starts a 14-day trial with every feature and no payment", async () => {
+    const res = await POST(
+      makeRequest({
+        name: `Trial School ${runId}`,
+        subdomain: "trial-" + runId,
+        phone: "9999999999",
+        email: `trial-${runId}@example.com`,
+        plan: "BASIC",
+        trial: true,
+        timezone: "Asia/Kolkata (IST)",
+        gradingSystem: "Percentage (0 - 100)",
+      }),
+    );
+    const body = await res.json();
+    expect(res.status).toBe(200);
+
+    const school = await prisma.school.findUniqueOrThrow({
+      where: { id: body.schoolId },
+      include: { subscription: true },
+    });
+    expect(school.plan).toBe("PRO");
+    expect(school.timezone).toBe("Asia/Kolkata");
+    expect(school.gradingSystem).toBeNull();
+    expect(school.subscription?.status).toBe("TRIAL");
+    const days =
+      (school.subscription!.trialEndsAt!.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(13.9);
+    expect(days).toBeLessThanOrEqual(14);
+  }, 60000);
+
+  it("requires payment details unless it is a trial", async () => {
+    const res = await POST(
+      makeRequest({
+        name: `Unpaid School ${runId}`,
+        subdomain: "unpaid-" + runId,
+        phone: "9999999999",
+        email: `unpaid-${runId}@example.com`,
+        plan: "PRO",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/payment details/i);
+  });
+
+  it("creates catalogue classes in catalogue order", async () => {
+    const payload = await signedPayload({ subdomain: "classes-" + runId });
+    const res = await POST(
+      makeRequest({ ...payload, classes: ["Nursery", "UKG", "Grade 2"] }),
+    );
+    const { schoolId } = await res.json();
+    const classes = await prisma.class.findMany({
+      where: { schoolId },
+      orderBy: { grade: "asc" },
+      select: { name: true, grade: true },
+    });
+    expect(classes).toEqual([
+      { name: "Nursery", grade: -2 },
+      { name: "UKG", grade: 0 },
+      { name: "Grade 2", grade: 2 },
+    ]);
+  }, 60000);
 });

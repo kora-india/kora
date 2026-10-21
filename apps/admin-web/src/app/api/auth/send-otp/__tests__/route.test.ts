@@ -38,7 +38,7 @@ describe("POST /api/auth/send-otp", () => {
     process.env.SMTP_HOST = "smtp.test.example.com";
     process.env.SMTP_PORT = "587";
     process.env.SMTP_USER = "test-smtp-user";
-    process.env.SMTP_PASS = "test-smtp-pass";
+    process.env.SMTP_PASSWORD = "test-smtp-pass";
   });
 
   beforeEach(async () => {
@@ -118,13 +118,8 @@ describe("POST /api/auth/send-otp", () => {
     expect(remaining[0].id).not.toBe(first!.id);
   });
 
-  it("KNOWN GAP: leaves the OTP row in place even when the email fails to send", async () => {
-    // Documents current behavior rather than desired behavior — the route writes
-    // the Otp row *before* attempting delivery and never rolls it back on
-    // failure, so the user ends up with an OTP they never received and can't
-    // regenerate (send-otp de-dupes on the newest row, but the user has no way
-    // to know it exists). Flagged in DOCUMENTATION.md's production-readiness
-    // gaps; update this test once the route is fixed to clean up on failure.
+  it("removes the OTP again when the email fails to send", async () => {
+    // A code the user never received must not stay valid.
     const { sendMail } = nodemailer.createTransport({} as any);
     vi.mocked(sendMail).mockRejectedValueOnce(
       new Error("SMTP connection failed"),
@@ -133,7 +128,6 @@ describe("POST /api/auth/send-otp", () => {
     const res = await POST(makeRequest({ email: testEmail }));
     expect(res.status).toBe(500);
 
-    const otpRow = await prisma.otp.findFirst({ where: { email: testEmail } });
-    expect(otpRow).toBeDefined();
+    expect(await prisma.otp.count({ where: { email: testEmail } })).toBe(0);
   });
 });

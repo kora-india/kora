@@ -5,6 +5,7 @@ import { requireActiveSchoolSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const NoticeSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -45,7 +46,7 @@ export async function createNotice(data: unknown) {
     revalidatePath("/dashboard");
     return { success: true, id: notice.id };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -78,7 +79,7 @@ export async function updateNotice(id: string, data: unknown) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -102,7 +103,7 @@ export async function deleteNotice(id: string) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -131,6 +132,6 @@ export async function toggleNoticePublish(id: string, isPublished: boolean) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

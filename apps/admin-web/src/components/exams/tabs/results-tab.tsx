@@ -19,6 +19,7 @@ import {
   Search,
 } from "lucide-react";
 import { Input, Select } from "antd";
+import { unwrapAction } from "@/lib/action-result";
 
 interface ResultsTabProps {
   exams: any[];
@@ -78,9 +79,8 @@ export function ResultsTab({
 
     setLoading(true);
     try {
-      const data = await getSectionReportCards(
-        selectedExamId,
-        selectedSectionId,
+      const data = unwrapAction(
+        await getSectionReportCards(selectedExamId, selectedSectionId),
       );
       setReportCards(data);
     } catch (err: any) {
@@ -284,7 +284,9 @@ export function ResultsTab({
                     </span>
                   </td>
                   <td className="py-3 px-3 text-muted-foreground">
-                    {card.attendance.percentage}%
+                    {card.attendance.percentage === null
+                      ? "—"
+                      : `${card.attendance.percentage}%`}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <button

@@ -2,68 +2,36 @@
 
 import { Check, Sparkles, ArrowRight, HelpCircle } from "lucide-react";
 import Link from "next/link";
+import {
+  PAID_PLAN_IDS,
+  PLANS,
+  formatPlanPrice,
+  type PaidPlanId,
+} from "@/lib/plans";
 
 export function PricingSection() {
-  const plans = [
-    {
-      name: "Starter",
-      tagline: "For schools getting started with digital management.",
-      price: "₹1,999",
+  // Names, prices and features come from the plan catalogue (U1), so this
+  // page shows what setup charges and what the app enforces.
+  const buttonStyles: Record<PaidPlanId, string> = {
+    BASIC: "bg-white hover:bg-slate-50 text-slate-800 border border-slate-300",
+    PRO: "bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-500/25",
+    ENTERPRISE: "bg-slate-900 hover:bg-black text-white",
+  };
+  const plans = PAID_PLAN_IDS.map((id) => {
+    const plan = PLANS[id];
+    return {
+      name: plan.name,
+      tagline: plan.tagline,
+      price: formatPlanPrice(plan),
       period: "per month",
-      popular: false,
-      benefits: [
-        "Up to 300 enrolled students",
-        "Complete fee management & receipts",
-        "Fast mobile attendance for teachers",
-        "Broadcast school notices & circulars",
-        "Standard Excel & PDF reports",
-        "Help desk & email support",
-      ],
-      ctaText: "Start Free Trial",
-      ctaHref: "/register?plan=starter",
-      buttonStyle:
-        "bg-white hover:bg-slate-50 text-slate-800 border border-slate-300",
-    },
-    {
-      name: "Growth",
-      tagline:
-        "For established schools that want complete operational control.",
-      price: "₹3,999",
-      period: "per month",
-      popular: true,
+      popular: Boolean(plan.popular),
       badge: "Most Popular",
-      benefits: [
-        "Up to 1,500 enrolled students",
-        "Everything in Starter included",
-        "School bus & transport management",
-        "Multiple branches, sections & teachers",
-        "Automated WhatsApp fee receipts",
-        "Priority phone & WhatsApp support",
-      ],
+      benefits: plan.features,
       ctaText: "Start Free Trial",
-      ctaHref: "/register?plan=growth",
-      buttonStyle:
-        "bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-500/25",
-    },
-    {
-      name: "Enterprise",
-      tagline: "For large institutions, multi-campus groups & trusts.",
-      price: "Custom",
-      period: "annual contract",
-      popular: false,
-      benefits: [
-        "Unlimited students & campuses",
-        "Central management dashboard",
-        "Custom school logo & branding",
-        "Full data migration from old software",
-        "Dedicated school relationship manager",
-        "Custom ERP & accounting integrations",
-      ],
-      ctaText: "Talk to Us",
-      ctaHref: "#final-cta",
-      buttonStyle: "bg-slate-900 hover:bg-black text-white",
-    },
-  ];
+      ctaHref: "/register",
+      buttonStyle: buttonStyles[id],
+    };
+  });
 
   return (
     <section id="pricing" className="py-24 bg-white border-b border-slate-100">
@@ -119,7 +87,7 @@ export function PricingSection() {
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Billed annually or monthly
+                    Billed monthly
                   </p>
                 </div>
 

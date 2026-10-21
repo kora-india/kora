@@ -13,6 +13,7 @@ import {
   waiveFeeChargeItem,
 } from "../fee-allocator";
 import { prisma, purgeSchool } from "@schoolos/db";
+import { buildPaymentPayload, splitMonthTotal } from "@/lib/fees/payment-split";
 import { auth } from "@schoolos/auth";
 
 const schoolId = "allocator-school-" + Math.random().toString(36).substring(7);
@@ -450,5 +451,102 @@ describe("Fee Allocator Actions", () => {
       where: { id: chargeItemId },
     });
     expect(Number(item.paidAmount)).toBe(0);
+  });
+  // U10: what the server records matches what the screens preview.
+  describe("payment split", () => {
+    async function twoItemCharge() {
+      const transport = await prisma.feeComponent.create({
+        data: { schoolId, name: `Transport ${Math.random()}`, amount: 500 },
+      });
+      const charge = await prisma.feeCharge.create({
+        data: {
+          schoolId,
+          studentId,
+          sessionId,
+          title: "May Fees",
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              { componentId, amount: 1000 },
+              { componentId: transport.id, amount: 500 },
+            ],
+          },
+        },
+        include: { items: { orderBy: { id: "asc" } } },
+      });
+      return charge;
+    }
+
+    it("fills a month total into its items in creation order", async () => {
+      const charge = await twoItemCharge();
+      await allocatePayment({
+        studentId,
+        monthPayments: [{ chargeId: charge.id, amount: 1200 }],
+        method: "CASH",
+      });
+      const items = await prisma.feeChargeItem.findMany({
+        where: { chargeId: charge.id },
+        orderBy: { id: "asc" },
+      });
+      expect(items.map((i) => Number(i.paidAmount))).toEqual([1000, 200]);
+      // The preview's split agrees.
+      expect(
+        splitMonthTotal(
+          charge.items.map((i) => ({ id: i.id, due: Number(i.amount) })),
+          1200,
+        ).allocations.map((a) => a.amount),
+      ).toEqual([1000, 200]);
+    });
+
+    it("records a chosen item split exactly", async () => {
+      const charge = await twoItemCharge();
+      const [, second] = charge.items;
+      const payload = buildPaymentPayload(
+        [
+          {
+            id: charge.id,
+            items: charge.items.map((i) => ({
+              id: i.id,
+              due: Number(i.amount),
+            })),
+          },
+        ],
+        { [charge.id]: true },
+        { [charge.id]: "500" },
+        { [second.id]: "500" },
+      );
+      expect(payload.monthPayments).toEqual([]);
+      const res = await allocatePayment({
+        studentId,
+        ...payload,
+        method: "CASH",
+      });
+      expect(res.error).toBeUndefined();
+      const paid = await prisma.feeChargeItem.findUniqueOrThrow({
+        where: { id: second.id },
+      });
+      expect(Number(paid.paidAmount)).toBe(500);
+    });
+
+    it("applies the minimum partial payment to item amounts too", async () => {
+      await prisma.school.update({
+        where: { id: schoolId },
+        data: { minPartialPaymentAmount: 800 },
+      });
+      try {
+        const charge = await twoItemCharge();
+        const res = await allocatePayment({
+          studentId,
+          itemPayments: [{ chargeItemId: charge.items[1].id, amount: 300 }],
+          method: "CASH",
+        });
+        expect(res.error).toMatch(/minimum partial payment/i);
+      } finally {
+        await prisma.school.update({
+          where: { id: schoolId },
+          data: { minPartialPaymentAmount: 0 },
+        });
+      }
+    });
   });
 });

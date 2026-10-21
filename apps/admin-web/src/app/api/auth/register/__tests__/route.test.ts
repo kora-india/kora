@@ -187,7 +187,8 @@ describe("POST /api/auth/register", () => {
     expect(badOtpLength.status).toBe(400);
   });
 
-  it("rejects name shorter than 3 characters or longer than 20 characters", async () => {
+  // U13: full names like "Alexander Christopher The Great" are allowed.
+  it("rejects name shorter than 3 characters or longer than 100 characters", async () => {
     const shortNameRes = await POST(
       makeRequest({
         name: "Al",
@@ -214,7 +215,7 @@ describe("POST /api/auth/register", () => {
 
     const longNameRes = await POST(
       makeRequest({
-        name: "Alexander Christopher The Great",
+        name: "A".repeat(101),
         email: testEmail,
         password: validPassword,
         otp: "123456",
@@ -222,6 +223,6 @@ describe("POST /api/auth/register", () => {
     );
     expect(longNameRes.status).toBe(400);
     const longBody = await longNameRes.json();
-    expect(longBody.error).toBe("Name cannot exceed 20 characters");
+    expect(longBody.error).toBe("Name cannot exceed 100 characters");
   });
 });

@@ -38,6 +38,12 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { FormField, selectCls, inputCls } from "@/components/ui/form-field";
+import { buildPaymentPayload, previewMonth } from "@/lib/fees/payment-split";
+import {
+  buildMonthList,
+  feePolicyOf,
+  firstPolicyError,
+} from "@/lib/fees/collection";
 
 export function CollectionTab({
   students,
@@ -163,64 +169,11 @@ export function CollectionTab({
   );
 
   // Calculate monthly dues from studentCharges
-  const { monthList, totalOutstanding } = useMemo(() => {
-    let overallOutstanding = 0;
-    const list = (studentCharges || []).map((charge: any) => {
-      let monthTotalDue = 0;
-      let monthPaid = 0;
-      let monthNetCharge = 0;
-
-      const items = (charge.items || []).map((item: any) => {
-        const amt = Number(item.amount || 0);
-        const paid = Number(item.paidAmount || 0);
-        const due = item.status === "WAIVED" ? 0 : Math.max(0, amt - paid);
-        const compName =
-          item.component?.name ||
-          components?.find((c: any) => c.id === item.componentId)?.name ||
-          "Fee Component";
-        const category =
-          item.component?.category ||
-          components?.find((c: any) => c.id === item.componentId)?.category;
-
-        monthNetCharge += amt;
-        monthPaid += paid;
-        monthTotalDue += due;
-        overallOutstanding += due;
-
-        return {
-          id: item.id,
-          componentId: item.componentId,
-          componentName: compName,
-          amount: amt,
-          paidAmount: paid,
-          due,
-          status:
-            item.status === "WAIVED"
-              ? "WAIVED"
-              : due <= 0
-                ? "PAID"
-                : paid > 0
-                  ? "PARTIAL"
-                  : "PENDING",
-          isLateFee: category === "LATE_FEE",
-        };
-      });
-
-      return {
-        id: charge.id,
-        title: charge.title,
-        dueDate: charge.dueDate,
-        status: charge.status,
-        netCharge: monthNetCharge,
-        paidAmount: monthPaid,
-        totalDue: monthTotalDue,
-        items,
-      };
-    });
-
-    const activeMonths = list.filter((m: any) => m.totalDue > 0);
-    return { monthList: activeMonths, totalOutstanding: overallOutstanding };
-  }, [studentCharges, components]);
+  // U11: shared with the other collection screen (lib/fees/collection).
+  const { monthList, totalOutstanding } = useMemo(
+    () => buildMonthList(studentCharges, components),
+    [studentCharges, components],
+  );
 
   // Track last prefilled key to avoid clobbering manual month deselects while ensuring strict full dues pre-fill
   const lastPrefilledKeyRef = useRef<string>("");
@@ -508,17 +461,20 @@ export function CollectionTab({
       const isMonthCleared = entered >= charge.totalDue;
       const remainingDue = Math.max(0, charge.totalDue - entered);
 
-      const allocations: any[] = [];
-      charge.items.forEach((item: any) => {
-        const payVal = Number(itemPayments[item.id]) || 0;
-        if (payVal > 0) {
-          allocations.push({
-            componentName: item.componentName,
-            allocated: payVal,
-            newStatus:
-              item.paidAmount + payVal >= item.amount ? "Paid" : "Partial",
-          });
-        }
+      // U10: the same split the server will make.
+      const itemsById = new Map(charge.items.map((it: any) => [it.id, it]));
+      const allocations = previewMonth(
+        charge,
+        entered,
+        itemPayments,
+      ).allocations.map(({ itemId, amount }) => {
+        const item: any = itemsById.get(itemId);
+        return {
+          componentName: item.componentName,
+          allocated: amount,
+          newStatus:
+            item.paidAmount + amount >= item.amount ? "Paid" : "Partial",
+        };
       });
 
       preview.push({
@@ -602,64 +558,32 @@ export function CollectionTab({
     toast.loading("Processing payment transaction...", { id: toastId });
 
     try {
-      // Validate policy
-      if (feePaymentMode === "FULL_ONLY") {
-        for (const [mId, val] of Object.entries(monthPayments)) {
-          if (!selectedMonths[mId]) continue;
-          const num = Number(val) || 0;
-          const targetMonth = monthList.find((m: any) => m.id === mId);
-          if (targetMonth && num > 0 && num < targetMonth.totalDue) {
-            toast.error(
-              `School policy requires clearing ${targetMonth.title} fully (₹${targetMonth.totalDue}). Partial payments are disabled.`,
-              { id: toastId },
-            );
-            setIsSubmitting(false);
-            return;
-          }
-        }
-      } else if (feePaymentMode === "ALLOW_PARTIAL") {
-        for (const [mId, val] of Object.entries(monthPayments)) {
-          if (!selectedMonths[mId]) continue;
-          const num = Number(val) || 0;
-          const targetMonth = monthList.find((m: any) => m.id === mId);
-          if (!targetMonth || num <= 0) continue;
-
-          const minReq =
-            minPartialPaymentPercentage > 0
-              ? Math.ceil(
-                  (targetMonth.netCharge * minPartialPaymentPercentage) / 100,
-                )
-              : minPartialPaymentAmount;
-
-          if (minReq > 0) {
-            // LOOPHOLE PREVENTION:
-            // If remaining due <= minReq, student must pay the remaining balance in full!
-            if (targetMonth.totalDue <= minReq && num < targetMonth.totalDue) {
-              toast.error(
-                `The remaining due for ${targetMonth.title} is ₹${targetMonth.totalDue}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minReq})` : `₹${minReq}`}). It must be cleared in full.`,
-                { id: toastId },
-              );
-              setIsSubmitting(false);
-              return;
-            } else if (num < minReq && num < targetMonth.totalDue) {
-              toast.error(
-                `Payment for ${targetMonth.title} must be at least ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minReq})` : `₹${minReq}`}.`,
-                { id: toastId },
-              );
-              setIsSubmitting(false);
-              return;
-            }
-          }
-        }
+      // U11: the same rule the server enforces (lib/fees/collection).
+      const policyError = firstPolicyError(
+        monthList,
+        selectedMonths,
+        monthPayments,
+        feePolicyOf(effectiveSchool),
+      );
+      if (policyError) {
+        toast.error(policyError, { id: toastId });
+        setIsSubmitting(false);
+        return;
       }
 
-      const payloadPayments = Object.entries(monthPayments)
-        .filter(([id, val]) => selectedMonths[id] && Number(val) > 0)
-        .map(([id, val]) => ({ chargeId: id, amount: Number(val) }));
+      // U10: months whose item split was chosen are sent item by item, so
+      // the server records what the preview showed.
+      const payload = buildPaymentPayload(
+        monthList,
+        selectedMonths,
+        monthPayments,
+        itemPayments,
+      );
 
       const res = await allocatePayment({
         studentId: currentStudent.id,
-        monthPayments: payloadPayments,
+        monthPayments: payload.monthPayments,
+        itemPayments: payload.itemPayments,
         generalAdvanceAmount:
           Number(generalAdvance) > 0 ? Number(generalAdvance) : undefined,
         method: paymentMethod as any,

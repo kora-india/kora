@@ -29,7 +29,7 @@ export default function ExpiredPage() {
 
       <div className="flex flex-col sm:flex-row items-center gap-3 mt-4 mb-8">
         <Link
-          href="/subscriptions"
+          href="/billing"
           className="h-11 px-6 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors shadow-sm"
         >
           <Sparkles className="w-4 h-4" />

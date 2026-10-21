@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const AssignmentSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -121,7 +122,7 @@ export async function createAssignment(data: unknown) {
     revalidatePath("/assignments");
     return { success: true, id: assignment.id };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -164,7 +165,7 @@ export async function updateAssignment(id: string, data: unknown) {
     revalidatePath("/assignments");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -187,6 +188,6 @@ export async function deleteAssignment(id: string) {
     revalidatePath("/assignments");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

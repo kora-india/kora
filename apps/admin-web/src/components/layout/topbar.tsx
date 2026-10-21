@@ -55,19 +55,28 @@ export function Topbar({
         {activePlan && (
           <>
             {subscription?.isTrial ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 text-xs font-semibold text-violet-700 dark:text-violet-300 shadow-xs">
+              <Link
+                href="/billing"
+                title="Choose a plan"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 text-xs font-semibold text-violet-700 dark:text-violet-300 shadow-xs hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+              >
                 <Sparkles className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 animate-pulse" />
                 <span>
-                  {activePlan} · Trial ({subscription.daysRemaining}d left)
+                  Free trial · {subscription.daysRemaining}d left · Choose a
+                  plan
                 </span>
-              </div>
+              </Link>
             ) : subscription?.isPastDue ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs">
+              <Link
+                href="/billing"
+                title="Renew your plan"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+              >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>
-                  {activePlan} · Past Due ({subscription.daysRemaining}d grace)
+                  {activePlan} · Renew ({subscription.daysRemaining}d grace)
                 </span>
-              </div>
+              </Link>
             ) : (
               <div
                 className={cn(

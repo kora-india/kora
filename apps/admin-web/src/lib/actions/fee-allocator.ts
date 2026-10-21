@@ -13,6 +13,7 @@ import {
   resolveTimeZone,
   todayInTimeZone,
 } from "@/lib/fees/timezone";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
@@ -277,6 +278,45 @@ export async function allocatePayment(rawInput: {
         }[] = [];
         const affectedChargeIds = new Set<string>();
 
+        /**
+         * B9: a month paid less than its due must respect the school's
+         * policy. Used for month totals and (U10) for item amounts, summed
+         * per month.
+         */
+        const assertMonthPolicy = (
+          chargeTitle: string,
+          totalChargeBilled: number,
+          totalChargeDue: number,
+          enteredAmount: number,
+        ) => {
+          if (enteredAmount < totalChargeDue) {
+            if (feePaymentMode === "FULL_ONLY") {
+              throw new Error(
+                `Payment failed: School policy requires clearing the full monthly due of ₹${totalChargeDue.toFixed(2)} for ${chargeTitle}. Partial payments are disabled.`,
+              );
+            } else if (feePaymentMode === "ALLOW_PARTIAL") {
+              let minRequired = 0;
+              if (minPartialPaymentPercentage > 0) {
+                minRequired = roundMoney(
+                  (totalChargeBilled * minPartialPaymentPercentage) / 100,
+                );
+              } else if (minPartialPaymentAmount > 0) {
+                minRequired = minPartialPaymentAmount;
+              }
+
+              if (minRequired > 0 && totalChargeDue <= minRequired) {
+                throw new Error(
+                  `Payment failed: The remaining due for ${chargeTitle} is ₹${totalChargeDue.toFixed(2)}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minRequired})` : `₹${minRequired}`}). The remaining balance must be cleared in full.`,
+                );
+              } else if (minRequired > 0 && enteredAmount < minRequired) {
+                throw new Error(
+                  `Payment failed: Minimum partial payment for ${chargeTitle} is ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minRequired.toFixed(2)})` : `₹${minRequired.toFixed(2)}`}.`,
+                );
+              }
+            }
+          }
+        };
+
         // 2. Allocate Month-wise payments if provided (FIFO: oldest due date first)
         if (data.monthPayments && data.monthPayments.length > 0) {
           const charges = await tx.feeCharge.findMany({
@@ -288,6 +328,8 @@ export async function allocatePayment(rawInput: {
             include: {
               items: {
                 include: { component: true },
+                // U10: the order the collection screens preview.
+                orderBy: { id: "asc" },
               },
             },
           });
@@ -331,32 +373,12 @@ export async function allocatePayment(rawInput: {
             }
 
             // B9: Policy Enforcements
-            if (enteredAmount < totalChargeDue) {
-              if (feePaymentMode === "FULL_ONLY") {
-                throw new Error(
-                  `Payment failed: School policy requires clearing the full monthly due of ₹${totalChargeDue.toFixed(2)} for ${charge.title}. Partial payments are disabled.`,
-                );
-              } else if (feePaymentMode === "ALLOW_PARTIAL") {
-                let minRequired = 0;
-                if (minPartialPaymentPercentage > 0) {
-                  minRequired = roundMoney(
-                    (totalChargeBilled * minPartialPaymentPercentage) / 100,
-                  );
-                } else if (minPartialPaymentAmount > 0) {
-                  minRequired = minPartialPaymentAmount;
-                }
-
-                if (minRequired > 0 && totalChargeDue <= minRequired) {
-                  throw new Error(
-                    `Payment failed: The remaining due for ${charge.title} is ₹${totalChargeDue.toFixed(2)}, which is at or below the minimum partial threshold (${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% (₹${minRequired})` : `₹${minRequired}`}). The remaining balance must be cleared in full.`,
-                  );
-                } else if (minRequired > 0 && enteredAmount < minRequired) {
-                  throw new Error(
-                    `Payment failed: Minimum partial payment for ${charge.title} is ${minPartialPaymentPercentage > 0 ? `${minPartialPaymentPercentage}% of total fee (₹${minRequired.toFixed(2)})` : `₹${minRequired.toFixed(2)}`}.`,
-                  );
-                }
-              }
-            }
+            assertMonthPolicy(
+              charge.title,
+              totalChargeBilled,
+              totalChargeDue,
+              enteredAmount,
+            );
 
             // Distribute entered amount across unpaid charge items
             let remainingForCharge = enteredAmount;
@@ -427,9 +449,37 @@ export async function allocatePayment(rawInput: {
                 studentId: data.studentId,
               },
             },
-            include: { charge: true },
+            include: { charge: { include: { items: true } } },
           });
           const itemsMap = new Map(foundItems.map((it) => [it.id, it]));
+
+          // U10: the screens send a month item by item when staff choose the
+          // split, so the month policy applies to each month's total here.
+          const enteredByCharge = new Map<string, number>();
+          for (const ip of data.itemPayments) {
+            const item = itemsMap.get(ip.chargeItemId);
+            if (!item) continue; // Rejected below.
+            enteredByCharge.set(
+              item.chargeId,
+              roundMoney((enteredByCharge.get(item.chargeId) ?? 0) + ip.amount),
+            );
+          }
+          for (const [chargeId, entered] of enteredByCharge) {
+            const charge = foundItems.find(
+              (it) => it.chargeId === chargeId,
+            )!.charge;
+            let billed = 0;
+            let due = 0;
+            for (const it of charge.items) {
+              if (it.status === FeeStatus.WAIVED) continue;
+              const amt = roundMoney(Number(it.amount || 0));
+              billed = roundMoney(billed + amt);
+              due = roundMoney(
+                due + Math.max(0, roundMoney(amt - Number(it.paidAmount || 0))),
+              );
+            }
+            assertMonthPolicy(charge.title, billed, due, entered);
+          }
 
           for (const ip of data.itemPayments) {
             const itemAmount = roundMoney(ip.amount);
@@ -700,7 +750,7 @@ export async function allocatePayment(rawInput: {
         };
       }
     }
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -1047,7 +1097,7 @@ export async function getFeeReceiptDetails(
   } catch (e: any) {
     return {
       success: false,
-      error: e.message || "Failed to load receipt details",
+      error: actionErrorMessage(e, "Failed to load receipt details"),
     };
   }
 }
@@ -1105,7 +1155,7 @@ export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
     ]);
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -1187,6 +1237,6 @@ export async function getStudentFeeDues(studentId: string) {
       recentTransactions,
     };
   } catch (e: any) {
-    return { error: e.message || "Failed to fetch student fee dues" };
+    return { error: actionErrorMessage(e, "Failed to fetch student fee dues") };
   }
 }

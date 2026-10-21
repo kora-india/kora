@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import "./globals.css";
+import { OfflineSupport } from "@/components/layout/offline-support";
 
 export const metadata: Metadata = {
   title: "Kora Teacher",
@@ -37,6 +38,7 @@ export default function RootLayout({
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           {children}
+          <OfflineSupport />
           <Toaster richColors position="top-center" />
         </ThemeProvider>
       </body>

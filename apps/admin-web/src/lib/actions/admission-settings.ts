@@ -10,6 +10,7 @@ import {
   admissionSettingsFor,
   formatAdmissionNumber,
 } from "@/lib/admission-number";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const AdmissionSettingsSchema = z.object({
   prefix: z
@@ -89,7 +90,12 @@ export async function getAdmissionNumberSettings() {
       },
     };
   } catch (err: any) {
-    return { error: err.message || "Failed to load admission number settings" };
+    return {
+      error: actionErrorMessage(
+        err,
+        "Failed to load admission number settings",
+      ),
+    };
   }
 }
 
@@ -131,7 +137,9 @@ export async function saveAdmissionNumberSettings(data: unknown) {
       sample: formatAdmissionNumber(cleanFormat, cleanPrefix, nextSequence),
     };
   } catch (err: any) {
-    return { error: err.message || "Failed to save admission number format" };
+    return {
+      error: actionErrorMessage(err, "Failed to save admission number format"),
+    };
   }
 }
 
@@ -195,6 +203,11 @@ export async function getNextAdmissionNumber(
       format,
     };
   } catch (err: any) {
-    return { error: err.message || "Failed to generate next admission number" };
+    return {
+      error: actionErrorMessage(
+        err,
+        "Failed to generate next admission number",
+      ),
+    };
   }
 }

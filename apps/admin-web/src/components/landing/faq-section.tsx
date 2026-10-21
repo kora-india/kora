@@ -38,7 +38,7 @@ export function FaqSection() {
     },
     {
       q: "How does the free trial work?",
-      a: "You get 14 days of full access to all Kora features with zero obligation. No credit card is required to get started, and you can invite your staff to test it with you.",
+      a: "You get 14 days of full access to every Kora feature, with no credit card needed to start, and you can invite your staff to try it with you. When the trial ends, choose a plan to keep going. Your data stays exactly as you left it.",
     },
   ];
 

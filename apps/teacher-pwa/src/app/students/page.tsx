@@ -5,6 +5,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import Link from "next/link";
 import { ArrowLeft, Search } from "lucide-react";
 import { compareRollNumbers } from "@schoolos/types";
+import { getTeacherSections } from "@/lib/teacher-sections";
 
 export default async function StudentsPage() {
   const session = await auth();
@@ -12,15 +13,19 @@ export default async function StudentsPage() {
   const user = session.user;
   if (!user.schoolId) redirect("/login");
 
-  const teacher = await prisma.teacher.findFirst({
-    where: { userId: user.id },
-  });
-  const students = teacher?.assignedClassId
+  // U8: students of every section the teacher has, not only the legacy one.
+  const { sections } = await getTeacherSections(user.id, user.schoolId);
+  const sectionName = new Map(
+    sections.map((sec) => [
+      sec.sectionId,
+      `${sec.className} ${sec.sectionName}`,
+    ]),
+  );
+  const students = sections.length
     ? await prisma.student.findMany({
         where: {
           schoolId: user.schoolId,
-          classId: teacher.assignedClassId,
-          sectionId: teacher.assignedSectionId ?? undefined,
+          sectionId: { in: sections.map((sec) => sec.sectionId) },
           isActive: true,
         },
         // Open charges from the current fee system (the legacy `fees` table is no longer written)
@@ -34,7 +39,12 @@ export default async function StudentsPage() {
       })
     : [];
 
-  students.sort((a, b) => compareRollNumbers(a.rollNumber, b.rollNumber));
+  const order = new Map(sections.map((sec, i) => [sec.sectionId, i]));
+  students.sort(
+    (a, b) =>
+      (order.get(a.sectionId) ?? 0) - (order.get(b.sectionId) ?? 0) ||
+      compareRollNumbers(a.rollNumber, b.rollNumber),
+  );
 
   return (
     <div className="min-h-screen bg-background pb-20 max-w-lg mx-auto">
@@ -48,7 +58,8 @@ export default async function StudentsPage() {
         <div>
           <h1 className="text-sm font-bold">Students</h1>
           <p className="text-[10px] text-muted-foreground">
-            {students.length} in your class
+            {students.length} in{" "}
+            {sections.length > 1 ? `${sections.length} sections` : "your class"}
           </p>
         </div>
       </div>
@@ -77,6 +88,7 @@ export default async function StudentsPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{s.name}</p>
                 <p className="text-[10px] text-muted-foreground">
+                  {sections.length > 1 && `${sectionName.get(s.sectionId)} · `}
                   Roll #{s.rollNumber} · {s.parentPhone}
                 </p>
               </div>

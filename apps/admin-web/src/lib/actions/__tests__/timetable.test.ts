@@ -6,9 +6,15 @@ import {
   getTimetable,
   checkSlotConflict,
   deleteTimetableSlot,
-  generateAutomatedTimetableAction,
   auditSchoolConflicts,
 } from "../timetable";
+import * as timetableActions from "../timetable";
+import { unwrapAction } from "../../action-result";
+
+// U4: returns { data } or { error }; unwrap so failures throw.
+const generateAutomatedTimetableAction = (
+  ...a: Parameters<typeof timetableActions.generateAutomatedTimetableAction>
+) => timetableActions.generateAutomatedTimetableAction(...a).then(unwrapAction);
 import { prisma } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 

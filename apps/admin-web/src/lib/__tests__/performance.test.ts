@@ -35,7 +35,7 @@ describe("Performance Optimizations (P1 - P10)", () => {
       expect(map.has("ENTERPRISE")).toBe(true);
 
       const proLimits = await getPlanLimits("PRO");
-      expect(proLimits.maxStudents).toBe(1000);
+      expect(proLimits.maxStudents).toBe(2000); // U1: what setup promised
       expect(proLimits.analyticsEnabled).toBe(true);
     });
   });

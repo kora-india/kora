@@ -29,6 +29,7 @@ const CreateSchoolSchema = z.object({
 });
 
 import crypto from "crypto";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -186,7 +187,7 @@ export async function toggleSchoolStatus(schoolId: string) {
         : `"${school.name}" has been suspended.`,
     };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -218,6 +219,6 @@ export async function updateSchoolPlan(schoolId: string, plan: string) {
     revalidatePath("/schools");
     return { success: true, message: `Plan updated to ${plan}` };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

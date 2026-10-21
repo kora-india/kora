@@ -31,6 +31,7 @@ import {
   generateAiTimetableAction,
 } from "@/lib/actions/timetable";
 import { PeriodDefinition, SubjectQuota } from "@/lib/timetable-generator";
+import { unwrapAction } from "@/lib/action-result";
 
 interface AutoGeneratorModalProps {
   open: boolean;
@@ -166,28 +167,32 @@ export function AutoGeneratorModal({
     try {
       let res;
       if (engineMode === "ai") {
-        res = await generateAiTimetableAction({
-          classId: values.classId,
-          sectionId: values.sectionId,
-          daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
-          subjects: subjectsList,
-          replaceExisting,
-          customPrompt: customPrompt.trim() || undefined,
-        });
+        res = unwrapAction(
+          await generateAiTimetableAction({
+            classId: values.classId,
+            sectionId: values.sectionId,
+            daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
+            subjects: subjectsList,
+            replaceExisting,
+            customPrompt: customPrompt.trim() || undefined,
+          }),
+        );
       } else {
-        res = await generateAutomatedTimetableAction({
-          classId: values.classId,
-          sectionId: values.sectionId,
-          daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
-          subjects: subjectsList,
-          replaceExisting,
-        });
+        res = unwrapAction(
+          await generateAutomatedTimetableAction({
+            classId: values.classId,
+            sectionId: values.sectionId,
+            daysOfWeek: [1, 2, 3, 4, 5, 6], // Monday to Saturday
+            subjects: subjectsList,
+            replaceExisting,
+          }),
+        );
       }
 
       if (res.success) {
         if ((res as any).usedFallbackSolver) {
           message.warning(
-            `Generated ${res.allocatedSlots} conflict-free periods using Kora engine (Gemini AI was temporarily experiencing high demand).`,
+            `Generated ${res.allocatedSlots} conflict-free periods with Kora's built-in scheduler: ${(res as any).fallbackReason ?? "Gemini AI couldn't be used"}.`,
             6,
           );
         } else if (engineMode === "ai") {
@@ -379,6 +384,12 @@ export function AutoGeneratorModal({
                 Zero Conflicts Guaranteed
               </span>
             </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              To draft the timetable, this class&apos;s subjects, teacher names
+              and their existing periods are sent to Google Gemini. Choose
+              Kora&apos;s built-in scheduler to keep everything here.
+            </p>
 
             <Input.TextArea
               rows={2}

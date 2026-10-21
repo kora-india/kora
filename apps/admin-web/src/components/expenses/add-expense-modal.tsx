@@ -1,10 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Modal, Form, Input, InputNumber, Select, DatePicker, Button } from "antd";
+import {
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  DatePicker,
+  Button,
+} from "antd";
 import dayjs from "dayjs";
 import { toast } from "sonner";
 import { createExpense } from "@/lib/actions/expenses";
+import { PAYMENT_METHOD_OPTIONS } from "@/lib/payment-methods";
 
 interface AddExpenseModalProps {
   open: boolean;
@@ -12,7 +21,11 @@ interface AddExpenseModalProps {
   categories: { id: string; name: string }[];
 }
 
-export function AddExpenseModal({ open, onOpenChange, categories }: Readonly<AddExpenseModalProps>) {
+export function AddExpenseModal({
+  open,
+  onOpenChange,
+  categories,
+}: Readonly<AddExpenseModalProps>) {
   const [form] = Form.useForm();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -27,7 +40,7 @@ export function AddExpenseModal({ open, onOpenChange, categories }: Readonly<Add
 
       const res = await createExpense(data);
       if (res.error) throw new Error(res.error);
-      
+
       toast.success("Expense added successfully");
       form.resetFields();
       onOpenChange(false);
@@ -88,7 +101,9 @@ export function AddExpenseModal({ open, onOpenChange, categories }: Readonly<Add
         >
           <Select placeholder="Select category">
             {categories.map((cat) => (
-              <Select.Option key={cat.id} value={cat.id}>{cat.name}</Select.Option>
+              <Select.Option key={cat.id} value={cat.id}>
+                {cat.name}
+              </Select.Option>
             ))}
           </Select>
         </Form.Item>
@@ -100,12 +115,10 @@ export function AddExpenseModal({ open, onOpenChange, categories }: Readonly<Add
             className="flex-1"
             rules={[{ required: true, message: "Payment method is required" }]}
           >
-            <Select placeholder="Select method">
-              <Select.Option value="CASH">Cash</Select.Option>
-              <Select.Option value="ONLINE">Online/Bank Transfer</Select.Option>
-              <Select.Option value="CHEQUE">Cheque</Select.Option>
-              <Select.Option value="UPI">UPI</Select.Option>
-            </Select>
+            <Select
+              placeholder="Select method"
+              options={PAYMENT_METHOD_OPTIONS.map((m) => ({ ...m }))}
+            />
           </Form.Item>
 
           <Form.Item
@@ -117,18 +130,18 @@ export function AddExpenseModal({ open, onOpenChange, categories }: Readonly<Add
           </Form.Item>
         </div>
 
-        <Form.Item
-          name="description"
-          label="Description (Optional)"
-        >
+        <Form.Item name="description" label="Description (Optional)">
           <Input.TextArea placeholder="Add notes..." rows={2} />
         </Form.Item>
 
         <div className="flex justify-end gap-2 mt-6">
-          <Button onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="primary" htmlType="submit" loading={isLoading} className="bg-violet-600">
+          <Button onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={isLoading}
+            className="bg-violet-600"
+          >
             Save Expense
           </Button>
         </div>

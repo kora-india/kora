@@ -15,7 +15,11 @@ const TeacherSchema = z.object({
   phone: z.string().optional().nullable(),
   subject: z.string().min(1, "Subject is required"),
   qualification: z.string().optional().nullable(),
-  salary: z.coerce.number().min(0).optional().nullable(),
+  // U13: an empty field is "not set" (null); 0 is a real salary of 0.
+  salary: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.coerce.number().min(0).nullable(),
+  ),
   joiningDate: z.string().optional().nullable(),
   assignedClassId: z.string().optional().nullable(),
   assignedSectionId: z.string().optional().nullable(),
@@ -24,6 +28,7 @@ const TeacherSchema = z.object({
 
 import crypto from "crypto";
 import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
   return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
@@ -128,7 +133,7 @@ export async function createTeacher(data: unknown) {
           ...rest,
           phone: rest.phone || null,
           qualification: rest.qualification || null,
-          salary: salary ? salary : null,
+          salary: salary ?? null,
           joiningDate: joiningDate ? new Date(joiningDate) : null,
           assignedClassId: primaryClassId,
           assignedSectionId: primarySectionId,
@@ -180,7 +185,7 @@ export async function createTeacher(data: unknown) {
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "A user with this email already exists" };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -199,6 +204,23 @@ export async function updateTeacher(id: string, data: unknown) {
     joiningDate,
     ...rest
   } = parsed.data;
+
+  // U4: a clear message when the new email belongs to another account.
+  const current = await prisma.teacher.findFirst({
+    where: { id, schoolId: user.schoolId },
+    select: { userId: true },
+  });
+  if (!current) return { error: "Teacher not found" };
+  const emailOwner = await prisma.user.findFirst({
+    where: {
+      email: { equals: rest.email, mode: "insensitive" },
+      id: { not: current.userId },
+    },
+    select: { id: true },
+  });
+  if (emailOwner) {
+    return { error: "Another account already uses this email address" };
+  }
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -235,7 +257,7 @@ export async function updateTeacher(id: string, data: unknown) {
           ...rest,
           phone: rest.phone || null,
           qualification: rest.qualification || null,
-          salary: salary ? salary : null,
+          salary: salary ?? null,
           joiningDate: joiningDate ? new Date(joiningDate) : null,
           assignedClassId: primaryClassId,
           assignedSectionId: primarySectionId,
@@ -269,7 +291,7 @@ export async function updateTeacher(id: string, data: unknown) {
     revalidatePath("/attendance");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -325,6 +347,6 @@ export async function deleteTeacher(id: string) {
       releasedPeriods: slots.count,
     };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

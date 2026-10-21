@@ -110,14 +110,22 @@ model SubscriptionOrder {
   plan      SubscriptionPlan
   amount    Int
   currency  String           @default("INR")
+  /// PENDING (checkout opened), PAID (payment verified, not yet used),
+  /// COMPLETED (school created or subscription renewed).
   status    String           @default("PENDING")
   paymentId String?          @unique
+  /// Setup orders: set once the school exists. Renewals: the school renewed.
   schoolId  String?
+  /// SETUP (pays for a new school) or RENEWAL (an existing school).
+  purpose   String           @default("SETUP")
+  /// Setup orders hold this subdomain for the payer until the school exists.
+  subdomain String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   @@index([userId])
   @@index([orderId])
+  @@index([subdomain])
   @@map("subscription_orders")
 }
 

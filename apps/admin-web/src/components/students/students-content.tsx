@@ -53,6 +53,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { unwrapAction } from "@/lib/action-result";
 
 const FEE_BADGE: Record<string, string> = {
   PAID: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
@@ -226,7 +227,9 @@ export function StudentsContent({
     if (!detailsModal.student?.id) return;
     setReportCardModal({ open: true, loading: true, data: null });
     try {
-      const card = await getStudentReportCard(examId, detailsModal.student.id);
+      const card = unwrapAction(
+        await getStudentReportCard(examId, detailsModal.student.id),
+      );
       setReportCardModal({ open: true, loading: false, data: card });
     } catch (err: any) {
       setReportCardModal({ open: false, loading: false, data: null });

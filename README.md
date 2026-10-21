@@ -81,7 +81,7 @@ The Teacher PWA is a mobile-first Progressive Web App designed for:
 
 - ✅ **Fast attendance** — Mark attendance in < 20 seconds
 - ✅ **Bottom navigation** — Native app feel
-- ✅ **Offline-ready structure** — Service worker via Next.js
+- ✅ **Works offline** — a service worker keeps the app openable without a connection, and attendance saved offline is queued on the phone and sent when it reconnects
 - ✅ **Installable** — Add to home screen on Android/iOS
 - ✅ **Class-scoped** — Teachers only see their assigned class
 

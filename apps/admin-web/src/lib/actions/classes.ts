@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { checkClassLimit, planLimitMessage } from "@/lib/plan-limits";
+import { equivalentClassNames } from "@/lib/class-catalog";
 import { invalidateCache } from "@/lib/redis";
 import {
   CLASS_NAME_MAX,
@@ -58,6 +59,7 @@ const CreateSectionsSchema = z.object({
 });
 
 import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
   return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
@@ -78,10 +80,13 @@ export async function createClass(data: unknown) {
   }
 
   try {
+    // "Class 5" and "Grade 5" are the same class (U6).
     const existing = await prisma.class.findFirst({
       where: {
         schoolId: user.schoolId,
-        name: { equals: parsed.data.name, mode: "insensitive" },
+        OR: equivalentClassNames(parsed.data.name).map((n) => ({
+          name: { equals: n, mode: "insensitive" as const },
+        })),
       },
       select: { name: true },
     });
@@ -149,7 +154,7 @@ export async function createClass(data: unknown) {
       return {
         error: `${parsed.data.name} already exists. You can add or manage sections from the existing class.`,
       };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -177,7 +182,9 @@ export async function updateClass(id: string, data: unknown) {
       where: {
         schoolId: user.schoolId,
         id: { not: id },
-        name: { equals: parsed.data.name, mode: "insensitive" },
+        OR: equivalentClassNames(parsed.data.name).map((n) => ({
+          name: { equals: n, mode: "insensitive" as const },
+        })),
       },
       select: { name: true },
     });
@@ -200,7 +207,7 @@ export async function updateClass(id: string, data: unknown) {
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "A class with this name already exists" };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -255,7 +262,7 @@ export async function deleteClass(id: string) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message || "Failed to delete class" };
+    return { error: actionErrorMessage(e, "Failed to delete class") };
   }
 }
 
@@ -282,7 +289,7 @@ export async function createSection(data: unknown) {
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "Section already exists in this class" };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -356,7 +363,7 @@ export async function createSections(data: unknown) {
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "Section already exists in this class" };
-    return { error: e.message || "Failed to create sections" };
+    return { error: actionErrorMessage(e, "Failed to create sections") };
   }
 }
 
@@ -393,6 +400,6 @@ export async function deleteSection(id: string) {
     revalidatePath("/students");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message || "Failed to delete section" };
+    return { error: actionErrorMessage(e, "Failed to delete section") };
   }
 }

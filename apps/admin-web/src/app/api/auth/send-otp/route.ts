@@ -8,7 +8,7 @@ import {
   createRateLimitResponse,
 } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
-import nodemailer from "nodemailer";
+import { isMailConfigured, sendMail } from "@/lib/mailer";
 import crypto from "crypto";
 import { z } from "zod";
 
@@ -48,11 +48,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT;
-    const hasSmtp = Boolean(smtpHost && smtpPort && smtpUser && smtpPass);
+    const hasSmtp = isMailConfigured();
 
     // In production, fail early if SMTP is missing
     if (process.env.NODE_ENV === "production" && !hasSmtp) {
@@ -109,16 +105,6 @@ export async function POST(req: Request) {
 
     // Send email using Nodemailer if SMTP credentials are provided
     if (hasSmtp) {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: Number(smtpPort),
-        secure: Number(smtpPort) === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
-
       const htmlTemplate = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
           <h2 style="color: #6d28d9; text-align: center;">Welcome to Kora!</h2>
@@ -133,18 +119,18 @@ export async function POST(req: Request) {
         </div>
       `;
 
-      try {
-        await transporter.sendMail({
-          from: `"Kora" <${smtpUser}>`,
-          to: normalizedEmail,
-          subject: "Your Kora Verification Code",
-          html: htmlTemplate,
-        });
-      } catch (mailErr: any) {
+      const sent = await sendMail({
+        to: normalizedEmail,
+        subject: "Your Kora Verification Code",
+        html: htmlTemplate,
+      });
+      if (!sent.success) {
         authLogger.error(
-          { err: mailErr, email: normalizedEmail },
+          { err: sent.error, email: normalizedEmail },
           "Failed to dispatch OTP email",
         );
+        // A code the user never received must not linger as the valid one.
+        await prisma.otp.deleteMany({ where: { email: normalizedEmail } });
         return NextResponse.json(
           { error: "Failed to dispatch verification email. Please try again." },
           { status: 500 },

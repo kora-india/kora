@@ -15,6 +15,7 @@ import {
   ExistingSlot,
 } from "../timetable-generator";
 import { generateAiScheduleDraft, AiTimetableResponse } from "../gemini";
+import { toActionResult } from "@/lib/action-errors";
 
 const slotSchema = z.object({
   id: z.string().optional(),
@@ -566,7 +567,14 @@ export async function clearSectionTimetable(sectionId: string) {
   return { success: true, count: deleted.count };
 }
 
-export async function generateAutomatedTimetableAction(params: {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function generateAutomatedTimetableAction(
+  ...args: Parameters<typeof generateAutomatedTimetableActionImpl>
+) {
+  return toActionResult(() => generateAutomatedTimetableActionImpl(...args));
+}
+
+async function generateAutomatedTimetableActionImpl(params: {
   classId: string;
   sectionId: string;
   daysOfWeek?: number[];
@@ -721,7 +729,29 @@ export async function generateAutomatedTimetableAction(params: {
   };
 }
 
-export async function generateAiTimetableAction(params: {
+/** Why the Gemini draft wasn't used, for staff (U14). */
+function aiFallbackReason(message: string): string {
+  if (/api key is not configured/i.test(message)) {
+    return "AI scheduling isn't set up on this server (no Gemini API key)";
+  }
+  if (/\((?:401|403)\)/.test(message)) return "Gemini rejected the API key";
+  if (/\((?:429|503)\)|busy|unavailable/i.test(message)) {
+    return "Gemini AI was busy";
+  }
+  if (/parse|empty response/i.test(message)) {
+    return "Gemini's answer couldn't be used";
+  }
+  return "Gemini AI couldn't be reached";
+}
+
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function generateAiTimetableAction(
+  ...args: Parameters<typeof generateAiTimetableActionImpl>
+) {
+  return toActionResult(() => generateAiTimetableActionImpl(...args));
+}
+
+async function generateAiTimetableActionImpl(params: {
   classId: string;
   sectionId: string;
   daysOfWeek?: number[];
@@ -839,12 +869,13 @@ export async function generateAiTimetableAction(params: {
       customPrompt: params.customPrompt,
     });
   } catch (err: any) {
-    logger.warn({
-      msg: "Gemini API unavailable or busy, falling back to Kora deterministic solver",
-      error: err.message,
-    });
     usedFallbackSolver = true;
-    aiErrorMessage = err.message || "Gemini AI temporarily busy";
+    aiErrorMessage = err.message || "";
+    logger.warn({
+      msg: "Gemini draft failed, falling back to Kora deterministic solver",
+      reason: aiFallbackReason(aiErrorMessage),
+      error: aiErrorMessage,
+    });
   }
 
   // 2. Validate against Kora strict deterministic conflict engine for zero-clash guarantee
@@ -877,9 +908,11 @@ export async function generateAiTimetableAction(params: {
       existingLockedSlots,
       otherSectionSlots,
     });
-    rationale = `Generated via Kora Conflict-Free Engine (Gemini AI was temporarily experiencing high demand). All teacher & room clashes prevented.`;
+    // U14: say why, instead of always blaming high demand.
+    const reason = aiFallbackReason(aiErrorMessage);
+    rationale = `Made by Kora's built-in scheduler because ${reason}. All teacher and room clashes are prevented.`;
     result.diagnostics = [
-      `Gemini AI was busy; seamlessly switched to Kora Conflict-Free Solver.`,
+      `${reason[0].toUpperCase()}${reason.slice(1)}, so Kora's built-in scheduler made this timetable.`,
       ...result.diagnostics,
     ];
   }
@@ -891,6 +924,9 @@ export async function generateAiTimetableAction(params: {
       unassignedSubjects: result.unassignedSubjects,
       aiRationale: rationale,
       usedFallbackSolver,
+      fallbackReason: usedFallbackSolver
+        ? aiFallbackReason(aiErrorMessage)
+        : null,
     };
   }
 
@@ -947,6 +983,9 @@ export async function generateAiTimetableAction(params: {
     diagnostics: result.diagnostics,
     aiRationale: rationale,
     usedFallbackSolver,
+    fallbackReason: usedFallbackSolver
+      ? aiFallbackReason(aiErrorMessage)
+      : null,
   };
 }
 

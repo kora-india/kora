@@ -5,13 +5,11 @@ import { prisma } from "@schoolos/db";
 import { UserRole } from "@schoolos/types";
 import { getAllPlanLimitsMap } from "@/lib/plan-limits";
 import { monthlyCollections, recentMonths } from "@/lib/reports/monthly-totals";
+import { PLANS } from "@/lib/plans";
 
-const TIER_PRICES: Record<string, number> = {
-  FREE: 0,
-  BASIC: 999,
-  PRO: 2499,
-  ENTERPRISE: 4999,
-};
+const TIER_PRICES: Record<string, number> = Object.fromEntries(
+  Object.values(PLANS).map((p) => [p.id, p.monthlyPriceInr]),
+);
 
 export async function getSuperAdminSession() {
   const session = await auth();
@@ -121,21 +119,21 @@ export async function getSuperAdminDashboardData() {
       plan: "BASIC",
       count: planCounts.BASIC,
       value: planCounts.BASIC,
-      price: 999,
+      price: PLANS.BASIC.monthlyPriceInr,
     },
     {
       name: "Pro Plan",
       plan: "PRO",
       count: planCounts.PRO,
       value: planCounts.PRO,
-      price: 2499,
+      price: PLANS.PRO.monthlyPriceInr,
     },
     {
       name: "Enterprise",
       plan: "ENTERPRISE",
       count: planCounts.ENTERPRISE,
       value: planCounts.ENTERPRISE,
-      price: 4999,
+      price: PLANS.ENTERPRISE.monthlyPriceInr,
     },
   ].filter((p) => p.count > 0 || totalSchools === 0);
 

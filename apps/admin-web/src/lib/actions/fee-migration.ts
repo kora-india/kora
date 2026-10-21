@@ -4,6 +4,7 @@ import { auth } from "@schoolos/auth";
 import { prisma, FeeStatus } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
   const session = await auth();
@@ -164,6 +165,6 @@ export async function runLegacyFeeMigration() {
 
     return { success: true, migratedCount: result.migratedCount };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

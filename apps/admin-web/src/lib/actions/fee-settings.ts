@@ -5,6 +5,7 @@ import { auth } from "@schoolos/auth";
 import { prisma, FeeFrequency } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateCache, invalidateFeesCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getFinanceSession() {
   const session = await auth();
@@ -84,7 +85,7 @@ export async function createAcademicSession(data: {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -121,7 +122,7 @@ export async function createFeeComponent(data: {
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -167,7 +168,7 @@ export async function createFeeStructure(data: {
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -215,7 +216,7 @@ export async function assignFeeStructureToClass(
     revalidatePath("/classes");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -282,7 +283,7 @@ export async function setStudentFeeOverride(
     revalidatePath(`/students/${studentId}`);
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -349,7 +350,7 @@ export async function updateAcademicSession(
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -389,7 +390,7 @@ export async function updateFeeComponent(
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -445,7 +446,7 @@ export async function updateFeeStructure(
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -531,7 +532,7 @@ export async function saveLateFeeSettings(data: {
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -555,7 +556,7 @@ export async function saveFeeAutomationSettings(data: {
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -594,6 +595,6 @@ export async function saveFeeCollectionPolicy(data: {
     revalidatePath("/fees");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

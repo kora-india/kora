@@ -5,6 +5,7 @@ import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const UpdateSchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -49,6 +50,6 @@ export async function updateSchoolProfile(data: unknown) {
     revalidatePath("/dashboard");
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

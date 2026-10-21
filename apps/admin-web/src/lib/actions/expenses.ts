@@ -5,6 +5,7 @@ import { prisma, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache, invalidateLedgerCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const ExpenseCategorySchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -17,7 +18,8 @@ const ExpenseSchema = z.object({
   date: z.string().min(1, "Date is required"),
   title: z.string().min(2, "Title is required"),
   description: z.string().optional(),
-  paymentMethod: z.enum(["CASH", "ONLINE", "CHEQUE", "UPI"]),
+  // U13: every method the database accepts, not just four of them.
+  paymentMethod: z.nativeEnum(PaymentMethod),
   referenceNo: z.string().optional(),
 });
 
@@ -53,7 +55,7 @@ export async function createExpenseCategory(data: unknown) {
   } catch (e: any) {
     if (e.code === "P2002")
       return { error: "Category with this name already exists" };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -91,7 +93,7 @@ export async function createExpense(data: unknown) {
 
     return { success: true, id: expense.id };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -121,6 +123,6 @@ export async function deleteExpense(id: string) {
 
     return { success: true };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

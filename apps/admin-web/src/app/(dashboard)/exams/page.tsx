@@ -18,6 +18,7 @@ export default async function ExamsPage() {
     where: { id: schoolId },
     select: {
       plan: true,
+      gradingSystem: true,
       subscription: { select: { plan: true, status: true } },
     },
   });
@@ -58,5 +59,12 @@ export default async function ExamsPage() {
     }),
   ]);
 
-  return <ExamsContent exams={exams} classes={classes} userRole={user.role} />;
+  return (
+    <ExamsContent
+      exams={exams}
+      classes={classes}
+      userRole={user.role}
+      defaultGradingSystem={school?.gradingSystem ?? null}
+    />
+  );
 }

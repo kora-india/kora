@@ -1,4 +1,5 @@
 import { prisma } from "@schoolos/db";
+import { PLANS } from "@/lib/plans";
 
 export interface PlanLimits {
   maxStudents: number;
@@ -7,33 +8,10 @@ export interface PlanLimits {
   analyticsEnabled: boolean;
 }
 
-// Hardcoded fallbacks — DB PlanLimit rows take precedence when seeded
-const DEFAULT_LIMITS: Record<string, PlanLimits> = {
-  FREE: {
-    maxStudents: 50,
-    maxTeachers: 5,
-    maxClasses: 5,
-    analyticsEnabled: false,
-  },
-  BASIC: {
-    maxStudents: 200,
-    maxTeachers: 20,
-    maxClasses: 20,
-    analyticsEnabled: false,
-  },
-  PRO: {
-    maxStudents: 1000,
-    maxTeachers: 100,
-    maxClasses: 60,
-    analyticsEnabled: true,
-  },
-  ENTERPRISE: {
-    maxStudents: Infinity,
-    maxTeachers: Infinity,
-    maxClasses: Infinity,
-    analyticsEnabled: true,
-  },
-};
+// From the plan catalogue (U1); DB PlanLimit rows take precedence when seeded
+const DEFAULT_LIMITS: Record<string, PlanLimits> = Object.fromEntries(
+  Object.values(PLANS).map((p) => [p.id, { ...p.limits }]),
+);
 
 let cachedLimitsMap: Map<string, PlanLimits> | null = null;
 let cachedLimitsAt = 0;

@@ -1,13 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import {
-  createExam,
-  getExams,
-  addExamSubject,
-  saveBatchMarks,
-  getStudentReportCard,
-  getSectionReportCards,
-  deleteExam,
-} from "../exams";
+import * as examActions from "../exams";
+import { getExams } from "../exams";
+import { unwrapAction } from "../../action-result";
+
+// U4: the actions return { data } or { error }; unwrap so failures throw
+// (with their message) as they do in the components' try/catch.
+const createExam = (...a: Parameters<typeof examActions.createExam>) =>
+  examActions.createExam(...a).then(unwrapAction);
+const addExamSubject = (...a: Parameters<typeof examActions.addExamSubject>) =>
+  examActions.addExamSubject(...a).then(unwrapAction);
+const saveBatchMarks = (...a: Parameters<typeof examActions.saveBatchMarks>) =>
+  examActions.saveBatchMarks(...a).then(unwrapAction);
+const getStudentReportCard = (
+  ...a: Parameters<typeof examActions.getStudentReportCard>
+) => examActions.getStudentReportCard(...a).then(unwrapAction);
+const getSectionReportCards = (
+  ...a: Parameters<typeof examActions.getSectionReportCards>
+) => examActions.getSectionReportCards(...a).then(unwrapAction);
+const deleteExam = (...a: Parameters<typeof examActions.deleteExam>) =>
+  examActions.deleteExam(...a).then(unwrapAction);
 import {
   calculateSubjectGrade,
   calculateReportCardSummary,

@@ -15,6 +15,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { formatCurrency } from "@schoolos/utils";
+import { PLANS, formatLimit } from "@/lib/plans";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { updateSchoolPlan } from "@/lib/actions/schools";
 import { toast } from "sonner";
@@ -37,61 +38,46 @@ interface SubscriptionsContentProps {
   planCounts: Record<string, number>;
 }
 
+const limitLabels = (id: keyof typeof PLANS) => {
+  const { maxStudents, maxTeachers, maxClasses } = PLANS[id].limits;
+  return {
+    maxStudents: `${formatLimit(maxStudents)} Students`,
+    maxTeachers: `${formatLimit(maxTeachers)} Teachers`,
+    maxClasses: `${formatLimit(maxClasses)} Classes`,
+  };
+};
+
 const PLANS_CONFIG = [
   {
     id: "FREE",
     name: "Free Tier",
-    price: 0,
+    price: PLANS.FREE.monthlyPriceInr,
     period: "/mo",
     description: "Ideal for small coaching centers and trial setups",
-    maxStudents: "50 Students",
-    maxTeachers: "5 Teachers",
-    maxClasses: "5 Classes",
-    features: [
-      "Student & Teacher Directory",
-      "Daily Attendance",
-      "Standard Fee Receipts",
-      "Notice Board",
-      "Community Support",
-    ],
+    ...limitLabels("FREE"),
+    features: PLANS.FREE.features,
     highlight: false,
     badgeColor: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
   },
   {
     id: "BASIC",
     name: "Basic Plan",
-    price: 999,
+    price: PLANS.BASIC.monthlyPriceInr,
     period: "/mo",
     description: "Designed for growing primary & middle schools",
-    maxStudents: "200 Students",
-    maxTeachers: "20 Teachers",
-    maxClasses: "20 Classes",
-    features: [
-      "Everything in Free",
-      "Class-wise Fee Structures",
-      "Automated Fee Receipts & Dues",
-      "Homework & Assignments",
-      "Email Support (24h SLA)",
-    ],
+    ...limitLabels("BASIC"),
+    features: PLANS.BASIC.features,
     highlight: false,
     badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
   },
   {
     id: "PRO",
     name: "Pro Plan",
-    price: 2499,
+    price: PLANS.PRO.monthlyPriceInr,
     period: "/mo",
     description: "Full-featured ERP suite for established schools",
-    maxStudents: "1,000 Students",
-    maxTeachers: "100 Teachers",
-    maxClasses: "60 Classes",
-    features: [
-      "Everything in Basic",
-      "Advanced Analytics & Trends",
-      "Expense & Cash Flow Tracking",
-      "Online Payment Gateway Integration",
-      "Priority Chat & Phone Support",
-    ],
+    ...limitLabels("PRO"),
+    features: PLANS.PRO.features,
     highlight: true,
     badgeColor:
       "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
@@ -99,19 +85,11 @@ const PLANS_CONFIG = [
   {
     id: "ENTERPRISE",
     name: "Enterprise",
-    price: 4999,
+    price: PLANS.ENTERPRISE.monthlyPriceInr,
     period: "/mo",
     description: "Custom branding and scale for large school networks",
-    maxStudents: "Unlimited Students",
-    maxTeachers: "Unlimited Teachers",
-    maxClasses: "Unlimited Classes",
-    features: [
-      "Everything in Pro",
-      "Multi-Branch Administration",
-      "Custom Subdomain & White-Labeling",
-      "Dedicated Database Isolation",
-      "Dedicated Account Manager (99.9% SLA)",
-    ],
+    ...limitLabels("ENTERPRISE"),
+    features: PLANS.ENTERPRISE.features,
     highlight: false,
     badgeColor:
       "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",

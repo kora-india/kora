@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -8,6 +8,10 @@ import { GraduationCap, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  // A signed-out phone shouldn't keep cached class lists (U8).
+  useEffect(() => {
+    navigator.serviceWorker?.controller?.postMessage("clear-pages");
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);

@@ -18,7 +18,10 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
+  // sw.js and manifest.json must load before sign-in (U8).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.png$).*)",
+  ],
   // Next.js 15.2+ supports Node.js middleware runtime (experimental).
   runtime: "nodejs",
 };

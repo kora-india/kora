@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { attendanceDateError, parseAttendanceDate } from "@schoolos/utils";
 import { z } from "zod";
+import { canTakeSection, getTeacherSections } from "@/lib/teacher-sections";
 
 const Schema = z.object({
-  classId: z.string(),
-  sectionId: z.string(),
-  date: z.string(),
-  records: z.array(
-    z.object({
-      studentId: z.string(),
-      status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
-    }),
-  ),
+  classId: z.string().min(1),
+  sectionId: z.string().min(1),
+  date: z.string().min(1),
+  records: z
+    .array(
+      z.object({
+        studentId: z.string().min(1),
+        status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
+      }),
+    )
+    .min(1, "No students to save"),
 });
 
 export async function POST(req: NextRequest) {
@@ -26,20 +30,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const schoolId = user.schoolId;
-  const data = Schema.parse(await req.json());
+
+  // U8: bad input is the caller's mistake (400), not a server error.
+  const parsed = Schema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message ?? "Invalid attendance" },
+      { status: 400 },
+    );
+  }
+  const data = parsed.data;
+
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { timezone: true },
+  });
+  // U13: a real day, not after today in the school's time zone.
+  const dateError = attendanceDateError(data.date, school?.timezone);
+  if (dateError) {
+    return NextResponse.json({ error: dateError }, { status: 400 });
+  }
+  // Stored at UTC midnight of the calendar day, like the admin app.
+  const date = parseAttendanceDate(data.date)!;
 
   // Verify class and section belong to school
-  const cls = await prisma.class.findFirst({
-    where: { id: data.classId, schoolId },
-  });
-  if (!cls)
-    return NextResponse.json(
-      { error: "Class not found in your school" },
-      { status: 404 },
-    );
-
   const section = await prisma.section.findFirst({
     where: { id: data.sectionId, classId: data.classId, schoolId },
+    select: { id: true },
   });
   if (!section)
     return NextResponse.json(
@@ -48,32 +65,15 @@ export async function POST(req: NextRequest) {
     );
 
   if (user.role === "TEACHER") {
-    const teacher = await prisma.teacher.findFirst({
-      where: { userId: user.id, schoolId },
-      include: {
-        assignedSections: true,
-        classTeacherOf: { select: { id: true } },
-      },
-    });
+    const { teacher, sections } = await getTeacherSections(user.id, schoolId);
     if (!teacher)
       return NextResponse.json(
         { error: "Teacher record not found" },
         { status: 403 },
       );
-    const isDirectMatch =
-      teacher.assignedClassId === data.classId &&
-      (!teacher.assignedSectionId ||
-        teacher.assignedSectionId === data.sectionId);
-    const isSectionMatch = teacher.assignedSections?.some(
-      (as) => as.classId === data.classId && as.sectionId === data.sectionId,
-    );
-    const isClassTeacher = teacher.classTeacherOf?.some(
-      (ct) => ct.id === data.classId,
-    );
-
-    if (!isDirectMatch && !isSectionMatch && !isClassTeacher) {
+    if (!canTakeSection(sections, data.classId, data.sectionId)) {
       return NextResponse.json(
-        { error: "You can only mark attendance for your assigned class" },
+        { error: "You can only mark attendance for your own sections" },
         { status: 403 },
       );
     }
@@ -81,16 +81,15 @@ export async function POST(req: NextRequest) {
 
   // Verify all students belong to this school, class, and section
   const studentIds = data.records.map((r) => r.studentId);
-  const validStudents = await prisma.student.findMany({
+  const validStudents = await prisma.student.count({
     where: {
       id: { in: studentIds },
       schoolId,
       classId: data.classId,
       sectionId: data.sectionId,
     },
-    select: { id: true },
   });
-  if (validStudents.length !== studentIds.length) {
+  if (validStudents !== new Set(studentIds).size) {
     return NextResponse.json(
       {
         error:
@@ -100,25 +99,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const date = new Date(data.date);
-  date.setHours(0, 0, 0, 0);
-
   await prisma.$transaction(
     data.records.map((rec) =>
       prisma.attendance.upsert({
         where: { studentId_date: { studentId: rec.studentId, date } },
-        update: { status: rec.status as any, markedById: user.id },
+        update: { status: rec.status, markedById: user.id },
         create: {
           schoolId,
           studentId: rec.studentId,
           classId: data.classId,
           sectionId: data.sectionId,
           date,
-          status: rec.status as any,
+          status: rec.status,
           markedById: user.id,
         },
       }),
     ),
   );
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, saved: data.records.length });
 }

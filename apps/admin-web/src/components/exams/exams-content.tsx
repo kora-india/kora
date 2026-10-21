@@ -25,12 +25,15 @@ interface ExamsContentProps {
   exams: any[];
   classes: any[];
   userRole?: string;
+  /** The school's grading system from setup; new exams start with it. */
+  defaultGradingSystem?: string | null;
 }
 
 export function ExamsContent({
   exams,
   classes,
   userRole,
+  defaultGradingSystem,
 }: Readonly<ExamsContentProps>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useQueryTab<
@@ -289,6 +292,7 @@ export function ExamsContent({
           onClose={() => setIsExamDialogOpen(false)}
           initialData={dialogInitialData}
           classes={classes}
+          defaultGradingSystem={defaultGradingSystem}
           onSuccess={handleRefresh}
         />
 

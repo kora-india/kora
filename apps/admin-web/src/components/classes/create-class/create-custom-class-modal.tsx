@@ -11,7 +11,7 @@ import {
   DISPLAY_ORDER_MAX,
   DISPLAY_ORDER_MIN,
   getCategory,
-  nameKey,
+  classNameKey,
   normalizeName,
   validateClassName,
   type ClassCategoryId,
@@ -64,7 +64,7 @@ export function CreateCustomClassModal({
   const nameError = useMemo(() => {
     const invalid = validateClassName(name);
     if (invalid) return invalid;
-    const clash = knownClasses.find((c) => c.key === nameKey(name));
+    const clash = knownClasses.find((c) => c.key === classNameKey(name));
     if (clash) {
       return clash.existing
         ? `${clash.name} already exists in your school`
@@ -87,7 +87,7 @@ export function CreateCustomClassModal({
 
   const position = useMemo(() => {
     if (orderError) return null;
-    const others = knownClasses.filter((c) => c.key !== nameKey(name));
+    const others = knownClasses.filter((c) => c.key !== classNameKey(name));
     const same = others.find((c) => c.order === orderNum);
     if (same) return `Sorted alongside ${same.name}`;
     const before = others

@@ -15,6 +15,7 @@ import {
   displayOrderForClassName,
   parseImportDate,
 } from "@/lib/student-import-helpers";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const importStudentSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -348,7 +349,7 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
     const message =
       error instanceof ImportAbort
         ? error.message
-        : `Import failed and nothing was saved: ${error?.message ?? "unknown error"}`;
+        : `Import failed and nothing was saved: ${actionErrorMessage(error, "an unexpected error")}`;
     return {
       imported: 0,
       skipped: 0,

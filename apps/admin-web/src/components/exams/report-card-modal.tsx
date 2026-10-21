@@ -174,9 +174,9 @@ export function ReportCardModal({
                     Attendance
                   </span>
                   <p className="font-medium text-foreground">
-                    {card.attendance.presentDays} /{" "}
-                    {card.attendance.totalWorkingDays} (
-                    {card.attendance.percentage}%)
+                    {card.attendance.percentage === null
+                      ? "Not recorded"
+                      : `${card.attendance.presentDays} / ${card.attendance.totalWorkingDays} (${card.attendance.percentage}%)`}
                   </p>
                 </div>
                 <div>

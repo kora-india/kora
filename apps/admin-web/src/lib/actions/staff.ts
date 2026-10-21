@@ -5,6 +5,7 @@ import { requireActiveSchoolSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const StaffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -74,7 +75,7 @@ export async function createStaff(data: unknown) {
 
     return { success: true, id: staff.id };
   } catch (e: any) {
-    return { error: e.message || "Failed to create staff member" };
+    return { error: actionErrorMessage(e, "Failed to create staff member") };
   }
 }
 
@@ -121,7 +122,7 @@ export async function updateStaff(id: string, data: unknown) {
 
     return { success: true, id: staff.id };
   } catch (e: any) {
-    return { error: e.message || "Failed to update staff member" };
+    return { error: actionErrorMessage(e, "Failed to update staff member") };
   }
 }
 
@@ -145,7 +146,7 @@ export async function deleteStaff(id: string) {
 
     return { success: true };
   } catch (e: any) {
-    return { error: e.message || "Failed to remove staff member" };
+    return { error: actionErrorMessage(e, "Failed to remove staff member") };
   }
 }
 

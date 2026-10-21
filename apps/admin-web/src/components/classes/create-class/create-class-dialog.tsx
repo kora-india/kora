@@ -16,7 +16,7 @@ import { createClass } from "@/lib/actions/classes";
 import {
   STANDARD_CLASSES,
   categoryForOrder,
-  nameKey,
+  classNameKey,
   validateSectionName,
 } from "@/lib/class-catalog";
 import { ClassSelector, type ClassOption } from "./class-selector";
@@ -111,11 +111,11 @@ export function CreateClassDialog({
   }, [open]);
 
   const options = useMemo<ClassOption[]>(() => {
-    const existing = new Map(classes.map((c) => [nameKey(c.name), c]));
+    const existing = new Map(classes.map((c) => [classNameKey(c.name), c]));
     const byKey = new Map<string, ClassOption>();
 
     for (const s of STANDARD_CLASSES) {
-      const key = nameKey(s.name);
+      const key = classNameKey(s.name);
       byKey.set(key, {
         key,
         name: s.name,
@@ -127,7 +127,7 @@ export function CreateClassDialog({
     }
     // Classes the school already has that aren't in the standard catalog.
     for (const c of classes) {
-      const key = nameKey(c.name);
+      const key = classNameKey(c.name);
       if (byKey.has(key)) continue;
       byKey.set(key, {
         key,
@@ -139,7 +139,7 @@ export function CreateClassDialog({
       });
     }
     for (const c of customClasses) {
-      const key = nameKey(c.name);
+      const key = classNameKey(c.name);
       if (byKey.has(key)) continue;
       byKey.set(key, {
         key,
@@ -162,7 +162,7 @@ export function CreateClassDialog({
 
   const handleCustomCreate = (input: CustomClassInput) => {
     setCustomClasses((prev) => [...prev, input]);
-    setSelectedKey(nameKey(input.name));
+    setSelectedKey(classNameKey(input.name));
     setCustomOpen(false);
     toast.success(`${input.name} added to the class list`);
   };
@@ -193,7 +193,7 @@ export function CreateClassDialog({
           : `${selected.name} created`,
       );
       setCustomClasses((prev) =>
-        prev.filter((c) => nameKey(c.name) !== selected.key),
+        prev.filter((c) => classNameKey(c.name) !== selected.key),
       );
       onCreated();
     } catch (err: any) {

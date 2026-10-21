@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient, FeeFrequency, Gender } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
+import { standardClassOrder } from "@/lib/class-catalog";
 
 const logger = createLogger("school-onboarding");
 
@@ -24,7 +25,7 @@ export async function seedInitialSchoolData(
     schoolId,
     subdomain,
     schoolName,
-    classes = ["Class 1"],
+    classes = ["Grade 1"],
     academicSession,
   }: SeedParams,
 ) {
@@ -52,7 +53,7 @@ export async function seedInitialSchoolData(
   }
 
   // Ensure we have at least one class
-  const classesToCreate = classes.length > 0 ? classes : ["Class 1"];
+  const classesToCreate = classes.length > 0 ? classes : ["Grade 1"];
 
   // Batch 1 (Parallel): Academic Session and 6 Fee Components
   const [
@@ -148,7 +149,9 @@ export async function seedInitialSchoolData(
         data: {
           schoolId,
           name: className,
-          grade: index + 1, // Simple grade assignment
+          // U6: the class catalogue's order (Nursery -2 … Grade N = N), so
+          // classes added later sort among these.
+          grade: standardClassOrder(className) ?? 14 + index,
           sections: {
             create: {
               schoolId,
@@ -202,4 +205,15 @@ export async function seedInitialSchoolData(
     classes: createdClasses,
     feeStructure,
   };
+}
+
+/**
+ * Starter data for a new school, all or nothing (U6): a failure leaves no
+ * half-made session or classes behind, so it can simply be run again.
+ */
+export function seedStarterData(prisma: PrismaClient, params: SeedParams) {
+  return prisma.$transaction((tx) => seedInitialSchoolData(tx, params), {
+    maxWait: 10000,
+    timeout: 30000,
+  });
 }

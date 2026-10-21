@@ -2,12 +2,32 @@ import nodemailer from "nodemailer";
 import { logger } from "@/lib/logger";
 
 let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+let warnedLegacyPassword = false;
+
+/**
+ * The one mailer for every email (U5): OTPs, password resets and salary
+ * slips. The password is SMTP_PASSWORD; SMTP_PASS, which the OTP route and CI
+ * used to read, still works but logs a warning.
+ */
+function smtpPassword() {
+  const { SMTP_PASSWORD, SMTP_PASS } = process.env;
+  if (!SMTP_PASSWORD && SMTP_PASS && !warnedLegacyPassword) {
+    warnedLegacyPassword = true;
+    logger.warn("SMTP_PASS is deprecated; rename it to SMTP_PASSWORD");
+  }
+  return SMTP_PASSWORD || SMTP_PASS;
+}
+
+export function isMailConfigured() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER } = process.env;
+  return Boolean(SMTP_HOST && SMTP_PORT && SMTP_USER && smtpPassword());
+}
 
 function getTransporter() {
   if (transporter) return transporter;
 
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD } = process.env;
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASSWORD) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER } = process.env;
+  if (!isMailConfigured()) {
     throw new Error(
       "SMTP is not configured — set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD",
     );
@@ -17,7 +37,7 @@ function getTransporter() {
     host: SMTP_HOST,
     port: Number(SMTP_PORT),
     secure: Number(SMTP_PORT) === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+    auth: { user: SMTP_USER, pass: smtpPassword() },
   });
   return transporter;
 }

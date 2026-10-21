@@ -38,6 +38,7 @@ const StudentSchema = z.object({
 });
 
 import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
   return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
@@ -138,7 +139,7 @@ export async function searchStudents(query: string = "", limit: number = 25) {
 
     return { success: true, students };
   } catch (err: any) {
-    return { error: err.message || "Failed to search students" };
+    return { error: actionErrorMessage(err, "Failed to search students") };
   }
 }
 
@@ -238,7 +239,7 @@ export async function createStudent(data: unknown) {
   } catch (e: any) {
     const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
     if (duplicate) return { error: duplicate };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -306,7 +307,7 @@ export async function updateStudent(id: string, data: unknown) {
   } catch (e: any) {
     const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
     if (duplicate) return { error: duplicate };
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -383,7 +384,7 @@ export async function deleteStudent(
     revalidatePath("/analytics");
     return { success: true, waivedCount };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -582,6 +583,6 @@ export async function getStudentDetails(id: string) {
 
     return { success: true, student };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

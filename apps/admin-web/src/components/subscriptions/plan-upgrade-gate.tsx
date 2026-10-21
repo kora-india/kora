@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Card, Tag, Button } from "antd";
+import { PLANS, formatPlanPrice } from "@/lib/plans";
 import {
   Sparkles,
   ArrowRight,
@@ -24,12 +25,6 @@ export function PlanUpgradeGate({
   requiredPlan = "PRO",
   highlights,
 }: PlanUpgradeGateProps) {
-  const priceMap: Record<string, string> = {
-    BASIC: "₹999 / month",
-    PRO: "₹2,499 / month",
-    ENTERPRISE: "₹4,999 / month",
-  };
-
   return (
     <div className="p-6 md:p-12 max-w-4xl mx-auto">
       <Card className="rounded-3xl border shadow-lg overflow-hidden bg-gradient-to-b from-card via-card to-violet-50/30 dark:to-violet-950/20">
@@ -75,11 +70,11 @@ export function PlanUpgradeGate({
             <div className="text-left sm:text-right">
               <p className="text-xs text-muted-foreground">Starting from</p>
               <p className="text-xl font-bold text-foreground">
-                {priceMap[requiredPlan]}
+                {formatPlanPrice(PLANS[requiredPlan])} / month
               </p>
             </div>
 
-            <Link href="/subscriptions">
+            <Link href={`/billing?plan=${requiredPlan}`}>
               <Button
                 type="primary"
                 size="large"
@@ -94,7 +89,7 @@ export function PlanUpgradeGate({
 
           <p className="text-[11px] text-muted-foreground mt-4 flex items-center justify-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
-            Instant automated activation · Cancel or switch plans anytime
+            Activates as soon as you pay · Billed monthly, no auto-renewal
           </p>
         </div>
       </Card>

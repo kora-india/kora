@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { calculateReportCardSummary, calculateSubjectGrade } from "../grading";
 import { invalidateStudentsCache } from "@/lib/redis";
 import { compareRollNumbers } from "@schoolos/types";
+import { toActionResult } from "@/lib/action-errors";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -112,7 +113,12 @@ export async function getExamById(examId: string) {
   return exam;
 }
 
-export async function createExam(data: {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function createExam(...args: Parameters<typeof createExamImpl>) {
+  return toActionResult(() => createExamImpl(...args));
+}
+
+async function createExamImpl(data: {
   name: string;
   type?: ExamType;
   academicYear: string;
@@ -178,7 +184,12 @@ export async function createExam(data: {
   return exam;
 }
 
-export async function updateExam(
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function updateExam(...args: Parameters<typeof updateExamImpl>) {
+  return toActionResult(() => updateExamImpl(...args));
+}
+
+async function updateExamImpl(
   examId: string,
   data: {
     name?: string;
@@ -210,7 +221,12 @@ export async function updateExam(
   return exam;
 }
 
-export async function deleteExam(examId: string) {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function deleteExam(...args: Parameters<typeof deleteExamImpl>) {
+  return toActionResult(() => deleteExamImpl(...args));
+}
+
+async function deleteExamImpl(examId: string) {
   const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   await prisma.exam.delete({
@@ -221,7 +237,14 @@ export async function deleteExam(examId: string) {
   return { success: true };
 }
 
-export async function togglePublishExam(examId: string) {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function togglePublishExam(
+  ...args: Parameters<typeof togglePublishExamImpl>
+) {
+  return toActionResult(() => togglePublishExamImpl(...args));
+}
+
+async function togglePublishExamImpl(examId: string) {
   const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   const exam = await prisma.exam.findFirst({
@@ -240,7 +263,14 @@ export async function togglePublishExam(examId: string) {
   return updated;
 }
 
-export async function addExamSubject(data: {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function addExamSubject(
+  ...args: Parameters<typeof addExamSubjectImpl>
+) {
+  return toActionResult(() => addExamSubjectImpl(...args));
+}
+
+async function addExamSubjectImpl(data: {
   examId: string;
   classId: string;
   subjectName: string;
@@ -289,7 +319,14 @@ export async function addExamSubject(data: {
   return subject;
 }
 
-export async function deleteExamSubject(examSubjectId: string) {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function deleteExamSubject(
+  ...args: Parameters<typeof deleteExamSubjectImpl>
+) {
+  return toActionResult(() => deleteExamSubjectImpl(...args));
+}
+
+async function deleteExamSubjectImpl(examSubjectId: string) {
   const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
 
   // Check ownership through exam
@@ -310,7 +347,14 @@ export async function deleteExamSubject(examSubjectId: string) {
   return { success: true };
 }
 
+/** U4: returns { data } or { error }; see lib/action-result. */
 export async function getExamMarksSheet(
+  ...args: Parameters<typeof getExamMarksSheetImpl>
+) {
+  return toActionResult(() => getExamMarksSheetImpl(...args));
+}
+
+async function getExamMarksSheetImpl(
   examSubjectId: string,
   sectionId?: string,
 ) {
@@ -441,7 +485,14 @@ export async function getExamMarksSheet(
  * (the sheet's `loadedAt`) the save is refused if someone else changed any of
  * these students' marks after the sheet was loaded.
  */
+/** U4: returns { data } or { error }; see lib/action-result. */
 export async function saveBatchMarks(
+  ...args: Parameters<typeof saveBatchMarksImpl>
+) {
+  return toActionResult(() => saveBatchMarksImpl(...args));
+}
+
+async function saveBatchMarksImpl(
   examSubjectId: string,
   entries: {
     studentId: string;
@@ -642,7 +693,14 @@ export async function saveBatchMarks(
   return { success: true, savedCount: cleanEntries.length };
 }
 
-export async function getStudentReportCard(examId: string, studentId: string) {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function getStudentReportCard(
+  ...args: Parameters<typeof getStudentReportCardImpl>
+) {
+  return toActionResult(() => getStudentReportCardImpl(...args));
+}
+
+async function getStudentReportCardImpl(examId: string, studentId: string) {
   const { user } = await requireExamAccess();
   const schoolId = user.schoolId;
 
@@ -745,15 +803,10 @@ export async function getStudentReportCard(examId: string, studentId: string) {
     exam.gradingSystem as any,
   );
 
-  // Calculate Attendance Stats for the Academic Term / Exam window
+  // U9: attendance over the session so far, not just the exam week.
+  const range = await reportAttendanceRange(schoolId, exam);
   const attendances = await prisma.attendance.findMany({
-    where: {
-      studentId,
-      date: {
-        gte: exam.startDate,
-        lte: exam.endDate,
-      },
-    },
+    where: { studentId, date: { gte: range.from, lte: range.to } },
     select: { status: true },
   });
 
@@ -765,6 +818,27 @@ export async function getStudentReportCard(examId: string, studentId: string) {
     marksMap,
     attendances,
   });
+}
+
+/**
+ * Days a report card's attendance covers (U9): from the start of the
+ * academic session the exam falls in, up to the end of the exam. Without a
+ * matching session, the exam's own dates.
+ */
+async function reportAttendanceRange(
+  schoolId: string,
+  exam: { startDate: Date; endDate: Date },
+) {
+  const session = await prisma.academicSession.findFirst({
+    where: {
+      schoolId,
+      startDate: { lte: exam.startDate },
+      endDate: { gte: exam.startDate },
+    },
+    select: { startDate: true },
+    orderBy: { startDate: "desc" },
+  });
+  return { from: session?.startDate ?? exam.startDate, to: exam.endDate };
 }
 
 function buildStudentReportCardPayload({
@@ -836,10 +910,11 @@ function buildStudentReportCardPayload({
       a.status === "PRESENT" || a.status === "LATE" || a.status === "EXCUSED",
   ).length;
 
+  // No attendance taken means unknown, not perfect attendance.
   const attendancePercentage =
     totalWorkingDays > 0
       ? Number(((presentDays / totalWorkingDays) * 100).toFixed(1))
-      : 100;
+      : null;
 
   return {
     school,
@@ -874,7 +949,14 @@ function buildStudentReportCardPayload({
   };
 }
 
-export async function getSectionReportCards(examId: string, sectionId: string) {
+/** U4: returns { data } or { error }; see lib/action-result. */
+export async function getSectionReportCards(
+  ...args: Parameters<typeof getSectionReportCardsImpl>
+) {
+  return toActionResult(() => getSectionReportCardsImpl(...args));
+}
+
+async function getSectionReportCardsImpl(examId: string, sectionId: string) {
   const { user } = await requireExamAccess();
   const schoolId = user.schoolId;
 
@@ -939,16 +1021,15 @@ export async function getSectionReportCards(examId: string, sectionId: string) {
         studentId: { in: studentIds },
       },
     }),
-    prisma.attendance.findMany({
-      where: {
-        studentId: { in: studentIds },
-        date: {
-          gte: exam.startDate,
-          lte: exam.endDate,
+    reportAttendanceRange(schoolId, exam).then((range) =>
+      prisma.attendance.findMany({
+        where: {
+          studentId: { in: studentIds },
+          date: { gte: range.from, lte: range.to },
         },
-      },
-      select: { studentId: true, status: true },
-    }),
+        select: { studentId: true, status: true },
+      }),
+    ),
   ]);
 
   // Group marks by studentId -> (examSubjectId -> mark)

@@ -19,6 +19,7 @@ import {
   serializeSlip,
   type SalarySlipStatus,
 } from "@/lib/payroll";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
   const session = await auth();
@@ -164,7 +165,7 @@ export async function generateSalarySlip(data: unknown) {
     return { error: "Couldn't allocate a slip number. Please try again." };
   } catch (e: any) {
     if (isMissingTable(e)) return { error: SETUP_ERROR };
-    return { error: e.message || "Failed to generate salary slip" };
+    return { error: actionErrorMessage(e, "Failed to generate salary slip") };
   }
 }
 
@@ -260,7 +261,7 @@ export async function processPayout(data: unknown) {
     };
   } catch (e: any) {
     if (isMissingTable(e)) return { error: SETUP_ERROR };
-    return { error: e.message || "Failed to process payout" };
+    return { error: actionErrorMessage(e, "Failed to process payout") };
   }
 }
 
@@ -339,6 +340,6 @@ export async function sendSalarySlip(slipId: string) {
     return { success: true, to: slip.teacher.email };
   } catch (e: any) {
     if (isMissingTable(e)) return { error: SETUP_ERROR };
-    return { error: e.message || "Failed to send salary slip" };
+    return { error: actionErrorMessage(e, "Failed to send salary slip") };
   }
 }

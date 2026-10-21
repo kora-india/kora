@@ -35,6 +35,14 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
+import {
+  PLANS as PLAN_CATALOGUE,
+  PAID_PLAN_IDS,
+  TRIAL_PLAN,
+  formatLimit,
+  formatPlanPrice,
+} from "@/lib/plans";
+import { STANDARD_CLASSES } from "@/lib/class-catalog";
 
 // --- Schema Definitions ---
 const SetupSchema = z.object({
@@ -79,51 +87,18 @@ const SetupSchema = z.object({
 
 type SetupInput = z.infer<typeof SetupSchema>;
 
-const PLANS = [
-  {
-    id: "BASIC",
-    name: "Basic",
-    price: "₹999",
-    description: "Perfect for small schools getting started.",
-    features: [
-      "Up to 500 students",
-      "Student & Staff Management",
-      "Attendance Management",
-      "Fee Management",
-      "Basic Reports & Analytics",
-      "Email Support",
-    ],
-  },
-  {
-    id: "PRO",
-    name: "Pro",
-    price: "₹1,999",
-    description: "Ideal for growing schools with advanced needs.",
-    features: [
-      "Up to 2,000 students",
-      "Everything in Basic",
-      "Advanced Analytics & Reports",
-      "Exam & Result Management",
-      "Transport Management",
-      "Priority Support",
-    ],
-    popular: true,
-  },
-  {
-    id: "ENTERPRISE",
-    name: "Enterprise",
-    price: "₹4,999",
-    description: "For large schools with custom requirements.",
-    features: [
-      "Unlimited students",
-      "Everything in Pro",
-      "Custom Branding",
-      "Dedicated Account Manager",
-      "24/7 Priority Support",
-      "Custom Integrations",
-    ],
-  },
-];
+// U1: names, prices and features from the plan catalogue.
+const PLANS = PAID_PLAN_IDS.map((id) => {
+  const plan = PLAN_CATALOGUE[id];
+  return {
+    id,
+    name: plan.name,
+    price: formatPlanPrice(plan),
+    description: plan.tagline,
+    features: plan.features,
+    popular: plan.popular,
+  };
+});
 
 const SCHOOL_TYPES = [
   { id: "School", icon: School },
@@ -134,25 +109,36 @@ const SCHOOL_TYPES = [
 ];
 
 const BOARDS = ["CBSE", "ICSE", "State Board", "IB", "Cambridge", "Other"];
-const CLASSES = [
-  "Nursery",
-  "LKG",
-  "UKG",
-  "Class 1",
-  "Class 2",
-  "Class 3",
-  "Class 4",
-  "Class 5",
-  "Class 6",
-  "Class 7",
-  "Class 8",
-  "Class 9",
-  "Class 10",
-  "Class 11",
-  "Class 12",
-  "Class 13",
-  "Class 14",
+// U6: the class catalogue's names ("Grade 1", not "Class 1"), so classes
+// added later from the Classes page are recognised as the same ones.
+const CLASSES = STANDARD_CLASSES.map((c) => c.name);
+
+const GRADING_OPTIONS = [
+  { value: "CBSE_9_POINT", label: "CBSE 9-Point (A1 to E)" },
+  { value: "PERCENTAGE_LETTER", label: "Letter Scale (A+ to F)" },
+  { value: "MARKS_ONLY", label: "Marks Only (Pass/Fail)" },
 ];
+
+/** The browser's IANA time zone ("Asia/Kolkata"), the school's default. */
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
+/**
+ * U3: a payment made during setup is kept in this browser until the school
+ * exists, so a failed creation is retried with it instead of a new charge.
+ */
+interface SavedPayment {
+  plan: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+const savedPaymentKey = (userId: string) => `kora:setup-payment:${userId}`;
 const WORKING_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const STEPS = [
@@ -178,8 +164,8 @@ const slideVariants = {
 };
 
 const PROVISIONING_MESSAGES = [
-  "Validating payment details...",
-  "Provisioning isolated database...",
+  "Checking your details...",
+  "Creating your school...",
   "Configuring academic sessions & classes...",
   "Setting up workspace...",
   "Finalizing your dashboard...",
@@ -198,6 +184,9 @@ export default function SetupSchoolPage() {
   const [subdomainStatus, setSubdomainStatus] = useState<
     "idle" | "available" | "taken"
   >("idle");
+  const [savedPayment, setSavedPayment] = useState<SavedPayment | null>(null);
+  const [starterDataError, setStarterDataError] = useState<string | null>(null);
+  const [isRetryingStarterData, setIsRetryingStarterData] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -217,14 +206,51 @@ export default function SetupSchoolPage() {
       schoolType: "School",
       board: "CBSE",
       mediumOfInstruction: "English",
-      timezone: "Asia/Kolkata (IST)",
+      timezone: browserTimeZone(),
       academicSession: "2026 - 2027",
       classes: [],
       workingDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       schoolShift: "SINGLE",
-      gradingSystem: "Percentage (0 - 100)",
+      gradingSystem: "CBSE_9_POINT",
     },
   });
+
+  // U6: the session may load after the form; fill the email once it does.
+  const sessionEmail = session?.user?.email;
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (sessionEmail && !getValues("email")) {
+      setValue("email", sessionEmail);
+    }
+  }, [sessionEmail, getValues, setValue]);
+
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const raw = localStorage.getItem(savedPaymentKey(userId));
+      if (raw) {
+        const payment = JSON.parse(raw) as SavedPayment;
+        setSavedPayment(payment);
+        setSelectedPlan(payment.plan);
+      }
+    } catch {
+      // Unreadable storage: the payment is still recorded on the server.
+    }
+  }, [userId]);
+
+  const rememberPayment = (payment: SavedPayment | null) => {
+    setSavedPayment(payment);
+    if (!userId) return;
+    try {
+      if (payment) {
+        localStorage.setItem(savedPaymentKey(userId), JSON.stringify(payment));
+      } else {
+        localStorage.removeItem(savedPaymentKey(userId));
+      }
+    } catch {
+      // Storage blocked: retrying still works until the page is closed.
+    }
+  };
 
   const logoUrl = watch("logoUrl");
   const selectedClasses = watch("classes") || [];
@@ -360,16 +386,75 @@ export default function SetupSchoolPage() {
     }
   };
 
+  /** Creates the school; `extra` carries the payment or the trial flag. */
+  const createSchool = async (extra: Record<string, unknown>) => {
+    setIsProvisioning(true);
+    try {
+      const res = await fetch("/api/school/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...getValues(), ...extra }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === "SUBDOMAIN_TAKEN") {
+          setSubdomainStatus("taken");
+          setError("subdomain", {
+            type: "manual",
+            message: "This subdomain is taken. Choose another one.",
+          });
+          setStep([1, -1]);
+        }
+        throw new Error(data.error || "We couldn't create your school.");
+      }
+      rememberPayment(null);
+      await update({ schoolId: data.schoolId });
+      if (data.starterDataError) {
+        // U6: say so and offer a retry instead of opening an empty school.
+        setStarterDataError(data.starterDataError);
+        setIsProvisioning(false);
+        return;
+      }
+      toast.success("School created!");
+      window.location.href = "/dashboard"; // Hard reload to guarantee cookie detection
+    } catch (err: any) {
+      toast.error(err.message);
+      setIsSubmitting(false);
+      setIsProvisioning(false);
+    }
+  };
+
+  const onStartTrial = async () => {
+    if (step !== 4 || isSubmitting) return;
+    setIsSubmitting(true);
+    await createSchool({ plan: TRIAL_PLAN, trial: true });
+  };
+
   const onSubmit = async () => {
     if (step !== 4) return;
     setIsSubmitting(true);
+
+    // U3: already paid; finish with that payment rather than a new checkout.
+    if (savedPayment) {
+      await createSchool({ ...savedPayment });
+      return;
+    }
+
     try {
       const orderRes = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan }),
+        body: JSON.stringify({
+          plan: selectedPlan,
+          subdomain: getValues("subdomain"),
+        }),
       });
       const orderData = await orderRes.json();
+      if (orderRes.status === 409) {
+        setSubdomainStatus("taken");
+        setError("subdomain", { type: "manual", message: orderData.error });
+        setStep([1, -1]);
+      }
       if (!orderRes.ok) throw new Error(orderData.error || "Failed");
 
       const options = {
@@ -380,30 +465,15 @@ export default function SetupSchoolPage() {
         description: `${selectedPlan} Plan`,
         order_id: orderData.orderId,
         handler: async function (response: any) {
-          try {
-            setIsProvisioning(true); // Overtake the screen
-            const formData = getValues();
-            const verifyRes = await fetch("/api/school/create", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...formData,
-                plan: selectedPlan,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok) throw new Error(verifyData.error || "Failed");
-            toast.success("School created!");
-            await update({ schoolId: verifyData.schoolId });
-            window.location.href = "/dashboard"; // Hard reload to guarantee cookie detection
-          } catch (err: any) {
-            toast.error(err.message);
-            setIsSubmitting(false);
-            setIsProvisioning(false);
-          }
+          const payment: SavedPayment = {
+            plan: selectedPlan,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+          };
+          // Kept before anything can fail, so a retry reuses it.
+          rememberPayment(payment);
+          await createSchool({ ...payment });
         },
         prefill: {
           name: session?.user?.name || "",
@@ -418,6 +488,27 @@ export default function SetupSchoolPage() {
     } catch (error: any) {
       toast.error(error.message);
       setIsSubmitting(false);
+    }
+  };
+
+  const retryStarterData = async () => {
+    setIsRetryingStarterData(true);
+    try {
+      const res = await fetch("/api/school/starter-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classes: getValues("classes"),
+          academicSession: getValues("academicSession"),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "That didn't work either.");
+      toast.success("Classes and session added");
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      toast.error(err.message);
+      setIsRetryingStarterData(false);
     }
   };
 
@@ -444,6 +535,37 @@ export default function SetupSchoolPage() {
 
   return (
     <>
+      {starterDataError && (
+        <div className="fixed inset-0 z-[110] bg-[#0a0a0a] flex items-center justify-center px-6 font-sans text-white">
+          <div className="max-w-md w-full text-center space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center mx-auto">
+              <CalendarDays className="w-7 h-7" />
+            </div>
+            <h2 className="text-2xl font-black">Almost there</h2>
+            <p className="text-sm text-zinc-400">
+              {starterDataError} You can try again now, or add them yourself
+              from Classes and Settings.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={retryStarterData}
+                disabled={isRetryingStarterData}
+                className="px-6 py-3 rounded-2xl bg-violet-600 hover:bg-violet-500 font-bold text-sm disabled:opacity-50"
+              >
+                {isRetryingStarterData ? "Adding…" : "Try again"}
+              </button>
+              <button
+                type="button"
+                onClick={() => (window.location.href = "/dashboard")}
+                className="px-6 py-3 rounded-2xl border border-white/10 hover:bg-white/5 font-bold text-sm"
+              >
+                Continue to dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {isProvisioning && (
           <motion.div
@@ -915,6 +1037,25 @@ export default function SetupSchoolPage() {
                             ))}
                           </select>
                         </div>
+                        <div>
+                          <label className="text-sm font-bold text-zinc-300 mb-2 block">
+                            Grading System
+                          </label>
+                          <select
+                            {...register("gradingSystem")}
+                            className="w-full h-14 px-5 rounded-2xl border border-white/10 bg-[#121214] focus:outline-none focus:border-violet-500 font-medium text-white appearance-none"
+                          >
+                            {GRADING_OPTIONS.map((g) => (
+                              <option key={g.value} value={g.value}>
+                                {g.label}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-zinc-500 mt-2">
+                            New exams start with this; you can change it per
+                            exam.
+                          </p>
+                        </div>
                       </div>
 
                       <div>
@@ -1029,12 +1170,59 @@ export default function SetupSchoolPage() {
                   {/* --- STEP 4 --- */}
                   {step === 4 && (
                     <div className="space-y-8">
+                      {savedPayment ? (
+                        <div className="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-6">
+                          <h3 className="font-black text-xl text-white">
+                            We received your payment
+                          </h3>
+                          <p className="text-sm text-zinc-300 mt-1">
+                            Your{" "}
+                            {PLAN_CATALOGUE[
+                              savedPayment.plan as keyof typeof PLAN_CATALOGUE
+                            ]?.name ?? savedPayment.plan}{" "}
+                            plan is paid. Finish setup to create your school;
+                            you won&apos;t be charged again.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="rounded-3xl border border-violet-500/30 bg-violet-500/10 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div>
+                            <h3 className="font-black text-xl text-white">
+                              Try Kora free for 14 days
+                            </h3>
+                            <p className="text-sm text-zinc-300 mt-1">
+                              Every feature, up to{" "}
+                              {formatLimit(
+                                PLAN_CATALOGUE[TRIAL_PLAN].limits.maxStudents,
+                              )}{" "}
+                              students. No payment now: choose a plan when the
+                              trial ends.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={onStartTrial}
+                            disabled={isSubmitting}
+                            className="shrink-0 px-8 py-4 rounded-2xl bg-white text-zinc-900 font-bold text-sm hover:bg-zinc-200 transition-colors disabled:opacity-50"
+                          >
+                            Start free trial
+                          </button>
+                        </div>
+                      )}
+                      {!savedPayment && (
+                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+                          Or pay now
+                        </p>
+                      )}
                       <div className="grid md:grid-cols-3 gap-6">
                         {PLANS.map((plan) => (
                           <motion.div
                             whileHover={{ y: -5 }}
                             key={plan.id}
-                            onClick={() => setSelectedPlan(plan.id)}
+                            onClick={() => {
+                              // A saved payment is for one plan only.
+                              if (!savedPayment) setSelectedPlan(plan.id);
+                            }}
                             className={`relative p-8 rounded-3xl border transition-all cursor-pointer bg-white/5 backdrop-blur-sm flex flex-col ${selectedPlan === plan.id ? "border-violet-500 ring-2 ring-violet-500/50 bg-violet-500/10" : "border-white/10 hover:bg-white/10"}`}
                           >
                             {plan.popular && (
@@ -1119,8 +1307,10 @@ export default function SetupSchoolPage() {
                 >
                   {isSubmitting ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : savedPayment ? (
+                    "Finish setup"
                   ) : (
-                    "Complete Setup"
+                    `Pay ${PLANS.find((p) => p.id === selectedPlan)?.price ?? ""} & create school`
                   )}
                 </motion.button>
               )}

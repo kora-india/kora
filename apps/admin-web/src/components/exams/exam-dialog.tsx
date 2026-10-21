@@ -14,12 +14,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Select } from "antd";
+import { unwrapAction } from "@/lib/action-result";
 
 interface ExamDialogProps {
   isOpen: boolean;
   onClose: () => void;
   initialData?: any;
   classes: any[];
+  /** The school's grading system (U6); falls back to CBSE 9-point. */
+  defaultGradingSystem?: string | null;
   onSuccess: () => void;
 }
 
@@ -36,15 +39,20 @@ export function ExamDialog({
   onClose,
   initialData,
   classes,
+  defaultGradingSystem,
   onSuccess,
 }: Readonly<ExamDialogProps>) {
+  const schoolGrading =
+    defaultGradingSystem &&
+    (Object.values(GradingSystem) as string[]).includes(defaultGradingSystem)
+      ? (defaultGradingSystem as GradingSystem)
+      : GradingSystem.CBSE_9_POINT;
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<ExamType>(ExamType.TERM_1);
   const [academicYear, setAcademicYear] = useState("2026-2027");
-  const [gradingSystem, setGradingSystem] = useState<GradingSystem>(
-    GradingSystem.CBSE_9_POINT,
-  );
+  const [gradingSystem, setGradingSystem] =
+    useState<GradingSystem>(schoolGrading);
   const [startDate, setStartDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -64,7 +72,7 @@ export function ExamDialog({
       setName(initialData.name || "");
       setType(initialData.type || ExamType.TERM_1);
       setAcademicYear(initialData.academicYear || "2026-2027");
-      setGradingSystem(initialData.gradingSystem || GradingSystem.CBSE_9_POINT);
+      setGradingSystem(initialData.gradingSystem || schoolGrading);
       setStartDate(
         initialData.startDate
           ? new Date(initialData.startDate).toISOString().split("T")[0]
@@ -89,7 +97,7 @@ export function ExamDialog({
       setName("");
       setType(ExamType.TERM_1);
       setAcademicYear("2026-2027");
-      setGradingSystem(GradingSystem.CBSE_9_POINT);
+      setGradingSystem(schoolGrading);
       setStartDate(new Date().toISOString().split("T")[0]);
       setEndDate(
         new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
@@ -99,7 +107,7 @@ export function ExamDialog({
       setDefaultMaxMarks(100);
       setDefaultPassMarks(33);
     }
-  }, [initialData, classes, isOpen, isEdit]);
+  }, [initialData, classes, isOpen, isEdit, schoolGrading]);
 
   const handleAddSubject = () => {
     if (
@@ -141,14 +149,16 @@ export function ExamDialog({
     setLoading(true);
     try {
       if (isEdit) {
-        await updateExam(initialData.id, {
-          name,
-          type,
-          academicYear,
-          gradingSystem,
-          startDate,
-          endDate,
-        });
+        unwrapAction(
+          await updateExam(initialData.id, {
+            name,
+            type,
+            academicYear,
+            gradingSystem,
+            startDate,
+            endDate,
+          }),
+        );
         toast.success("Exam updated successfully");
       } else {
         // Build initial subjects payload across selected classes
@@ -164,15 +174,17 @@ export function ExamDialog({
           }
         }
 
-        await createExam({
-          name,
-          type,
-          academicYear,
-          gradingSystem,
-          startDate,
-          endDate,
-          subjects: subjectsPayload,
-        });
+        unwrapAction(
+          await createExam({
+            name,
+            type,
+            academicYear,
+            gradingSystem,
+            startDate,
+            endDate,
+            subjects: subjectsPayload,
+          }),
+        );
         toast.success("Exam created with subjects configured");
       }
 

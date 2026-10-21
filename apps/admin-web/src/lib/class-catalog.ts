@@ -136,6 +136,33 @@ export function nameKey(name: string): string {
   return normalizeName(name).toLowerCase();
 }
 
+/**
+ * Duplicate-check key for class names: "Class 5", "Std 5", "Standard 5" and
+ * "Grade 5" are the same class (U6: setup used to create "Class N" while the
+ * catalogue offers "Grade N", so schools ended up with both).
+ */
+export function classNameKey(name: string): string {
+  const key = nameKey(name);
+  const numbered = /^(?:class|grade|std\.?|standard)\s*(\d{1,2})$/.exec(key);
+  return numbered ? `grade ${Number(numbered[1])}` : key;
+}
+
+/** Names that count as the same class as `name` (for database lookups). */
+export function equivalentClassNames(name: string): string[] {
+  const key = classNameKey(name);
+  const numbered = /^grade (\d+)$/.exec(key);
+  if (!numbered) return [normalizeName(name)];
+  const n = numbered[1];
+  return [`Grade ${n}`, `Class ${n}`, `Std ${n}`, `Std. ${n}`, `Standard ${n}`];
+}
+
+/** Catalogue order for a standard class name ("UKG" → 0, "Class 5" → 5). */
+export function standardClassOrder(name: string): number | null {
+  const key = classNameKey(name);
+  const match = STANDARD_CLASSES.find((c) => classNameKey(c.name) === key);
+  return match ? match.order : null;
+}
+
 export function validateClassName(raw: string): string | null {
   const name = normalizeName(raw);
   if (!name) return "Class name is required";

@@ -98,7 +98,8 @@ export function AttendanceContent({
   assignedSectionIds = [],
 }: Readonly<Props>) {
   const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
+  // The local calendar day (toISOString would give yesterday before 05:30 IST).
+  const today = new Date().toLocaleDateString("en-CA");
 
   const [selectedClassId, setSelectedClassId] = useQueryState(
     "classId",
@@ -113,6 +114,8 @@ export function AttendanceContent({
   const [attendance, setAttendance] = useState<
     Record<string, AttendanceStatus>
   >({});
+  // U7: how many students already had attendance saved for the loaded day.
+  const [savedCount, setSavedCount] = useState(0);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -177,29 +180,29 @@ export function AttendanceContent({
       const list: Student[] = data.students ?? [];
       setStudents(list);
 
-      const defaults: Record<string, AttendanceStatus> = {};
-
-      // Default everyone to present
-      list.forEach((s) => {
-        defaults[s.id] = "PRESENT";
-      });
-
-      // Override with existing records from DB if they exist
+      // U7: nobody is marked until someone marks them (an accidental save
+      // used to record absent students as present). Saved records show as
+      // they were saved.
+      const ids = new Set(list.map((s) => s.id));
+      const saved: Record<string, AttendanceStatus> = {};
       if (attendanceRes.success && attendanceRes.records) {
         attendanceRes.records.forEach((record: any) => {
-          if (defaults[record.studentId]) {
-            defaults[record.studentId] = record.status as AttendanceStatus;
+          if (ids.has(record.studentId)) {
+            saved[record.studentId] = record.status as AttendanceStatus;
           }
         });
       }
 
-      setAttendance(defaults);
+      setAttendance(saved);
+      setSavedCount(Object.keys(saved).length);
     } catch {
       toast.error("Failed to load students");
     } finally {
       setLoadingStudents(false);
     }
   };
+
+  const markedCount = students.filter((s) => attendance[s.id]).length;
 
   const markAll = (status: AttendanceStatus) => {
     setAttendance(Object.fromEntries(students.map((s) => [s.id, status])));
@@ -210,10 +213,17 @@ export function AttendanceContent({
       toast.error("Load students first");
       return;
     }
+    const unmarked = students.filter((s) => !attendance[s.id]).length;
+    if (unmarked > 0) {
+      toast.error(
+        `${unmarked} student${unmarked === 1 ? " is" : "s are"} not marked yet`,
+      );
+      return;
+    }
     setSaving(true);
     const records = students.map((s) => ({
       studentId: s.id,
-      status: attendance[s.id] ?? "PRESENT",
+      status: attendance[s.id],
     }));
     const result = await markAttendance({
       classId: selectedClassId,
@@ -227,6 +237,7 @@ export function AttendanceContent({
       return;
     }
     toast.success(`Attendance saved for ${result.count} students`);
+    setSavedCount(students.length);
     router.refresh();
   };
 
@@ -305,6 +316,7 @@ export function AttendanceContent({
                 // now would overwrite this date's attendance (D2).
                 setStudents([]);
                 setAttendance({});
+                setSavedCount(0);
               }}
               className="h-8 px-2 rounded-lg border bg-background text-xs focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -379,16 +391,27 @@ export function AttendanceContent({
                 </button>
               ))}
               <span className="ml-auto text-xs text-muted-foreground">
-                {students.length} students
+                {markedCount}/{students.length} marked
               </span>
             </div>
+            <p
+              className={`px-4 py-2 text-xs border-b ${
+                savedCount > 0
+                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  : "bg-muted/30 text-muted-foreground"
+              }`}
+            >
+              {savedCount > 0
+                ? `Attendance was already saved for ${savedCount} of ${students.length} students on this day. Saving again updates it.`
+                : "Not taken yet for this day. Mark every student, or use Mark all."}
+            </p>
 
             <div
               id="tour-attendance-roster"
               className="divide-y max-h-96 overflow-y-auto"
             >
               {students.map((student) => {
-                const status = attendance[student.id] ?? "PRESENT";
+                const status = attendance[student.id];
                 return (
                   <div
                     key={student.id}
@@ -406,6 +429,7 @@ export function AttendanceContent({
                         <p className="text-xs font-medium">{student.name}</p>
                         <p className="text-[10px] text-muted-foreground">
                           Roll #{student.rollNumber}
+                          {!status && " · not marked"}
                         </p>
                       </div>
                     </div>
@@ -438,12 +462,17 @@ export function AttendanceContent({
               })}
             </div>
 
-            <div className="p-4 border-t flex justify-end">
+            <div className="p-4 border-t flex items-center justify-end gap-3">
+              {markedCount < students.length && (
+                <span className="text-xs text-muted-foreground">
+                  {students.length - markedCount} not marked
+                </span>
+              )}
               <button
                 id="tour-attendance-submit-btn"
                 type="button"
                 onClick={saveAttendance}
-                disabled={saving}
+                disabled={saving || markedCount < students.length}
                 className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
               >
                 {saving ? (

@@ -4,7 +4,9 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { attendanceDateError, parseAttendanceDate } from "@schoolos/utils";
 import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
+import { actionErrorMessage } from "@/lib/action-errors";
 
 const AttendanceRecordSchema = z.object({
   studentId: z.string(),
@@ -39,7 +41,15 @@ export async function markAttendance(data: unknown) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   const { classId, sectionId, date, records } = parsed.data;
-  const attendanceDate = new Date(date);
+
+  // U13: a real day, and not after today where the school is.
+  const school = await prisma.school.findUnique({
+    where: { id: user.schoolId },
+    select: { timezone: true },
+  });
+  const dateError = attendanceDateError(date, school?.timezone);
+  if (dateError) return { error: dateError };
+  const attendanceDate = parseAttendanceDate(date)!;
 
   if (user.role === "TEACHER") {
     const teacher = await prisma.teacher.findFirst({
@@ -133,7 +143,7 @@ export async function markAttendance(data: unknown) {
     revalidatePath("/analytics");
     return { success: true, count: results.length };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }
 
@@ -159,6 +169,6 @@ export async function getAttendanceForClass(
     });
     return { success: true, records };
   } catch (e: any) {
-    return { error: e.message };
+    return { error: actionErrorMessage(e) };
   }
 }

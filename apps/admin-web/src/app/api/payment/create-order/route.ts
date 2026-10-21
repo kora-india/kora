@@ -7,18 +7,22 @@ import { paymentRatelimit, createRateLimitResponse } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
 import Razorpay from "razorpay";
 import { z } from "zod";
+import { planAmountPaise } from "@/lib/plans";
+import { isSubdomainAvailable } from "@/lib/billing";
 
 const paymentLogger = createLogger("payment-orders");
 
 const OrderSchema = z.object({
   plan: z.enum(["BASIC", "PRO", "ENTERPRISE"]),
+  // SETUP pays for a new school; RENEWAL pays another month (or ends a trial).
+  purpose: z.enum(["SETUP", "RENEWAL"]).default("SETUP"),
+  // Setup only: checked again here and held for this user during checkout.
+  subdomain: z
+    .string()
+    .min(3)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
 });
-
-const PLAN_PRICES = {
-  BASIC: 999,
-  PRO: 1999,
-  ENTERPRISE: 4999,
-};
 
 export async function POST(req: Request) {
   try {
@@ -49,13 +53,21 @@ export async function POST(req: Request) {
       );
     }
 
-    if (user.schoolId !== null) {
+    const { plan, purpose, subdomain } = OrderSchema.parse(await req.json());
+
+    if (purpose === "SETUP" && user.schoolId !== null) {
       paymentLogger.warn(
         { userId: user.id, schoolId: user.schoolId },
         "Forbidden: User already belongs to an existing school",
       );
       return NextResponse.json(
         { error: "User already belongs to an existing school" },
+        { status: 400 },
+      );
+    }
+    if (purpose === "RENEWAL" && user.schoolId === null) {
+      return NextResponse.json(
+        { error: "Create your school before renewing a plan" },
         { status: 400 },
       );
     }
@@ -73,8 +85,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
-    const { plan } = OrderSchema.parse(body);
+    // U3: check the subdomain again right before checkout; the order then
+    // holds it for this user so no one can take it while they pay.
+    if (
+      purpose === "SETUP" &&
+      subdomain &&
+      !(await isSubdomainAvailable(subdomain, user.id))
+    ) {
+      return NextResponse.json(
+        { error: "This subdomain was just taken. Choose another one." },
+        { status: 409 },
+      );
+    }
 
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -94,7 +116,7 @@ export async function POST(req: Request) {
       key_secret: keySecret,
     });
 
-    const amountInPaise = PLAN_PRICES[plan] * 100;
+    const amountInPaise = planAmountPaise(plan);
     const receipt = `receipt_order_${Date.now()}`;
 
     const options = {
@@ -114,6 +136,9 @@ export async function POST(req: Request) {
         amount: Number(order.amount),
         currency: order.currency,
         status: "PENDING",
+        purpose,
+        subdomain: purpose === "SETUP" ? (subdomain ?? null) : null,
+        schoolId: purpose === "RENEWAL" ? user.schoolId : null,
       },
     });
 
@@ -121,6 +146,7 @@ export async function POST(req: Request) {
       {
         orderId: order.id,
         plan,
+        purpose,
         amount: order.amount,
         userId: session.user.id,
       },
