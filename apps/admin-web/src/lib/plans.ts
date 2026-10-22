@@ -30,6 +30,7 @@ export interface PlanDefinition {
 }
 
 export const TRIAL_PLAN: PaidPlanId = "PRO";
+export const TRIAL_DURATION_DAYS = 14;
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
   FREE: {

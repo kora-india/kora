@@ -1,4 +1,5 @@
 import { prisma, SubscriptionPlan, SubscriptionStatus } from "@schoolos/db";
+import { TRIAL_DURATION_DAYS } from "@/lib/plans";
 
 export type FeatureKey = "EXAMS" | "TIMETABLE" | "ANALYTICS" | "TRANSPORT";
 
@@ -14,7 +15,7 @@ export interface SubscriptionEvaluation {
 }
 
 export const GRACE_PERIOD_DAYS = 7;
-export const TRIAL_DURATION_DAYS = 14;
+export { TRIAL_DURATION_DAYS };
 
 /**
  * Evaluates the runtime validity, remaining days, and status transitions of a subscription.
