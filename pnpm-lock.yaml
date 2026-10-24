@@ -365,10 +365,16 @@ importers:
       '@schoolos/logger':
         specifier: workspace:*
         version: link:../logger
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       prisma:
         specifier: ^5.13.0
         version: 5.22.0
     devDependencies:
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1

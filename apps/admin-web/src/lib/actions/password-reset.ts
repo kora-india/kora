@@ -65,7 +65,9 @@ export async function requestPasswordReset(data: unknown) {
     where: { email },
   });
 
-  if (!user || !user.isActive) {
+  // The super admin's password comes from SUPER_ADMIN_PASSWORD, so no link
+  // is sent; the reply is the same so the account isn't revealed.
+  if (!user || !user.isActive || user.role === "SUPER_ADMIN") {
     // Return success message silently without sending email to prevent user enumeration
     return {
       success: true,
@@ -124,7 +126,12 @@ export async function resetPassword(data: unknown) {
     },
   });
 
-  if (!user || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
+  if (
+    !user ||
+    user.role === "SUPER_ADMIN" ||
+    !user.resetTokenExpiry ||
+    user.resetTokenExpiry < new Date()
+  ) {
     return {
       error:
         "This reset link is invalid or has expired. Please request a new one.",

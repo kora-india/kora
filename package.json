@@ -21,6 +21,7 @@
     "db:dr:sync": "cd packages/db && pnpm db:dr:sync",
     "db:dr:verify": "cd packages/db && pnpm db:dr:verify",
     "db:dr:dump": "cd packages/db && pnpm db:dr:dump",
+    "db:super-admin": "cd packages/db && pnpm db:super-admin",
     "db:push": "cd packages/db && pnpm prisma db push",
     "desktop:dev": "pnpm --filter @schoolos/desktop dev:app",
     "desktop:build": "pnpm --filter @schoolos/desktop build",

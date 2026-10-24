@@ -16,6 +16,7 @@ import {
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { purgeSchool } from "./purge-school";
+import { makeSoleSuperAdmin, superAdminFromEnv } from "./super-admin";
 
 const prisma = new PrismaClient({
   datasources: {
@@ -27,6 +28,9 @@ const prisma = new PrismaClient({
 
 async function main() {
   console.log("🌱 Starting Minimal Test Seed...");
+
+  // Checked first, so a missing setting stops the seed before it changes anything.
+  const superAdmin = superAdminFromEnv();
 
   // 1. Cleanup old "Delhi Public School" data
   const oldSchools = await prisma.school.findMany({
@@ -62,26 +66,9 @@ async function main() {
 
   // Password for test users
   const testPassword = await bcrypt.hash("test1234", 10);
-  const superAdminPassword = await bcrypt.hash("superadmin123", 10);
 
-  // 1.5 Create/Upsert Super Admin
-  await prisma.user.upsert({
-    where: { email: "superadmin@schoolos.com" },
-    update: {
-      password: superAdminPassword,
-      role: UserRole.SUPER_ADMIN,
-      isActive: true,
-      schoolId: null,
-    },
-    create: {
-      email: "superadmin@schoolos.com",
-      name: "Super Admin",
-      password: superAdminPassword,
-      role: UserRole.SUPER_ADMIN,
-      isActive: true,
-      schoolId: null,
-    },
-  });
+  // 1.5 The env account becomes the only super admin.
+  await makeSoleSuperAdmin(prisma, superAdmin);
 
   // 2. Create Test School
   const school = await prisma.school.create({
@@ -840,10 +827,16 @@ async function main() {
 
   console.log("✅ Minimal Comprehensive Test Seed Complete!");
   console.log("\n📋 Test Credentials:");
+  console.log(
+    `  Super Admin: ${superAdmin.email} (password from SUPER_ADMIN_PASSWORD)`,
+  );
   console.log("  Admin Email: admin@test-dps.com");
   console.log("  Password:    test1234\n");
 }
 
 main()
-  .catch(console.error)
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
   .finally(() => prisma.$disconnect());

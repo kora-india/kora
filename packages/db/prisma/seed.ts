@@ -8,6 +8,7 @@ import {
   NoticeTarget,
 } from "../src/generated";
 import bcrypt from "bcryptjs";
+import { superAdminFromEnv } from "../src/super-admin";
 
 const prisma = new PrismaClient();
 
@@ -15,12 +16,13 @@ async function main() {
   console.log("🌱 Starting seed...");
 
   // ── Super Admin ──────────────────────────────────────────
-  const superAdminPassword = await bcrypt.hash("superadmin123", 12);
+  const superAdminLogin = superAdminFromEnv();
+  const superAdminPassword = await bcrypt.hash(superAdminLogin.password, 12);
   const superAdmin = await prisma.user.upsert({
-    where: { email: "superadmin@schoolos.com" },
+    where: { email: superAdminLogin.email },
     update: {},
     create: {
-      email: "superadmin@schoolos.com",
+      email: superAdminLogin.email,
       name: "Super Admin",
       password: superAdminPassword,
       role: UserRole.SUPER_ADMIN,
@@ -535,7 +537,9 @@ async function main() {
 
   console.log("✅ Seed complete!");
   console.log("\n📋 Demo Credentials:");
-  console.log("  Super Admin:    superadmin@schoolos.com  / superadmin123");
+  console.log(
+    `  Super Admin:    ${superAdminLogin.email} (password from SUPER_ADMIN_PASSWORD)`,
+  );
   console.log("  School Admin:   admin@dps.schoolos.com   / admin123");
   console.log("  Teacher:        priya.nair@dps.schoolos.com / teacher123");
   console.log("  Accountant:     accounts@dps.schoolos.com  / accountant123");

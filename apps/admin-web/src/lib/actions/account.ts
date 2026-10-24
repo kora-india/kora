@@ -18,6 +18,9 @@ const ChangePasswordSchema = z
     path: ["confirmPassword"],
   });
 
+const SUPER_ADMIN_PASSWORD_ERROR =
+  "The super admin's password is set with SUPER_ADMIN_PASSWORD on the server. Change it there and restart the app.";
+
 export async function changePassword(data: unknown) {
   const session = await auth();
   if (!session?.user) return { error: "Unauthorized" };
@@ -27,6 +30,8 @@ export async function changePassword(data: unknown) {
 
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return { error: "User not found" };
+  // Set by SUPER_ADMIN_PASSWORD; a change here would be undone on restart.
+  if (user.role === "SUPER_ADMIN") return { error: SUPER_ADMIN_PASSWORD_ERROR };
 
   const isValid = await bcrypt.compare(
     parsed.data.currentPassword,

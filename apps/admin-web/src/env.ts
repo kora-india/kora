@@ -54,6 +54,12 @@ const FEATURES: Feature[] = [
     effect: "school logos can't be uploaded",
   },
   {
+    name: "Super admin",
+    vars: ["SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD"],
+    effect:
+      "the super admin login isn't created or updated from the environment",
+  },
+  {
     name: "AI timetable (Gemini)",
     vars: ["GEMINI_API_KEY"],
     effect: "timetables are made by Kora's built-in scheduler only",

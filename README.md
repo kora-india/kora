@@ -89,14 +89,18 @@ This starts both apps:
 
 ---
 
-## 🔐 Demo Credentials
+## 🔐 Logging in locally
 
-| Role         | Email                       | Password      |
-| ------------ | --------------------------- | ------------- |
-| Super Admin  | superadmin@schoolos.com     | superadmin123 |
-| School Admin | admin@dps.schoolos.com      | admin123      |
-| Teacher      | priya.nair@dps.schoolos.com | teacher123    |
-| Accountant   | accounts@dps.schoolos.com   | accountant123 |
+There is one super admin, and its login comes from your environment, not
+from code. Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in `.env` (see
+`.env.example`). Every time the app starts it makes that account the only
+super admin, deleting any other, so changing the email or password is: edit
+`.env`, restart. `pnpm db:super-admin` previews what would change, and
+`--apply` does it without a restart. `pnpm db:seed` does the same for a local
+database, and stops with an error if either setting is missing.
+
+The seed also creates a test school you can sign in to as its admin:
+`admin@test-dps.com` / `test1234`. It's for local development only.
 
 ---
 

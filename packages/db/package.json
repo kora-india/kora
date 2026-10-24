@@ -5,7 +5,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./super-admin": "./src/super-admin.ts"
   },
   "scripts": {
     "postinstall": "prisma generate --schema=./prisma/schema.prisma",
@@ -20,14 +21,17 @@
     "db:dr:sync": "tsx src/scripts/backup-sync.ts --sync",
     "db:dr:verify": "tsx src/scripts/backup-sync.ts --verify",
     "db:dr:dump": "tsx src/scripts/backup-sync.ts --dump",
-    "db:disable-onboarding-admins": "tsx src/scripts/disable-onboarding-admins.ts"
+    "db:disable-onboarding-admins": "tsx src/scripts/disable-onboarding-admins.ts",
+    "db:super-admin": "tsx src/scripts/set-super-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.13.0",
+    "bcryptjs": "^2.4.3",
     "@schoolos/logger": "workspace:*",
     "prisma": "^5.13.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "dotenv": "^16.4.5",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"

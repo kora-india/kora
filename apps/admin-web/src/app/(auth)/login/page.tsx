@@ -227,65 +227,6 @@ export default function LoginPage() {
               Create an account
             </Link>
           </div>
-
-          <div className="mt-6 p-4 bg-muted/40 rounded-xl border">
-            <p className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">
-              Try a demo account
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              {[
-                {
-                  label: "Super Admin",
-                  email: "superadmin@schoolos.com",
-                  password: "superadmin123",
-                  color:
-                    "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
-                },
-                {
-                  label: "School Admin",
-                  email: "admin@dps.schoolos.com",
-                  password: "admin123",
-                  color:
-                    "bg-violet-50 hover:bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:hover:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800",
-                },
-                {
-                  label: "Teacher",
-                  email: "priya.nair@dps.schoolos.com",
-                  password: "teacher123",
-                  color:
-                    "bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800",
-                },
-                {
-                  label: "Accountant",
-                  email: "accounts@dps.schoolos.com",
-                  password: "accountant123",
-                  color:
-                    "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
-                },
-              ].map((demo) => (
-                <button
-                  key={demo.label}
-                  type="button"
-                  onClick={async () => {
-                    const result = await signIn("credentials", {
-                      email: demo.email,
-                      password: demo.password,
-                      redirect: false,
-                    });
-                    if (!result?.error) {
-                      toast.success(`Signed in as ${demo.label}`);
-                      router.push("/dashboard");
-                      router.refresh();
-                    }
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${demo.color}`}
-                >
-                  <span>{demo.label}</span>
-                  <span className="opacity-60 font-normal">{demo.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>
