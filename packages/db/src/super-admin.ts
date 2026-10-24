@@ -71,11 +71,10 @@ export interface SuperAdminResult {
  * Refuses an email that belongs to a school's user: making it the super admin
  * would pull that person out of their school.
  */
-async function assertEmailFree(db: Db, email: string) {
-  const user = await db.user.findUnique({
-    where: { email },
-    select: { role: true, school: { select: { name: true } } },
-  });
+function assertNotSchoolUser(
+  email: string,
+  user: { role: string; school: { name: string } | null } | null,
+) {
   if (user && user.role !== UserRole.SUPER_ADMIN) {
     const where = user.school ? ` at ${user.school.name}` : "";
     throw new Error(
@@ -83,7 +82,35 @@ async function assertEmailFree(db: Db, email: string) {
         "Use a different SUPER_ADMIN_EMAIL, or remove that account first.",
     );
   }
-  return Boolean(user);
+}
+
+/** The env account (if any) and every other super admin, read in parallel. */
+async function readSuperAdmins(db: Db, email: string) {
+  const [current, others] = await Promise.all([
+    db.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        role: true,
+        password: true,
+        isActive: true,
+        schoolId: true,
+        school: { select: { name: true } },
+      },
+    }),
+    db.user.findMany({
+      where: { role: UserRole.SUPER_ADMIN, email: { not: email } },
+      select: {
+        id: true,
+        email: true,
+        _count: {
+          select: { notices: true, attendances: true, recordedExpenses: true },
+        },
+      },
+    }),
+  ]);
+  assertNotSchoolUser(email, current);
+  return { current, others };
 }
 
 /** What `makeSoleSuperAdmin` would change, without changing anything. */
@@ -91,19 +118,9 @@ export async function planSoleSuperAdmin(
   db: Db,
   { email }: SuperAdminCredentials,
 ): Promise<SuperAdminPlan> {
-  const exists = await assertEmailFree(db, email);
-  const others = await db.user.findMany({
-    where: { role: UserRole.SUPER_ADMIN, email: { not: email } },
-    select: {
-      id: true,
-      email: true,
-      _count: {
-        select: { notices: true, attendances: true, recordedExpenses: true },
-      },
-    },
-  });
+  const { current, others } = await readSuperAdmins(db, email);
   return {
-    exists,
+    exists: Boolean(current),
     others: others.map((u) => ({
       id: u.id,
       email: u.email,
@@ -114,38 +131,31 @@ export async function planSoleSuperAdmin(
   };
 }
 
-const ADMIN_FIELDS = {
-  id: true,
-  role: true,
-  password: true,
-  isActive: true,
-  schoolId: true,
-} as const;
-
 /**
  * Makes the env account the platform's only super admin: creates it, updates
  * its password when the env one differs, and deletes every other super admin.
  * Their notices, attendance and expenses move to this account, since the
  * database won't delete a user those records point to.
  *
- * Safe to run on every start: when nothing differs it only reads.
+ * Safe to run on every start: when nothing differs it only reads. Reads and
+ * password hashing happen before the transaction, which only writes, so it
+ * stays short even on a distant database.
  */
 export async function makeSoleSuperAdmin(
   prisma: PrismaClient,
   { email, password }: SuperAdminCredentials,
 ): Promise<SuperAdminResult> {
-  const [current, otherCount] = await Promise.all([
-    prisma.user.findUnique({ where: { email }, select: ADMIN_FIELDS }),
-    prisma.user.count({
-      where: { role: UserRole.SUPER_ADMIN, email: { not: email } },
-    }),
-  ]);
+  const { current, others } = await readSuperAdmins(prisma, email);
+  const passwordMatches = current
+    ? await bcrypt.compare(password, current.password)
+    : false;
+
   if (
-    current?.role === UserRole.SUPER_ADMIN &&
+    current &&
+    passwordMatches &&
     current.isActive &&
     current.schoolId === null &&
-    otherCount === 0 &&
-    (await bcrypt.compare(password, current.password))
+    others.length === 0
   ) {
     return {
       adminId: current.id,
@@ -156,69 +166,64 @@ export async function makeSoleSuperAdmin(
     };
   }
 
-  return prisma.$transaction(async (tx) => {
-    await assertEmailFree(tx, email);
-    const existing = await tx.user.findUnique({
-      where: { email },
-      select: ADMIN_FIELDS,
-    });
+  const hash = passwordMatches ? null : await bcrypt.hash(password, 10);
+  const passwordFields = hash
+    ? {
+        password: hash,
+        passwordChangedAt: new Date(),
+        mustChangePassword: false,
+      }
+    : {};
+  const ids = others.map((u) => u.id);
 
-    let adminId: string;
-    let passwordChanged = false;
-    if (!existing) {
-      const admin = await tx.user.create({
-        data: {
+  return prisma.$transaction(
+    async (tx) => {
+      // The role filter makes this fail rather than take over an account
+      // that became a school user after the read above.
+      const admin = await tx.user.upsert({
+        where: { email, role: UserRole.SUPER_ADMIN },
+        create: {
           email,
           name: "Super Admin",
-          password: await bcrypt.hash(password, 10),
+          password: hash!,
           role: UserRole.SUPER_ADMIN,
           isActive: true,
         },
+        update: {
+          ...passwordFields,
+          isActive: true,
+          ...(current?.schoolId ? { school: { disconnect: true } } : {}),
+        },
+        select: { id: true },
       });
-      adminId = admin.id;
-    } else {
-      adminId = existing.id;
-      passwordChanged = !(await bcrypt.compare(password, existing.password));
-      const data: Prisma.UserUpdateInput = {};
-      if (passwordChanged) {
-        data.password = await bcrypt.hash(password, 10);
-        data.passwordChangedAt = new Date();
-        data.mustChangePassword = false;
-      }
-      if (!existing.isActive) data.isActive = true;
-      if (existing.schoolId !== null) data.school = { disconnect: true };
-      if (Object.keys(data).length > 0) {
-        await tx.user.update({ where: { id: adminId }, data });
-      }
-    }
 
-    const others = await tx.user.findMany({
-      where: { role: UserRole.SUPER_ADMIN, id: { not: adminId } },
-      select: { id: true },
-    });
-    const ids = others.map((u) => u.id);
-    if (ids.length > 0) {
-      await tx.notice.updateMany({
-        where: { publishedById: { in: ids } },
-        data: { publishedById: adminId },
-      });
-      await tx.attendance.updateMany({
-        where: { markedById: { in: ids } },
-        data: { markedById: adminId },
-      });
-      await tx.expense.updateMany({
-        where: { recordedById: { in: ids } },
-        data: { recordedById: adminId },
-      });
-      await tx.user.deleteMany({ where: { id: { in: ids } } });
-    }
+      if (ids.length > 0) {
+        await tx.notice.updateMany({
+          where: { publishedById: { in: ids } },
+          data: { publishedById: admin.id },
+        });
+        await tx.attendance.updateMany({
+          where: { markedById: { in: ids } },
+          data: { markedById: admin.id },
+        });
+        await tx.expense.updateMany({
+          where: { recordedById: { in: ids } },
+          data: { recordedById: admin.id },
+        });
+        await tx.user.deleteMany({
+          where: { id: { in: ids }, role: UserRole.SUPER_ADMIN },
+        });
+      }
 
-    return {
-      adminId,
-      created: !existing,
-      passwordChanged,
-      removed: ids.length,
-      changed: true,
-    };
-  });
+      return {
+        adminId: admin.id,
+        created: !current,
+        passwordChanged: Boolean(current && hash),
+        removed: ids.length,
+        changed: true,
+      };
+    },
+    // As for starter data: a remote database can be slow to answer.
+    { maxWait: 10_000, timeout: 30_000 },
+  );
 }
