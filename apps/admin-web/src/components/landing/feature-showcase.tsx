@@ -15,7 +15,7 @@ const REPORT = [
 /** Shown in the photo's place until public/landing/student.png exists. */
 function ReportCardScene() {
   return (
-    <div className="absolute bottom-[10%] left-[8%] right-[30%] top-[22%] flex flex-col rounded-2xl bg-white p-5 shadow-[0_24px_48px_-24px_rgba(76,29,149,0.45)] ring-1 ring-violet-100">
+    <div className="absolute bottom-[14%] left-[8%] right-[30%] top-[22%] flex flex-col rounded-2xl bg-white p-5 shadow-[0_24px_48px_-24px_rgba(76,29,149,0.45)] ring-1 ring-violet-100">
       <p className="text-xs font-medium text-violet-600">Term 1 report card</p>
       <p className="mt-1 font-semibold text-slate-900">
         Aarav Sharma · Grade 8-A

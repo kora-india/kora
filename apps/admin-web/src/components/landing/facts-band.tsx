@@ -4,7 +4,7 @@ export function FactsBand() {
   return (
     <section
       aria-labelledby="facts-heading"
-      className="bg-white px-4 pt-10 sm:px-6 lg:px-8 lg:pt-0"
+      className="bg-white px-4 sm:px-6 lg:px-8"
     >
       <h2 id="facts-heading" className="sr-only">
         Kora at a glance
