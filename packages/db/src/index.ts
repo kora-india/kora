@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { createLogger } from "@schoolos/logger";
+import { withPgBouncerFlag } from "./pooler-url";
 
 declare global {
   var __prisma: PrismaClient | undefined;
@@ -8,7 +9,14 @@ declare global {
 const dbLogger = createLogger("prisma");
 
 function createPrismaClient(): PrismaClient {
+  const { url, added } = withPgBouncerFlag(process.env.DATABASE_URL);
+  if (added) {
+    dbLogger.warn(
+      "DATABASE_URL uses the transaction pooler (port 6543) without pgbouncer=true, so it was added. Add ?pgbouncer=true to DATABASE_URL.",
+    );
+  }
   const client = new PrismaClient({
+    ...(added ? { datasources: { db: { url } } } : {}),
     log: [
       { emit: "event", level: "query" },
       { emit: "event", level: "error" },
@@ -84,3 +92,4 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 
 export * from "@prisma/client";
 export { purgeSchool } from "./purge-school";
+export { withPgBouncerFlag } from "./pooler-url";
