@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { TimetableContent } from "@/components/timetable/timetable-content";
 import { getTimetable, getTimetablePeriods } from "@/lib/actions/timetable";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { cheapestPlanWith } from "@/lib/plans";
 
 export const metadata = { title: "Timetable & Scheduling | Kora" };
 
@@ -26,10 +28,12 @@ export default async function TimetablePage() {
   });
 
   const { hasFeatureAccess } = await import("@/lib/subscription");
+  const plans = await getPlanCatalog();
   const canAccess = hasFeatureAccess(
     school?.plan || "FREE",
     school?.subscription?.status || "ACTIVE",
     "TIMETABLE",
+    plans,
   );
 
   if (!canAccess && user.role !== "SUPER_ADMIN") {
@@ -39,7 +43,7 @@ export default async function TimetablePage() {
       <PlanUpgradeGate
         featureName="Automated Timetable & Scheduling"
         description="Automated constraint-satisfaction scheduling of classes, teacher assignments, and real-time conflict detection."
-        requiredPlan="PRO"
+        requiredPlan={cheapestPlanWith(plans, "TIMETABLE")}
         highlights={[
           "AI constraint solver allocating complete week in seconds",
           "Strict teacher double-booking and room overlap prevention",

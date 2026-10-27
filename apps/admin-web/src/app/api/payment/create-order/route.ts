@@ -8,6 +8,7 @@ import { getClientIp } from "@/lib/ip";
 import Razorpay from "razorpay";
 import { z } from "zod";
 import { planAmountPaise } from "@/lib/plans";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 import { isSubdomainAvailable } from "@/lib/billing";
 
 const paymentLogger = createLogger("payment-orders");
@@ -116,7 +117,8 @@ export async function POST(req: Request) {
       key_secret: keySecret,
     });
 
-    const amountInPaise = planAmountPaise(plan);
+    // The price the super admin set, which every pricing screen shows (U1).
+    const amountInPaise = planAmountPaise((await getPlanCatalog())[plan]);
     const receipt = `receipt_order_${Date.now()}`;
 
     const options = {

@@ -73,9 +73,12 @@ interface SuccessState {
 
 interface SchoolsContentProps {
   schools: any[];
+  /** Each plan's current name (U1), by plan id. */
+  planNames: Record<string, string>;
 }
 
-export function SchoolsContent({ schools }: SchoolsContentProps) {
+export function SchoolsContent({ schools, planNames }: SchoolsContentProps) {
+  const planName = (plan: string) => planNames[plan] ?? plan;
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -199,7 +202,7 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {p}
+                {p === "ALL" ? p : planName(p)}
               </button>
             ))}
           </div>
@@ -285,7 +288,7 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${PLAN_BADGE[s.plan] ?? PLAN_BADGE.FREE}`}
                   >
-                    {s.plan}
+                    {planName(s.plan)}
                   </span>
                 </td>
                 <td className="h-12 px-4 text-xs">{s._count.students}</td>
@@ -346,8 +349,8 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
                               />
                               <span>
                                 {isUpgrade
-                                  ? `Upgrade to ${p}`
-                                  : `Switch to ${p}`}
+                                  ? `Upgrade to ${planName(p)}`
+                                  : `Switch to ${planName(p)}`}
                               </span>
                             </DropdownMenuItem>
                           );
@@ -464,10 +467,11 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
               required
             >
               <select {...form.register("plan")} className={selectCls}>
-                <option value="FREE">FREE</option>
-                <option value="BASIC">BASIC</option>
-                <option value="PRO">PRO</option>
-                <option value="ENTERPRISE">ENTERPRISE</option>
+                {["FREE", "BASIC", "PRO", "ENTERPRISE"].map((p) => (
+                  <option key={p} value={p}>
+                    {planName(p)}
+                  </option>
+                ))}
               </select>
             </FormField>
 
@@ -683,7 +687,7 @@ export function SchoolsContent({ schools }: SchoolsContentProps) {
           if (!open) setPlanTarget(null);
         }}
         title="Change Plan"
-        description={`Change "${planTarget?.school?.name}" to the ${planTarget?.plan} plan?`}
+        description={`Change "${planTarget?.school?.name}" to the ${planTarget ? planName(planTarget.plan) : ""} plan?`}
         confirmLabel="Change Plan"
         onConfirm={handlePlanChange}
       />

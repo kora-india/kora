@@ -1,21 +1,31 @@
 /**
- * The plan catalogue (U1). Every price, limit and feature list shown to
- * schools, charged at checkout or enforced by the limit checks comes from
- * here, so the landing page, setup, billing and super-admin screens agree.
+ * The plan catalogue (U1). Every price, limit, module and benefit shown to
+ * schools, charged at checkout or enforced by the limit and feature checks
+ * comes from one catalogue, so the landing page, setup, billing and
+ * super-admin screens agree.
  *
- * Feature lists only name what the app gates and ships: transport needs
- * Basic, exams, timetable and analytics need Pro (see `hasFeatureAccess`).
- * Limits can still be overridden per plan by `plan_limits` rows.
+ * The super admin edits plans from the Subscriptions page; the server loads
+ * the live catalogue with `getPlanCatalog()` (lib/plan-catalog.ts) and hands
+ * it to these helpers. `DEFAULT_PLANS` applies until the first edit.
  */
 
 export type PaidPlanId = "BASIC" | "PRO" | "ENTERPRISE";
 export type PlanId = "FREE" | PaidPlanId;
 
+/** Modules a plan has to include before a school can open them. */
+export type FeatureKey = "TRANSPORT" | "EXAMS" | "TIMETABLE" | "ANALYTICS";
+
+export const PLAN_MODULES: { key: FeatureKey; label: string }[] = [
+  { key: "TRANSPORT", label: "Transport & bus fees" },
+  { key: "EXAMS", label: "Exams & report cards" },
+  { key: "TIMETABLE", label: "Timetable" },
+  { key: "ANALYTICS", label: "Analytics & reports" },
+];
+
 export interface PlanLimitsDefinition {
   maxStudents: number;
   maxTeachers: number;
   maxClasses: number;
-  analyticsEnabled: boolean;
 }
 
 export interface PlanDefinition {
@@ -24,15 +34,21 @@ export interface PlanDefinition {
   /** Monthly price in rupees. */
   monthlyPriceInr: number;
   tagline: string;
+  /** `Infinity` means unlimited. */
   limits: PlanLimitsDefinition;
+  modules: FeatureKey[];
+  /** Benefit lines shown wherever the plan is offered. */
   features: string[];
   popular?: boolean;
 }
 
+export type PlanCatalog = Record<PlanId, PlanDefinition>;
+export type PaidPlanDefinition = PlanDefinition & { id: PaidPlanId };
+
 export const TRIAL_PLAN: PaidPlanId = "PRO";
 export const TRIAL_DURATION_DAYS = 14;
 
-export const PLANS: Record<PlanId, PlanDefinition> = {
+export const DEFAULT_PLANS: PlanCatalog = {
   FREE: {
     id: "FREE",
     name: "Free",
@@ -42,8 +58,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       maxStudents: 50,
       maxTeachers: 5,
       maxClasses: 5,
-      analyticsEnabled: false,
     },
+    modules: [],
     features: [
       "Up to 50 students",
       "Student & teacher records",
@@ -61,8 +77,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       maxStudents: 500,
       maxTeachers: 20,
       maxClasses: 20,
-      analyticsEnabled: false,
     },
+    modules: ["TRANSPORT"],
     features: [
       "Up to 500 students",
       "Student, staff & attendance management",
@@ -82,8 +98,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       maxStudents: 2000,
       maxTeachers: 100,
       maxClasses: 60,
-      analyticsEnabled: true,
     },
+    modules: ["TRANSPORT", "EXAMS", "TIMETABLE", "ANALYTICS"],
     features: [
       "Up to 2,000 students",
       "Everything in Basic",
@@ -102,8 +118,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       maxStudents: Infinity,
       maxTeachers: Infinity,
       maxClasses: Infinity,
-      analyticsEnabled: true,
     },
+    modules: ["TRANSPORT", "EXAMS", "TIMETABLE", "ANALYTICS"],
     features: [
       "Unlimited students, teachers & classes",
       "Everything in Pro",
@@ -115,12 +131,35 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
 };
 
 export const PAID_PLAN_IDS: PaidPlanId[] = ["BASIC", "PRO", "ENTERPRISE"];
+export const PLAN_IDS: PlanId[] = ["FREE", ...PAID_PLAN_IDS];
+
+export const isPlanId = (plan: string): plan is PlanId =>
+  (PLAN_IDS as string[]).includes(plan);
 
 export const isPaidPlan = (plan: string): plan is PaidPlanId =>
   (PAID_PLAN_IDS as string[]).includes(plan);
 
-export const getPlan = (plan: string | null | undefined): PlanDefinition =>
-  PLANS[(plan as PlanId) ?? "FREE"] ?? PLANS.FREE;
+export const getPlan = (
+  plans: PlanCatalog,
+  plan: string | null | undefined,
+): PlanDefinition =>
+  (plan && isPlanId(plan) ? plans[plan] : undefined) ?? plans.FREE;
+
+/** Paid plans from cheapest to dearest. */
+export const paidPlansByPrice = (plans: PlanCatalog): PaidPlanDefinition[] =>
+  PAID_PLAN_IDS.map((id) => ({ ...plans[id], id })).sort(
+    (a, b) => a.monthlyPriceInr - b.monthlyPriceInr,
+  );
+
+export const planIncludes = (plan: PlanDefinition, feature: FeatureKey) =>
+  plan.modules.includes(feature);
+
+/** The cheapest paid plan that unlocks `feature`, or null when none does. */
+export const cheapestPlanWith = (
+  plans: PlanCatalog,
+  feature: FeatureKey,
+): PaidPlanDefinition | null =>
+  paidPlansByPrice(plans).find((p) => planIncludes(p, feature)) ?? null;
 
 /** "₹1,999" */
 export const formatPlanPrice = (plan: PlanDefinition) =>
@@ -131,5 +170,5 @@ export const formatLimit = (n: number) =>
   Number.isFinite(n) ? n.toLocaleString("en-IN") : "Unlimited";
 
 /** Razorpay amounts are in paise. */
-export const planAmountPaise = (plan: PaidPlanId) =>
-  PLANS[plan].monthlyPriceInr * 100;
+export const planAmountPaise = (plan: PlanDefinition) =>
+  plan.monthlyPriceInr * 100;

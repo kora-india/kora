@@ -153,7 +153,12 @@ export async function createStudent(data: unknown) {
   const limit = await checkStudentLimit(user.schoolId);
   if (!limit.allowed) {
     return {
-      error: planLimitMessage("students", limit.current, limit.max, limit.plan),
+      error: planLimitMessage(
+        "students",
+        limit.current,
+        limit.max,
+        limit.planName,
+      ),
     };
   }
 

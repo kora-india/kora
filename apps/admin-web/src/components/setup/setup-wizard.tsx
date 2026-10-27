@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Loader2, LogOut } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@schoolos/utils";
-import { PLANS, TRIAL_PLAN, type PaidPlanId } from "@/lib/plans";
+import { TRIAL_PLAN, type PaidPlanId, type PlanCatalog } from "@/lib/plans";
 import {
   LAST_STEP,
   STEPS,
@@ -39,7 +39,8 @@ import { PlanStep } from "./steps/plan-step";
 
 export const DRAFT_SAVE_DELAY_MS = 300;
 
-export function SetupWizard() {
+/** `plans` is the live catalogue (`getPlanCatalog()`), loaded by the page. */
+export function SetupWizard({ plans }: Readonly<{ plans: PlanCatalog }>) {
   const { data: session, update } = useSession();
   const userId = session?.user?.id;
   const sessionEmail = session?.user?.email ?? "";
@@ -236,7 +237,7 @@ export function SetupWizard() {
         amount: orderData.amount,
         currency: orderData.currency,
         name: "Kora",
-        description: `${PLANS[plan].name} plan`,
+        description: `${plans[plan].name} plan`,
         order_id: orderData.orderId,
         handler: async (response: any) => {
           const payment: SavedPayment = {
@@ -314,6 +315,7 @@ export function SetupWizard() {
     sessionValue;
 
   const footer = footerCopy({
+    plans,
     step,
     choice,
     hasSavedPayment: Boolean(savedPayment),
@@ -422,6 +424,7 @@ export function SetupWizard() {
                   {step === 3 && <AcademicStep />}
                   {step === 4 && (
                     <PlanStep
+                      plans={plans}
                       choice={choice}
                       onChoiceChange={setChoice}
                       savedPayment={savedPayment}

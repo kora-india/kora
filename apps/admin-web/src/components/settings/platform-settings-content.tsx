@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   Server,
   Database,
@@ -14,7 +15,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { PLANS, formatLimit, formatPlanPrice } from "@/lib/plans";
+import {
+  PLAN_IDS,
+  formatLimit,
+  formatPlanPrice,
+  type PlanCatalog,
+} from "@/lib/plans";
 
 const PLAN_TIER_COLORS: Record<string, string> = {
   FREE: "",
@@ -23,7 +29,9 @@ const PLAN_TIER_COLORS: Record<string, string> = {
   ENTERPRISE: "text-amber-600",
 };
 
-export function PlatformSettingsContent() {
+export function PlatformSettingsContent({
+  plans,
+}: Readonly<{ plans: PlanCatalog }>) {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const handleMaintenanceToggle = () => {
@@ -107,9 +115,15 @@ export function PlatformSettingsContent() {
               Default Plan Enforcements
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Limits automatically applied to schools during onboarding
+              Limits applied to every school on each plan
             </p>
           </div>
+          <Link
+            href="/subscriptions"
+            className="text-xs font-semibold text-violet-600 hover:underline"
+          >
+            Edit plans
+          </Link>
         </div>
 
         <div className="overflow-x-auto">
@@ -127,12 +141,12 @@ export function PlatformSettingsContent() {
               </tr>
             </thead>
             <tbody>
-              {Object.values(PLANS).map((plan) => (
+              {PLAN_IDS.map((id) => plans[id]).map((plan) => (
                 <tr key={plan.id} className="border-b last:border-0">
                   <td
                     className={`py-2.5 px-3 font-semibold ${PLAN_TIER_COLORS[plan.id]}`}
                   >
-                    {plan.id}
+                    {plan.name}
                   </td>
                   <td className="py-2.5 px-3 text-muted-foreground">
                     {formatPlanPrice(plan)}/mo
@@ -148,9 +162,11 @@ export function PlatformSettingsContent() {
                     ),
                   )}
                   <td
-                    className={`py-2.5 px-3 ${plan.limits.analyticsEnabled ? "text-emerald-600 font-semibold" : "text-muted-foreground"}`}
+                    className={`py-2.5 px-3 ${plan.modules.includes("ANALYTICS") ? "text-emerald-600 font-semibold" : "text-muted-foreground"}`}
                   >
-                    {plan.limits.analyticsEnabled ? "Enabled" : "Disabled"}
+                    {plan.modules.includes("ANALYTICS")
+                      ? "Enabled"
+                      : "Disabled"}
                   </td>
                 </tr>
               ))}

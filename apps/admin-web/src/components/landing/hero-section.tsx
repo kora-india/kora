@@ -11,7 +11,7 @@ import {
 } from "./dashboard-mockup";
 import { ScaleToFit } from "./scale-to-fit";
 import { handwriting } from "./landing-fonts";
-import { TRIAL } from "./landing-content";
+import { TRIAL_DURATION_DAYS } from "@/lib/plans";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -100,7 +100,7 @@ export function HeroSection() {
               className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600"
             >
               {[
-                `${TRIAL.days}-day free trial`,
+                `${TRIAL_DURATION_DAYS}-day free trial`,
                 "No payment to start",
                 "Set up in four steps",
               ].map((item) => (

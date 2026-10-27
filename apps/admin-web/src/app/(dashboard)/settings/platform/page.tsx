@@ -2,6 +2,7 @@ import { auth } from "@schoolos/auth";
 import { redirect } from "next/navigation";
 import { UserRole } from "@schoolos/types";
 import { PlatformSettingsContent } from "@/components/settings/platform-settings-content";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 
 export const metadata = { title: "Platform Settings" };
 
@@ -11,5 +12,5 @@ export default async function PlatformSettingsPage() {
   const user = session.user;
   if (user.role !== UserRole.SUPER_ADMIN) redirect("/settings/school-profile");
 
-  return <PlatformSettingsContent />;
+  return <PlatformSettingsContent plans={await getPlanCatalog()} />;
 }

@@ -15,6 +15,7 @@ import { z } from "zod";
 import { createTenantLogger } from "@schoolos/logger";
 import { getCache, invalidateTransportCache } from "@/lib/redis";
 import { findOrCreateTransportComponent } from "@/lib/fees/transport-component";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 
 const logger = createTenantLogger("global", "transport-actions");
 
@@ -43,6 +44,7 @@ async function getTransportSession(
         school?.plan || "FREE",
         school?.subscription?.status || "ACTIVE",
         "TRANSPORT",
+        await getPlanCatalog(),
       )
     ) {
       return null;

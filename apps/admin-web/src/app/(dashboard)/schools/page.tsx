@@ -2,6 +2,8 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { SchoolsContent } from "@/components/schools/schools-content";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { PLAN_IDS } from "@/lib/plans";
 
 export const metadata = { title: "Schools" };
 
@@ -21,5 +23,10 @@ export default async function SchoolsPage() {
     take: 500,
   });
 
-  return <SchoolsContent schools={schools} />;
+  const plans = await getPlanCatalog();
+  const planNames = Object.fromEntries(
+    PLAN_IDS.map((id) => [id, plans[id].name]),
+  );
+
+  return <SchoolsContent schools={schools} planNames={planNames} />;
 }

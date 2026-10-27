@@ -29,6 +29,8 @@ interface TopbarProps {
   breadcrumb?: string;
   subscription?: SubscriptionEvaluation | null;
   schoolPlan?: string;
+  /** The plan's current name; falls back to its id. */
+  planName?: string;
 }
 
 export function Topbar({
@@ -36,11 +38,13 @@ export function Topbar({
   breadcrumb,
   subscription,
   schoolPlan,
+  planName,
 }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const { startTour, pageTitle } = useTour();
   const [menuOpen, setMenuOpen] = useState(false);
   const activePlan = subscription?.plan || schoolPlan;
+  const activePlanName = planName || activePlan;
 
   return (
     <header className="h-14 border-b bg-card/60 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-10 print:hidden">
@@ -74,7 +78,7 @@ export function Topbar({
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 <span>
-                  {activePlan} · Renew ({subscription.daysRemaining}d grace)
+                  {activePlanName} · Renew ({subscription.daysRemaining}d grace)
                 </span>
               </Link>
             ) : (
@@ -103,7 +107,7 @@ export function Topbar({
                 {activePlan === "FREE" && (
                   <Sparkles className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 )}
-                <span>{activePlan} Plan</span>
+                <span>{activePlanName} Plan</span>
               </div>
             )}
           </>

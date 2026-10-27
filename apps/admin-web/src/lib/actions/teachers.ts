@@ -52,7 +52,12 @@ export async function createTeacher(data: unknown) {
   const limit = await checkTeacherLimit(user.schoolId);
   if (!limit.allowed) {
     return {
-      error: planLimitMessage("teachers", limit.current, limit.max, limit.plan),
+      error: planLimitMessage(
+        "teachers",
+        limit.current,
+        limit.max,
+        limit.planName,
+      ),
     };
   }
 

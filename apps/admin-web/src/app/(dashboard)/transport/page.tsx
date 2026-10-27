@@ -5,6 +5,8 @@ import { getTransportData } from "@/lib/actions/transport";
 import { TransportContent } from "@/components/transport/transport-content";
 import { hasFeatureAccess } from "@/lib/subscription";
 import { PlanUpgradeGate } from "@/components/subscriptions/plan-upgrade-gate";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { cheapestPlanWith } from "@/lib/plans";
 
 export const metadata = {
   title: "Transport & Fleet Management | Kora",
@@ -28,10 +30,12 @@ export default async function TransportPage() {
     },
   });
 
+  const plans = await getPlanCatalog();
   const canAccess = hasFeatureAccess(
     school?.plan || "FREE",
     school?.subscription?.status || "ACTIVE",
     "TRANSPORT",
+    plans,
   );
 
   if (!canAccess && user.role !== "SUPER_ADMIN") {
@@ -39,7 +43,7 @@ export default async function TransportPage() {
       <PlanUpgradeGate
         featureName="Transport & Fleet Management"
         description="Track bus routes, fleet vehicles, driver records, and automated transport fee billing."
-        requiredPlan="BASIC"
+        requiredPlan={cheapestPlanWith(plans, "TRANSPORT")}
         highlights={[
           "Vehicle and bus route tracking",
           "Driver and conductor directory",

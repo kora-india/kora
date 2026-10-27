@@ -5,6 +5,8 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { PageTransition } from "@/components/layout/page-transition";
 import { TourProvider } from "@/components/tour/tour-provider";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { getPlan } from "@/lib/plans";
 
 export default async function DashboardRootLayout({
   children,
@@ -60,6 +62,10 @@ export default async function DashboardRootLayout({
       }
     }
   }
+  // The name the super admin gave the plan (U1).
+  const planName = schoolPlan
+    ? getPlan(await getPlanCatalog(), schoolPlan).name
+    : "";
 
   return (
     <TourProvider>
@@ -68,12 +74,14 @@ export default async function DashboardRootLayout({
           userRole={user.role}
           schoolName={schoolName}
           schoolPlan={schoolPlan}
+          planName={planName}
         />
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
           <Topbar
             user={user}
             subscription={subscriptionEvaluation}
             schoolPlan={schoolPlan}
+            planName={planName}
           />
           <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
             <PageTransition>{children}</PageTransition>

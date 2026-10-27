@@ -1,8 +1,9 @@
 /**
  * Everything the landing page claims, in one place. Each line describes what
  * the product does today (see the README's "What's included"); prices and the
- * trial come from the plan catalogue. Parent portal, SMS/email and library
- * are planned, not shipped, so they are not offered here.
+ * trial come from the live plan catalogue, which the page passes in. Parent
+ * portal, SMS/email and library are planned, not shipped, so they are not
+ * offered here.
  */
 import {
   BarChart3,
@@ -19,11 +20,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  PLANS,
   TRIAL_DURATION_DAYS,
   TRIAL_PLAN,
   formatLimit,
   formatPlanPrice,
+  paidPlansByPrice,
+  type PlanCatalog,
 } from "@/lib/plans";
 
 export const NAV_LINKS = [
@@ -34,11 +36,12 @@ export const NAV_LINKS = [
   { label: "FAQ", href: "#faq" },
 ];
 
-export const TRIAL = {
+/** The trial, described with the live plan catalogue (`getPlanCatalog()`). */
+export const trialOffer = (plans: PlanCatalog) => ({
   days: TRIAL_DURATION_DAYS,
-  planName: PLANS[TRIAL_PLAN].name,
-  students: formatLimit(PLANS[TRIAL_PLAN].limits.maxStudents),
-};
+  planName: plans[TRIAL_PLAN].name,
+  students: formatLimit(plans[TRIAL_PLAN].limits.maxStudents),
+});
 
 export const MODULES: { label: string; icon: LucideIcon }[] = [
   { label: "Students & staff", icon: Users },
@@ -90,18 +93,20 @@ export const FEATURES: {
   },
 ];
 
-export const FACTS: {
+export const facts = (
+  plans: PlanCatalog,
+): {
   value: string;
   label: string;
   icon: LucideIcon;
-}[] = [
+}[] => [
   {
     value: `${TRIAL_DURATION_DAYS} days`,
-    label: `Free trial with every ${PLANS[TRIAL_PLAN].name} feature`,
+    label: `Free trial with every ${plans[TRIAL_PLAN].name} feature`,
     icon: Sparkles,
   },
   {
-    value: `${formatPlanPrice(PLANS.BASIC)}/mo`,
+    value: `${formatPlanPrice(paidPlansByPrice(plans)[0])}/mo`,
     label: "Starting price, paid monthly with no auto-renewal",
     icon: Wallet,
   },
@@ -135,7 +140,7 @@ export const STEPS = [
   },
 ];
 
-export const FAQS = [
+export const faqs = (plans: PlanCatalog) => [
   {
     q: "Is Kora difficult to set up?",
     a: "No. After you sign up, a four-step setup asks for your school's details, classes and plan, then creates your academic session, classes and common fee heads. Add students and staff yourself or import them from a spreadsheet.",
@@ -162,10 +167,10 @@ export const FAQS = [
   },
   {
     q: "Can I move our existing school data into Kora?",
-    a: "Yes. Import student lists from a spreadsheet. On the Enterprise plan we also help you move data from your old software.",
+    a: `Yes. Import student lists from a spreadsheet. On the ${plans.ENTERPRISE.name} plan we also help you move data from your old software.`,
   },
   {
     q: "How does the free trial work?",
-    a: `You get ${TRIAL_DURATION_DAYS} days of every ${PLANS[TRIAL_PLAN].name} feature, for up to ${formatLimit(PLANS[TRIAL_PLAN].limits.maxStudents)} students, with no payment to start. When the trial ends, choose a plan to keep going. Your data stays exactly as you left it.`,
+    a: `You get ${TRIAL_DURATION_DAYS} days of every ${plans[TRIAL_PLAN].name} feature, for up to ${formatLimit(plans[TRIAL_PLAN].limits.maxStudents)} students, with no payment to start. When the trial ends, choose a plan to keep going. Your data stays exactly as you left it.`,
   },
 ];

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { TRIAL_PLAN } from "@/lib/plans";
+import { DEFAULT_PLANS, TRIAL_PLAN } from "@/lib/plans";
 import {
   CLASSES,
   CLASS_GROUPS,
@@ -279,19 +279,20 @@ describe("plans", () => {
     [2000, "PRO"],
     [12000, "ENTERPRISE"],
   ])("recommends the cheapest plan with room for %s students", (n, plan) => {
-    expect(recommendedPlan(n)).toBe(plan);
+    expect(recommendedPlan(DEFAULT_PLANS, n)).toBe(plan);
   });
 
   it("says whether a plan has room for the school", () => {
-    expect(fitsPlan("BASIC", 499)).toBe(true);
-    expect(fitsPlan("BASIC", 1500)).toBe(false);
-    expect(fitsPlan("ENTERPRISE", 1_000_000)).toBe(true);
-    expect(fitsPlan("BASIC", undefined)).toBe(true);
+    expect(fitsPlan(DEFAULT_PLANS, "BASIC", 499)).toBe(true);
+    expect(fitsPlan(DEFAULT_PLANS, "BASIC", 1500)).toBe(false);
+    expect(fitsPlan(DEFAULT_PLANS, "ENTERPRISE", 1_000_000)).toBe(true);
+    expect(fitsPlan(DEFAULT_PLANS, "BASIC", undefined)).toBe(true);
   });
 });
 
 describe("footerCopy", () => {
   const base = {
+    plans: DEFAULT_PLANS,
     choice: "TRIAL" as const,
     hasSavedPayment: false,
     isSubmitting: false,

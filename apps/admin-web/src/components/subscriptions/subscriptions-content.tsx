@@ -13,9 +13,17 @@ import {
   ShieldCheck,
   ArrowUpRight,
   HelpCircle,
+  Pencil,
 } from "lucide-react";
 import { formatCurrency } from "@schoolos/utils";
-import { PLANS, formatLimit } from "@/lib/plans";
+import {
+  PLAN_IDS,
+  PLAN_MODULES,
+  formatLimit,
+  type PlanCatalog,
+  type PlanId,
+} from "@/lib/plans";
+import { PlanEditorDialog } from "./plan-editor-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { updateSchoolPlan } from "@/lib/actions/schools";
 import { toast } from "sonner";
@@ -34,73 +42,31 @@ interface SchoolSubItem {
 }
 
 interface SubscriptionsContentProps {
+  /** The live plan catalogue (`getPlanCatalog()`). */
+  plans: PlanCatalog;
   schools: SchoolSubItem[];
   planCounts: Record<string, number>;
 }
 
-const limitLabels = (id: keyof typeof PLANS) => {
-  const { maxStudents, maxTeachers, maxClasses } = PLANS[id].limits;
-  return {
-    maxStudents: `${formatLimit(maxStudents)} Students`,
-    maxTeachers: `${formatLimit(maxTeachers)} Teachers`,
-    maxClasses: `${formatLimit(maxClasses)} Classes`,
-  };
+const BADGE_COLORS: Record<PlanId, string> = {
+  FREE: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  BASIC: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  PRO: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  ENTERPRISE:
+    "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
 };
 
-const PLANS_CONFIG = [
-  {
-    id: "FREE",
-    name: "Free Tier",
-    price: PLANS.FREE.monthlyPriceInr,
-    period: "/mo",
-    description: "Ideal for small coaching centers and trial setups",
-    ...limitLabels("FREE"),
-    features: PLANS.FREE.features,
-    highlight: false,
-    badgeColor: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  },
-  {
-    id: "BASIC",
-    name: "Basic Plan",
-    price: PLANS.BASIC.monthlyPriceInr,
-    period: "/mo",
-    description: "Designed for growing primary & middle schools",
-    ...limitLabels("BASIC"),
-    features: PLANS.BASIC.features,
-    highlight: false,
-    badgeColor: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  },
-  {
-    id: "PRO",
-    name: "Pro Plan",
-    price: PLANS.PRO.monthlyPriceInr,
-    period: "/mo",
-    description: "Full-featured ERP suite for established schools",
-    ...limitLabels("PRO"),
-    features: PLANS.PRO.features,
-    highlight: true,
-    badgeColor:
-      "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
-  },
-  {
-    id: "ENTERPRISE",
-    name: "Enterprise",
-    price: PLANS.ENTERPRISE.monthlyPriceInr,
-    period: "/mo",
-    description: "Custom branding and scale for large school networks",
-    ...limitLabels("ENTERPRISE"),
-    features: PLANS.ENTERPRISE.features,
-    highlight: false,
-    badgeColor:
-      "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  },
-];
+const moduleLabel = (key: string) =>
+  PLAN_MODULES.find((m) => m.key === key)?.label ?? key;
 
 export function SubscriptionsContent({
+  plans,
   schools,
   planCounts,
 }: Readonly<SubscriptionsContentProps>) {
   const router = useRouter();
+  const [editingPlan, setEditingPlan] = useState<PlanId | null>(null);
+  const planName = (id: string) => plans[id as PlanId]?.name ?? id;
   const [selectedPlanFilter, setSelectedPlanFilter] = useState<string>("ALL");
   const [planTarget, setPlanTarget] = useState<{
     school: SchoolSubItem;
@@ -127,10 +93,8 @@ export function SubscriptionsContent({
   };
 
   const totalMonthlyRevenue = Object.entries(planCounts).reduce(
-    (acc, [plan, count]) => {
-      const config = PLANS_CONFIG.find((p) => p.id === plan);
-      return acc + (config ? config.price * count : 0);
-    },
+    (acc, [plan, count]) =>
+      acc + (plans[plan as PlanId]?.monthlyPriceInr ?? 0) * count,
     0,
   );
 
@@ -164,18 +128,19 @@ export function SubscriptionsContent({
         id="tour-subscriptions-stats"
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5"
       >
-        {PLANS_CONFIG.map((plan) => {
-          const count = planCounts[plan.id] ?? 0;
+        {PLAN_IDS.map((id) => {
+          const plan = plans[id];
+          const count = planCounts[id] ?? 0;
           return (
             <div
               key={plan.id}
               className={`rounded-2xl border bg-card p-5 flex flex-col justify-between transition-all relative ${
-                plan.highlight
+                plan.popular
                   ? "border-violet-400 ring-2 ring-violet-500/20 shadow-md"
                   : "border-border hover:border-violet-300 dark:hover:border-violet-800"
               }`}
             >
-              {plan.highlight && (
+              {plan.popular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-violet-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Most Popular
                 </span>
@@ -184,7 +149,7 @@ export function SubscriptionsContent({
               <div>
                 <div className="flex items-center justify-between">
                   <span
-                    className={`text-xs font-bold px-2 py-0.5 rounded-md ${plan.badgeColor}`}
+                    className={`text-xs font-bold px-2 py-0.5 rounded-md ${BADGE_COLORS[id]}`}
                   >
                     {plan.name}
                   </span>
@@ -195,31 +160,50 @@ export function SubscriptionsContent({
 
                 <div className="mt-4 mb-2">
                   <span className="text-3xl font-extrabold text-foreground">
-                    {plan.price === 0 ? "Free" : formatCurrency(plan.price)}
+                    {plan.monthlyPriceInr === 0
+                      ? "Free"
+                      : formatCurrency(plan.monthlyPriceInr)}
                   </span>
-                  {plan.price > 0 && (
+                  {plan.monthlyPriceInr > 0 && (
                     <span className="text-xs text-muted-foreground font-medium">
-                      {plan.period}
+                      /mo
                     </span>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground min-h-[32px]">
-                  {plan.description}
+                  {plan.tagline}
                 </p>
 
                 <div className="my-4 py-3 border-y space-y-1.5 text-xs">
                   <div className="flex items-center justify-between font-medium text-foreground">
                     <span>Student Limit:</span>
-                    <span className="font-semibold">{plan.maxStudents}</span>
+                    <span className="font-semibold">
+                      {formatLimit(plan.limits.maxStudents)} Students
+                    </span>
                   </div>
                   <div className="flex items-center justify-between font-medium text-foreground">
                     <span>Teacher Limit:</span>
-                    <span className="font-semibold">{plan.maxTeachers}</span>
+                    <span className="font-semibold">
+                      {formatLimit(plan.limits.maxTeachers)} Teachers
+                    </span>
                   </div>
                   <div className="flex items-center justify-between font-medium text-foreground">
                     <span>Class Limit:</span>
-                    <span className="font-semibold">{plan.maxClasses}</span>
+                    <span className="font-semibold">
+                      {formatLimit(plan.limits.maxClasses)} Classes
+                    </span>
                   </div>
+                </div>
+
+                <div className="space-y-1.5 mb-4">
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                    Modules
+                  </p>
+                  <p className="text-[11px] text-foreground">
+                    {plan.modules.length
+                      ? plan.modules.map(moduleLabel).join(" · ")
+                      : "Core modules only"}
+                  </p>
                 </div>
 
                 <div className="space-y-2 mb-4">
@@ -237,23 +221,30 @@ export function SubscriptionsContent({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setSelectedPlanFilter(
-                    plan.id === selectedPlanFilter ? "ALL" : plan.id,
-                  )
-                }
-                className={`w-full h-8 text-xs font-semibold rounded-lg transition-colors border ${
-                  selectedPlanFilter === plan.id
-                    ? "bg-violet-600 text-white border-violet-600"
-                    : "bg-muted/50 text-foreground hover:bg-muted"
-                }`}
-              >
-                {selectedPlanFilter === plan.id
-                  ? "Showing Enrolled Schools"
-                  : `Filter by ${plan.name}`}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingPlan(id)}
+                  className="h-8 text-xs font-semibold rounded-lg transition-colors border bg-violet-600 text-white border-violet-600 hover:bg-violet-700 flex items-center justify-center gap-1.5"
+                >
+                  <Pencil className="w-3 h-3" /> Edit plan
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedPlanFilter(
+                      id === selectedPlanFilter ? "ALL" : id,
+                    )
+                  }
+                  className={`h-8 text-xs font-semibold rounded-lg transition-colors border ${
+                    selectedPlanFilter === id
+                      ? "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800"
+                      : "bg-muted/50 text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {selectedPlanFilter === id ? "Show all" : "Show schools"}
+                </button>
+              </div>
             </div>
           );
         })}
@@ -277,7 +268,7 @@ export function SubscriptionsContent({
 
           {/* Filter Pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {["ALL", "FREE", "BASIC", "PRO", "ENTERPRISE"].map((tier) => (
+            {["ALL", ...PLAN_IDS].map((tier) => (
               <button
                 key={tier}
                 type="button"
@@ -288,7 +279,7 @@ export function SubscriptionsContent({
                     : "bg-muted/40 hover:bg-muted text-muted-foreground"
                 }`}
               >
-                {tier}
+                {tier === "ALL" ? tier : planName(tier)}
               </button>
             ))}
           </div>
@@ -324,7 +315,7 @@ export function SubscriptionsContent({
                   </td>
                   <td className="py-3 px-3">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
-                      {s.plan}
+                      {planName(s.plan)}
                     </span>
                   </td>
                   <td className="py-3 px-3">
@@ -348,10 +339,11 @@ export function SubscriptionsContent({
                       }
                       className="h-7 px-2 border rounded-md text-[11px] bg-background font-medium focus:ring-1 focus:ring-violet-500"
                     >
-                      <option value="FREE">FREE</option>
-                      <option value="BASIC">BASIC</option>
-                      <option value="PRO">PRO</option>
-                      <option value="ENTERPRISE">ENTERPRISE</option>
+                      {PLAN_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {planName(id)}
+                        </option>
+                      ))}
                     </select>
                   </td>
                 </tr>
@@ -368,10 +360,21 @@ export function SubscriptionsContent({
           if (!open) setPlanTarget(null);
         }}
         title="Update Subscription Tier"
-        description={`Are you sure you want to change "${planTarget?.school.name}" to the ${planTarget?.plan} plan? Limit caps will be adjusted immediately.`}
+        description={`Are you sure you want to change "${planTarget?.school.name}" to the ${planTarget ? planName(planTarget.plan) : ""} plan? Limit caps will be adjusted immediately.`}
         confirmLabel="Update Plan"
         onConfirm={handlePlanChange}
       />
+
+      {editingPlan && (
+        <PlanEditorDialog
+          plan={plans[editingPlan]}
+          schoolCount={planCounts[editingPlan] ?? 0}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditingPlan(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   TRIAL_DURATION_DAYS,
 } from "../subscription";
 import { SubscriptionPlan, SubscriptionStatus } from "@schoolos/db";
+import { DEFAULT_PLANS, type PlanCatalog } from "@/lib/plans";
 
 describe("Subscription Validity & Trial Engine", () => {
   const baseDate = new Date("2026-09-01T12:00:00Z");
@@ -123,6 +124,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.TRIAL,
         "EXAMS",
+        DEFAULT_PLANS,
       ),
     ).toBe(true);
     expect(
@@ -130,6 +132,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.TRIAL,
         "TIMETABLE",
+        DEFAULT_PLANS,
       ),
     ).toBe(true);
     expect(
@@ -137,6 +140,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.TRIAL,
         "ANALYTICS",
+        DEFAULT_PLANS,
       ),
     ).toBe(true);
     expect(
@@ -144,6 +148,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.TRIAL,
         "TRANSPORT",
+        DEFAULT_PLANS,
       ),
     ).toBe(true);
   });
@@ -154,6 +159,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.ACTIVE,
         "EXAMS",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
     expect(
@@ -161,6 +167,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.ACTIVE,
         "TIMETABLE",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
     expect(
@@ -168,6 +175,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.ACTIVE,
         "ANALYTICS",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
     expect(
@@ -175,6 +183,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.FREE,
         SubscriptionStatus.ACTIVE,
         "TRANSPORT",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
   });
@@ -185,6 +194,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.BASIC,
         SubscriptionStatus.ACTIVE,
         "TRANSPORT",
+        DEFAULT_PLANS,
       ),
     ).toBe(true);
     expect(
@@ -192,6 +202,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.BASIC,
         SubscriptionStatus.ACTIVE,
         "EXAMS",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
     expect(
@@ -199,6 +210,7 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.BASIC,
         SubscriptionStatus.ACTIVE,
         "TIMETABLE",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
     expect(
@@ -206,25 +218,70 @@ describe("Feature Gating Matrix", () => {
         SubscriptionPlan.BASIC,
         SubscriptionStatus.ACTIVE,
         "ANALYTICS",
+        DEFAULT_PLANS,
       ),
     ).toBe(false);
   });
 
   it("should allow all features on PRO and ENTERPRISE tiers", () => {
     for (const plan of [SubscriptionPlan.PRO, SubscriptionPlan.ENTERPRISE]) {
-      expect(hasFeatureAccess(plan, SubscriptionStatus.ACTIVE, "EXAMS")).toBe(
-        true,
-      );
       expect(
-        hasFeatureAccess(plan, SubscriptionStatus.ACTIVE, "TIMETABLE"),
+        hasFeatureAccess(
+          plan,
+          SubscriptionStatus.ACTIVE,
+          "EXAMS",
+          DEFAULT_PLANS,
+        ),
       ).toBe(true);
       expect(
-        hasFeatureAccess(plan, SubscriptionStatus.ACTIVE, "ANALYTICS"),
+        hasFeatureAccess(
+          plan,
+          SubscriptionStatus.ACTIVE,
+          "TIMETABLE",
+          DEFAULT_PLANS,
+        ),
       ).toBe(true);
       expect(
-        hasFeatureAccess(plan, SubscriptionStatus.ACTIVE, "TRANSPORT"),
+        hasFeatureAccess(
+          plan,
+          SubscriptionStatus.ACTIVE,
+          "ANALYTICS",
+          DEFAULT_PLANS,
+        ),
+      ).toBe(true);
+      expect(
+        hasFeatureAccess(
+          plan,
+          SubscriptionStatus.ACTIVE,
+          "TRANSPORT",
+          DEFAULT_PLANS,
+        ),
       ).toBe(true);
     }
+  });
+
+  it("follows the modules the super admin gave each plan", () => {
+    const edited: PlanCatalog = {
+      ...DEFAULT_PLANS,
+      BASIC: { ...DEFAULT_PLANS.BASIC, modules: ["TRANSPORT", "EXAMS"] },
+      PRO: { ...DEFAULT_PLANS.PRO, modules: ["TRANSPORT"] },
+    };
+    const active = SubscriptionStatus.ACTIVE;
+    expect(
+      hasFeatureAccess(SubscriptionPlan.BASIC, active, "EXAMS", edited),
+    ).toBe(true);
+    expect(
+      hasFeatureAccess(SubscriptionPlan.PRO, active, "ANALYTICS", edited),
+    ).toBe(false);
+    // A trial still opens everything.
+    expect(
+      hasFeatureAccess(
+        SubscriptionPlan.PRO,
+        SubscriptionStatus.TRIAL,
+        "ANALYTICS",
+        edited,
+      ),
+    ).toBe(true);
   });
 
   it("D16: honours a stored EXPIRED status even without a period end", () => {

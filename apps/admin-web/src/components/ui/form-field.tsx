@@ -4,6 +4,8 @@ import { cn } from "@schoolos/utils";
 
 interface FormFieldProps {
   label: React.ReactNode;
+  /** The input's id, so the label names it. */
+  htmlFor?: string;
   description?: React.ReactNode;
   error?: string;
   required?: boolean;
@@ -13,6 +15,7 @@ interface FormFieldProps {
 
 export function FormField({
   label,
+  htmlFor,
   description,
   error,
   required,
@@ -21,7 +24,7 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label className="text-xs font-medium block">
+      <label htmlFor={htmlFor} className="text-xs font-medium block">
         {label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
       </label>

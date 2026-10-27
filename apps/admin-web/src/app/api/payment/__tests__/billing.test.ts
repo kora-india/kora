@@ -24,7 +24,7 @@ import { auth } from "@schoolos/auth";
 import { POST as createOrder } from "../create-order/route";
 import { POST as verify } from "../verify/route";
 import { addOneMonth, nextPaidPeriod } from "@/lib/billing";
-import { PLANS } from "@/lib/plans";
+import { DEFAULT_PLANS } from "@/lib/plans";
 
 const SECRET = "test-razorpay-secret";
 const run = Math.random().toString(36).slice(2, 8);
@@ -146,7 +146,7 @@ describe("subscription payments", () => {
     const res = await createOrder(json({ plan: "BASIC", purpose: "RENEWAL" }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.amount).toBe(PLANS.BASIC.monthlyPriceInr * 100);
+    expect(body.amount).toBe(DEFAULT_PLANS.BASIC.monthlyPriceInr * 100);
     const order = await prisma.subscriptionOrder.findUniqueOrThrow({
       where: { orderId: body.orderId },
     });

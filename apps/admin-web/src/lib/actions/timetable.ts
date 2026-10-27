@@ -16,6 +16,7 @@ import {
 } from "../timetable-generator";
 import { generateAiScheduleDraft, AiTimetableResponse } from "../gemini";
 import { toActionResult } from "@/lib/action-errors";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 
 const slotSchema = z.object({
   id: z.string().optional(),
@@ -91,6 +92,7 @@ async function requireTimetableAccess(
       school.plan,
       school.subscription?.status || "ACTIVE",
       "TIMETABLE",
+      await getPlanCatalog(),
     );
     if (!allowed) {
       throw new Error(

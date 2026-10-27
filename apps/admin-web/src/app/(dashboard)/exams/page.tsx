@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { ExamsContent } from "@/components/exams/exams-content";
 import { getExams } from "@/lib/actions/exams";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { cheapestPlanWith } from "@/lib/plans";
 
 export const metadata = { title: "Examinations & Report Cards | Kora" };
 
@@ -24,10 +26,12 @@ export default async function ExamsPage() {
   });
 
   const { hasFeatureAccess } = await import("@/lib/subscription");
+  const plans = await getPlanCatalog();
   const canAccess = hasFeatureAccess(
     school?.plan || "FREE",
     school?.subscription?.status || "ACTIVE",
     "EXAMS",
+    plans,
   );
 
   if (!canAccess && user.role !== "SUPER_ADMIN") {
@@ -37,7 +41,7 @@ export default async function ExamsPage() {
       <PlanUpgradeGate
         featureName="Examinations & Institutional Report Cards"
         description="Manage academic terms, batch marks entry, CBSE 9-point grading, and printable institutional report cards."
-        requiredPlan="PRO"
+        requiredPlan={cheapestPlanWith(plans, "EXAMS")}
         highlights={[
           "CBSE 9-point and percentage grading schemes",
           "Batch marks entry across classes and sections",

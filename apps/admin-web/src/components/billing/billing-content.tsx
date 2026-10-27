@@ -6,10 +6,11 @@ import { ArrowLeft, Check, Clock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@schoolos/utils";
 import {
-  PAID_PLAN_IDS,
-  PLANS,
   formatPlanPrice,
+  getPlan,
+  paidPlansByPrice,
   type PaidPlanId,
+  type PlanCatalog,
 } from "@/lib/plans";
 
 interface BillingStatus {
@@ -24,6 +25,8 @@ interface BillingStatus {
 }
 
 interface Props {
+  /** The live plan catalogue (`getPlanCatalog()`). */
+  plans: PlanCatalog;
   schoolName: string;
   /** Only the school admin pays; other staff see the status. */
   canPay: boolean;
@@ -40,8 +43,8 @@ const formatDate = (iso: string | null) =>
       })
     : null;
 
-function statusLine(status: BillingStatus) {
-  const planName = PLANS[status.plan as PaidPlanId]?.name ?? status.plan;
+function statusLine(status: BillingStatus, plans: PlanCatalog) {
+  const planName = getPlan(plans, status.plan).name;
   const days = status.daysRemaining ?? 0;
   if (status.isExpired) {
     return {
@@ -85,13 +88,14 @@ const TONES = {
 };
 
 export function BillingContent({
+  plans,
   schoolName,
   canPay,
   status,
   suggestedPlan,
 }: Readonly<Props>) {
   const [payingPlan, setPayingPlan] = useState<PaidPlanId | null>(null);
-  const line = statusLine(status);
+  const line = statusLine(status, plans);
   const currentPaid = !status.isTrial && !status.isExpired;
 
   useEffect(() => {
@@ -127,7 +131,7 @@ export function BillingContent({
         amount: order.amount,
         currency: order.currency,
         name: "Kora",
-        description: `${PLANS[plan].name} plan · 1 month`,
+        description: `${plans[plan].name} plan · 1 month`,
         order_id: order.orderId,
         handler: async (response: any) => {
           try {
@@ -143,7 +147,7 @@ export function BillingContent({
             const data = await res.json();
             if (!res.ok)
               throw new Error(data.error || "We couldn't confirm the payment");
-            toast.success(`${PLANS[plan].name} plan is active`);
+            toast.success(`${plans[plan].name} plan is active`);
             window.location.href = "/dashboard";
           } catch (err: any) {
             toast.error(
@@ -201,8 +205,8 @@ export function BillingContent({
         )}
 
         <div className="grid gap-6 md:grid-cols-3">
-          {PAID_PLAN_IDS.map((id) => {
-            const plan = PLANS[id];
+          {paidPlansByPrice(plans).map((plan) => {
+            const { id } = plan;
             const isCurrent = currentPaid && status.plan === id;
             const highlighted = suggestedPlan
               ? suggestedPlan === id

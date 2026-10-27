@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { TRIAL } from "./landing-content";
+import type { PlanCatalog } from "@/lib/plans";
+import { trialOffer } from "./landing-content";
 
-export function CtaBand() {
+export function CtaBand({ plans }: Readonly<{ plans: PlanCatalog }>) {
+  const trial = trialOffer(plans);
   return (
     <section
       aria-labelledby="cta-heading"
@@ -26,7 +28,7 @@ export function CtaBand() {
             Transform your school today
           </h2>
           <p className="mt-3 text-lg text-violet-100">
-            Try every {TRIAL.planName} feature free for {TRIAL.days} days, and
+            Try every {trial.planName} feature free for {trial.days} days, and
             see your school run more simply.
           </p>
         </div>

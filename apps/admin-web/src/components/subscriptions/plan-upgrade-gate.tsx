@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Card, Tag, Button } from "antd";
-import { PLANS, formatPlanPrice } from "@/lib/plans";
+import { formatPlanPrice, type PlanDefinition } from "@/lib/plans";
 import {
   Sparkles,
   ArrowRight,
@@ -15,14 +15,15 @@ import {
 interface PlanUpgradeGateProps {
   featureName: string;
   description: string;
-  requiredPlan?: "BASIC" | "PRO" | "ENTERPRISE";
+  /** The cheapest plan with the feature (`cheapestPlanWith`); null if none has it. */
+  requiredPlan: PlanDefinition | null;
   highlights: string[];
 }
 
 export function PlanUpgradeGate({
   featureName,
   description,
-  requiredPlan = "PRO",
+  requiredPlan,
   highlights,
 }: PlanUpgradeGateProps) {
   return (
@@ -33,14 +34,16 @@ export function PlanUpgradeGate({
             <Lock className="w-7 h-7" />
           </div>
 
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Tag
-              color="purple"
-              className="px-2.5 py-0.5 font-bold uppercase tracking-wider text-[10px]"
-            >
-              {requiredPlan} Tier Feature
-            </Tag>
-          </div>
+          {requiredPlan && (
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Tag
+                color="purple"
+                className="px-2.5 py-0.5 font-bold uppercase tracking-wider text-[10px]"
+              >
+                {requiredPlan.name} Plan Feature
+              </Tag>
+            </div>
+          )}
 
           <h2 className="text-2xl font-bold tracking-tight text-foreground">
             Unlock {featureName}
@@ -53,7 +56,9 @@ export function PlanUpgradeGate({
           {/* Highlights List */}
           <div className="bg-card/80 border rounded-2xl p-6 max-w-lg mx-auto my-6 text-left space-y-3 shadow-xs">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              What&apos;s Included in {requiredPlan}:
+              {requiredPlan
+                ? `What's Included in ${requiredPlan.name}:`
+                : "What's Included:"}
             </p>
             {highlights.map((item, idx) => (
               <div key={idx} className="flex items-start gap-2.5">
@@ -65,32 +70,41 @@ export function PlanUpgradeGate({
             ))}
           </div>
 
-          {/* Pricing & CTA */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <div className="text-left sm:text-right">
-              <p className="text-xs text-muted-foreground">Starting from</p>
-              <p className="text-xl font-bold text-foreground">
-                {formatPlanPrice(PLANS[requiredPlan])} / month
+          {requiredPlan ? (
+            <>
+              {/* Pricing & CTA */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div className="text-left sm:text-right">
+                  <p className="text-xs text-muted-foreground">Starting from</p>
+                  <p className="text-xl font-bold text-foreground">
+                    {formatPlanPrice(requiredPlan)} / month
+                  </p>
+                </div>
+
+                <Link href={`/billing?plan=${requiredPlan.id}`}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<Sparkles className="w-4 h-4" />}
+                    className="bg-violet-600 hover:bg-violet-700 h-11 px-6 rounded-xl font-semibold flex items-center gap-2"
+                  >
+                    Upgrade to {requiredPlan.name}
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground mt-4 flex items-center justify-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
+                Activates as soon as you pay · Billed monthly, no auto-renewal
               </p>
-            </div>
-
-            <Link href={`/billing?plan=${requiredPlan}`}>
-              <Button
-                type="primary"
-                size="large"
-                icon={<Sparkles className="w-4 h-4" />}
-                className="bg-violet-600 hover:bg-violet-700 h-11 px-6 rounded-xl font-semibold flex items-center gap-2"
-              >
-                Upgrade to {requiredPlan}
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-
-          <p className="text-[11px] text-muted-foreground mt-4 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
-            Activates as soon as you pay · Billed monthly, no auto-renewal
-          </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No plan includes this right now. Contact Kora support to get
+              access.
+            </p>
+          )}
         </div>
       </Card>
     </div>

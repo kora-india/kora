@@ -5,11 +5,8 @@ import { prisma } from "@schoolos/db";
 import { UserRole } from "@schoolos/types";
 import { getAllPlanLimitsMap } from "@/lib/plan-limits";
 import { monthlyCollections, recentMonths } from "@/lib/reports/monthly-totals";
-import { PLANS } from "@/lib/plans";
-
-const TIER_PRICES: Record<string, number> = Object.fromEntries(
-  Object.values(PLANS).map((p) => [p.id, p.monthlyPriceInr]),
-);
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { PLAN_IDS, getPlan } from "@/lib/plans";
 
 export async function getSuperAdminSession() {
   const session = await auth();
@@ -43,6 +40,7 @@ export async function getSuperAdminDashboardData() {
     allSchools,
     pastSchools,
     planLimitsMap,
+    plans,
   ] = await Promise.all([
     prisma.school.count(),
     prisma.school.count({ where: { isActive: true } }),
@@ -88,7 +86,9 @@ export async function getSuperAdminDashboardData() {
       select: { createdAt: true, plan: true },
     }),
     getAllPlanLimitsMap(),
+    getPlanCatalog(),
   ]);
+  const priceOf = (plan: string) => getPlan(plans, plan).monthlyPriceInr;
 
   const suspendedSchools = totalSchools - activeSchools;
 
@@ -103,39 +103,16 @@ export async function getSuperAdminDashboardData() {
   let estimatedMRR = 0;
   for (const item of schoolsByPlan) {
     planCounts[item.plan] = item._count.id;
-    estimatedMRR += item._count.id * (TIER_PRICES[item.plan] ?? 0);
+    estimatedMRR += item._count.id * priceOf(item.plan);
   }
 
-  const planDistribution = [
-    {
-      name: "Free Tier",
-      plan: "FREE",
-      count: planCounts.FREE,
-      value: planCounts.FREE,
-      price: 0,
-    },
-    {
-      name: "Basic Plan",
-      plan: "BASIC",
-      count: planCounts.BASIC,
-      value: planCounts.BASIC,
-      price: PLANS.BASIC.monthlyPriceInr,
-    },
-    {
-      name: "Pro Plan",
-      plan: "PRO",
-      count: planCounts.PRO,
-      value: planCounts.PRO,
-      price: PLANS.PRO.monthlyPriceInr,
-    },
-    {
-      name: "Enterprise",
-      plan: "ENTERPRISE",
-      count: planCounts.ENTERPRISE,
-      value: planCounts.ENTERPRISE,
-      price: PLANS.ENTERPRISE.monthlyPriceInr,
-    },
-  ].filter((p) => p.count > 0 || totalSchools === 0);
+  const planDistribution = PLAN_IDS.map((id) => ({
+    name: plans[id].name,
+    plan: id,
+    count: planCounts[id],
+    value: planCounts[id],
+    price: plans[id].monthlyPriceInr,
+  })).filter((p) => p.count > 0 || totalSchools === 0);
 
   // Platform Total Fee Volume Processed by Schools
   const totalFeeVolume = Number(paymentAgg._sum.amount ?? 0);
@@ -162,6 +139,7 @@ export async function getSuperAdminDashboardData() {
       email: school.email,
       phone: school.phone,
       plan: school.plan,
+      planName: getPlan(plans, school.plan).name,
       isActive: school.isActive,
       createdAt: school.createdAt.toISOString(),
       studentCount,
@@ -176,6 +154,7 @@ export async function getSuperAdminDashboardData() {
     id: string;
     name: string;
     plan: string;
+    planName: string;
     current: number;
     max: number;
     percent: number;
@@ -189,6 +168,7 @@ export async function getSuperAdminDashboardData() {
           id: s.id,
           name: s.name,
           plan: s.plan,
+          planName: getPlan(plans, s.plan).name,
           current: s._count.students,
           max: limits.maxStudents,
           percent: pct,
@@ -219,7 +199,7 @@ export async function getSuperAdminDashboardData() {
     const m = months.find((entry) => entry.key === key);
     if (m) {
       m.count += 1;
-      m.revenue += TIER_PRICES[s.plan] ?? 0;
+      m.revenue += priceOf(s.plan);
     }
   });
 
@@ -285,6 +265,7 @@ export async function getSuperAdminAnalyticsData() {
     monthlyCollections(null, months, "Asia/Kolkata"),
     prisma.school.groupBy({ by: ["plan"], _count: { id: true } }),
   ]);
+  const plans = await getPlanCatalog();
 
   const calculatePct = (count: number) =>
     totalSchools > 0 ? Math.round((count / totalSchools) * 100) : 0;
@@ -333,8 +314,8 @@ export async function getSuperAdminAnalyticsData() {
     volume: volumeByMonth.get(key) ?? 0,
   }));
 
-  const plans = planDistribution.map((p) => ({
-    name: p.plan,
+  const planShares = planDistribution.map((p) => ({
+    name: getPlan(plans, p.plan).name,
     count: p._count.id,
     percentage:
       totalSchools > 0 ? Math.round((p._count.id / totalSchools) * 100) : 0,
@@ -347,6 +328,6 @@ export async function getSuperAdminAnalyticsData() {
     totalStaff,
     moduleAdoption,
     monthlyVolume,
-    plans,
+    plans: planShares,
   };
 }

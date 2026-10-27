@@ -23,6 +23,9 @@ process.env.SMTP_PASSWORD = process.env.SMTP_PASSWORD || "test-smtp-pass";
 // Mock Next.js Cache
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  // No cache in tests: every call reads the database.
+  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
 }));
 
 // Mock Auth

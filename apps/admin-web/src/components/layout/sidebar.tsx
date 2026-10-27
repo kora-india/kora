@@ -37,6 +37,7 @@ interface SidebarProps {
   userRole: UserRole;
   schoolName?: string;
   schoolPlan?: string;
+  planName?: string;
 }
 
 const adminNavItems = [
@@ -128,10 +129,15 @@ function getRoleBadge(role: UserRole) {
   }
 }
 
-function getPlanBadge(plan?: string) {
+// Colours and icons follow the tier; the label is the plan's current name.
+function getPlanBadge(plan?: string, name?: string) {
   if (!plan) return null;
-  const p = plan.toUpperCase();
-  switch (p) {
+  const badge = planBadgeStyle(plan.toUpperCase());
+  return { ...badge, label: name || badge.label };
+}
+
+function planBadgeStyle(plan: string) {
+  switch (plan) {
     case "ENTERPRISE":
       return {
         label: "Enterprise",
@@ -167,13 +173,14 @@ export function Sidebar({
   userRole,
   schoolName,
   schoolPlan,
+  planName,
 }: Readonly<SidebarProps>) {
   const [collapsed, setCollapsed] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
   const navItems = getNavItems(userRole);
   const roleBadge = getRoleBadge(userRole);
-  const planBadge = getPlanBadge(schoolPlan);
+  const planBadge = getPlanBadge(schoolPlan, planName);
 
   useEffect(() => {
     setNavigatingTo(null);

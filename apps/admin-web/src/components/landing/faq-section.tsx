@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import { FAQS } from "./landing-content";
+import type { PlanCatalog } from "@/lib/plans";
+import { faqs } from "./landing-content";
 
-export function FaqSection() {
+export function FaqSection({ plans }: Readonly<{ plans: PlanCatalog }>) {
   return (
     <section
       id="faq"
@@ -30,7 +31,7 @@ export function FaqSection() {
         </div>
 
         <div className="divide-y divide-slate-200 border-y border-slate-200">
-          {FAQS.map((faq, i) => (
+          {faqs(plans).map((faq, i) => (
             <details key={faq.q} className="group" open={i === 0}>
               <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left font-semibold text-slate-900 marker:hidden [&::-webkit-details-marker]:hidden">
                 {faq.q}

@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { prisma } from "@schoolos/db";
 import { requireActiveSchoolSession } from "@/lib/auth-guard";
-import { checkClassLimit, getPlanLimits } from "@/lib/plan-limits";
+import { checkClassLimit } from "@/lib/plan-limits";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { getPlan } from "@/lib/plans";
 import { revalidatePath } from "next/cache";
 import { invalidateCache } from "@/lib/redis";
 import {
@@ -304,13 +306,16 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
           where: { id: schoolId },
           select: { plan: true },
         });
-        const limits = await getPlanLimits(plan.plan);
+        const { name: planName, limits } = getPlan(
+          await getPlanCatalog(),
+          plan.plan,
+        );
         const activeStudents = await tx.student.count({
           where: { schoolId, isActive: true },
         });
         if (activeStudents + toImport.length > limits.maxStudents) {
           throw new ImportAbort(
-            `Importing ${toImport.length} students would exceed your ${plan.plan} plan limit (${activeStudents}/${limits.maxStudents} active students). Upgrade your plan to add more.`,
+            `Importing ${toImport.length} students would exceed your ${planName} plan limit (${activeStudents}/${limits.maxStudents} active students). Upgrade your plan to add more.`,
           );
         }
 

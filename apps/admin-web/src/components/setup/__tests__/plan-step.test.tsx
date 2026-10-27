@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { DEFAULT_PLANS } from "@/lib/plans";
 import { PlanStep } from "../steps/plan-step";
 import type { PlanChoice, SavedPayment } from "../setup-model";
 import { COMPLETE_SCHOOL, renderWithForm } from "./test-utils";
@@ -20,6 +21,7 @@ function renderStep({
   const onEdit = vi.fn();
   renderWithForm(
     <PlanStep
+      plans={DEFAULT_PLANS}
       choice={choice}
       onChoiceChange={onChoiceChange}
       savedPayment={savedPayment}

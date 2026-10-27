@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { cn } from "@schoolos/utils";
-import { PAID_PLAN_IDS, PLANS, formatPlanPrice } from "@/lib/plans";
-import { TRIAL } from "./landing-content";
+import {
+  TRIAL_DURATION_DAYS,
+  formatPlanPrice,
+  paidPlansByPrice,
+  type PlanCatalog,
+} from "@/lib/plans";
 
-// Names, prices and features come from the plan catalogue (U1), so this
+// Names, prices and features come from the live plan catalogue (U1), so this
 // page shows what setup charges and what the app enforces.
-export function PricingSection() {
+export function PricingSection({ plans }: Readonly<{ plans: PlanCatalog }>) {
   return (
     <section
       id="pricing"
@@ -24,16 +28,15 @@ export function PricingSection() {
           </h2>
           <p className="mt-4 text-lg text-slate-600">
             Pay monthly, nothing renews on its own. Every plan starts with a{" "}
-            {TRIAL.days}-day free trial.
+            {TRIAL_DURATION_DAYS}-day free trial.
           </p>
         </div>
 
         <div className="mt-14 grid gap-6 lg:grid-cols-3">
-          {PAID_PLAN_IDS.map((id) => {
-            const plan = PLANS[id];
+          {paidPlansByPrice(plans).map((plan) => {
             return (
               <div
-                key={id}
+                key={plan.id}
                 className={cn(
                   "relative flex flex-col rounded-2xl bg-white p-7",
                   plan.popular

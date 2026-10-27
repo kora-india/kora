@@ -3,7 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { UserRole } from "@schoolos/types";
 import { SubscriptionsContent } from "@/components/subscriptions/subscriptions-content";
-import { getPlanLimits } from "@/lib/plan-limits";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { getPlan } from "@/lib/plans";
 
 export const metadata = { title: "Subscriptions & Plans" };
 
@@ -32,23 +33,28 @@ export default async function SubscriptionsPage() {
     ENTERPRISE: 0,
   };
 
-  const schoolsWithLimits = await Promise.all(
-    schools.map(async (school) => {
-      planCounts[school.plan] = (planCounts[school.plan] ?? 0) + 1;
-      const limits = await getPlanLimits(school.plan);
-      return {
-        id: school.id,
-        name: school.name,
-        subdomain: school.subdomain,
-        plan: school.plan,
-        isActive: school.isActive,
-        studentCount: school._count.students,
-        maxStudents: limits.maxStudents,
-        teacherCount: school._count.teachers,
-        maxTeachers: limits.maxTeachers,
-      };
-    })
-  );
+  const plans = await getPlanCatalog();
+  const schoolsWithLimits = schools.map((school) => {
+    planCounts[school.plan] = (planCounts[school.plan] ?? 0) + 1;
+    const { limits } = getPlan(plans, school.plan);
+    return {
+      id: school.id,
+      name: school.name,
+      subdomain: school.subdomain,
+      plan: school.plan,
+      isActive: school.isActive,
+      studentCount: school._count.students,
+      maxStudents: limits.maxStudents,
+      teacherCount: school._count.teachers,
+      maxTeachers: limits.maxTeachers,
+    };
+  });
 
-  return <SubscriptionsContent schools={schoolsWithLimits} planCounts={planCounts} />;
+  return (
+    <SubscriptionsContent
+      plans={plans}
+      schools={schoolsWithLimits}
+      planCounts={planCounts}
+    />
+  );
 }

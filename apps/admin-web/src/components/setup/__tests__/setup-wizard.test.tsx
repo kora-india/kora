@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { DEFAULT_PLANS } from "@/lib/plans";
 import { SetupWizard } from "../setup-wizard";
 import {
   draftKey,
@@ -109,7 +110,7 @@ describe("SetupWizard", () => {
   it("won't leave the profile step until it's valid, and focuses the first problem", async () => {
     mockFetch();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     expect(heading()).toHaveTextContent("Tell us about your school");
     expect(screen.getByText("1 of 4")).toBeInTheDocument();
 
@@ -130,7 +131,7 @@ describe("SetupWizard", () => {
       "/api/school/create": () => created.promise,
     });
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     // Profile
     await user.type(
@@ -216,7 +217,7 @@ describe("SetupWizard", () => {
   it("saves answers as they're typed and restores them after a reload", async () => {
     mockFetch();
     const user = userEvent.setup();
-    const { unmount } = render(<SetupWizard />);
+    const { unmount } = render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     await user.type(screen.getByLabelText("School name"), "Greenfield Academy");
     await waitFor(() =>
@@ -224,7 +225,7 @@ describe("SetupWizard", () => {
     );
     unmount();
 
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await waitFor(() =>
       expect(screen.getByLabelText("School name")).toHaveValue(
         "Greenfield Academy",
@@ -239,7 +240,7 @@ describe("SetupWizard", () => {
     mockFetch();
     writeDraft("user-1", { step: 3, values: COMPLETE_SCHOOL });
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     await waitFor(() =>
       expect(heading()).toHaveTextContent("How does your school run?"),
@@ -255,7 +256,7 @@ describe("SetupWizard", () => {
     mockFetch();
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await waitFor(() => expect(heading()).toHaveTextContent("Review"));
 
     await user.click(screen.getByRole("button", { name: "Edit profile" }));
@@ -276,7 +277,7 @@ describe("SetupWizard", () => {
       values: { ...COMPLETE_SCHOOL, phone: "" },
     });
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await waitFor(() => expect(heading()).toHaveTextContent("Review"));
 
     await user.click(screen.getByRole("button", { name: "Edit profile" }));
@@ -294,7 +295,7 @@ describe("SetupWizard", () => {
       "check-subdomain": () => jsonResponse({ available: false }),
     });
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await user.type(
       screen.getByLabelText("School name"),
       "Delhi Public School",
@@ -325,7 +326,7 @@ describe("SetupWizard", () => {
     });
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await waitFor(() =>
       expect(callsTo(fetchMock, "check-subdomain")).toHaveLength(1),
     );
@@ -367,7 +368,7 @@ describe("SetupWizard", () => {
     vi.stubGlobal("Razorpay", Razorpay);
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     await user.click(
       await screen.findByRole("radio", { name: "Pro, ₹1,999 a month" }),
@@ -412,7 +413,7 @@ describe("SetupWizard", () => {
     );
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     await user.click(
       await screen.findByRole("radio", { name: "Basic, ₹999 a month" }),
@@ -434,7 +435,7 @@ describe("SetupWizard", () => {
     writeSavedPayment("user-1", PAYMENT);
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     expect(
       await screen.findByText("We received your payment"),
@@ -457,7 +458,7 @@ describe("SetupWizard", () => {
     });
     resumeAtPlanStep();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
 
     await user.click(
       await screen.findByRole("button", { name: "Start 14-day free trial" }),
@@ -483,7 +484,7 @@ describe("SetupWizard", () => {
   it("signs out from the header", async () => {
     mockFetch();
     const user = userEvent.setup();
-    render(<SetupWizard />);
+    render(<SetupWizard plans={DEFAULT_PLANS} />);
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     expect(mocks.signOut).toHaveBeenCalledWith({ callbackUrl: "/login" });
   });

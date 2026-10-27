@@ -12,12 +12,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  PLANS,
   PAID_PLAN_IDS,
   TRIAL_DURATION_DAYS,
   TRIAL_PLAN,
   formatPlanPrice,
+  paidPlansByPrice,
   type PaidPlanId,
+  type PlanCatalog,
 } from "@/lib/plans";
 import {
   CLASS_CATEGORIES,
@@ -365,22 +366,35 @@ export async function lookupPincode(pin: string): Promise<PincodePlace | null> {
 
 export type PlanChoice = "TRIAL" | PaidPlanId;
 
-export const fitsPlan = (plan: PaidPlanId, students?: number) =>
-  !students || students <= PLANS[plan].limits.maxStudents;
+export const fitsPlan = (
+  plans: PlanCatalog,
+  plan: PaidPlanId,
+  students?: number,
+) => !students || students <= plans[plan].limits.maxStudents;
 
-/** The cheapest paid plan with room for this many students. */
-export function recommendedPlan(students?: number): PaidPlanId {
+/** The cheapest paid plan with room for this many students, else the biggest. */
+export function recommendedPlan(
+  plans: PlanCatalog,
+  students?: number,
+): PaidPlanId {
   if (!students) return TRIAL_PLAN;
-  return PAID_PLAN_IDS.find((id) => fitsPlan(id, students)) ?? "ENTERPRISE";
+  const byPrice = paidPlansByPrice(plans);
+  const fits = byPrice.find((p) => fitsPlan(plans, p.id, students));
+  if (fits) return fits.id;
+  return byPrice.reduce((a, b) =>
+    b.limits.maxStudents > a.limits.maxStudents ? b : a,
+  ).id;
 }
 
 /** The footer's primary button label and the note beside it. */
 export function footerCopy({
+  plans,
   step,
   choice,
   hasSavedPayment,
   isSubmitting,
 }: {
+  plans: PlanCatalog;
   step: StepId;
   choice: PlanChoice;
   hasSavedPayment: boolean;
@@ -409,7 +423,7 @@ export function footerCopy({
   return {
     label: isSubmitting
       ? "Opening payment…"
-      : `Pay ${formatPlanPrice(PLANS[choice])} & create school`,
+      : `Pay ${formatPlanPrice(plans[choice])} & create school`,
     note: "Paid monthly through Razorpay. Nothing renews automatically.",
   };
 }

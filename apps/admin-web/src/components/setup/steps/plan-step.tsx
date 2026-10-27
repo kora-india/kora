@@ -4,13 +4,13 @@ import { useFormContext } from "react-hook-form";
 import { AlertTriangle, Check, CheckCircle2, Pencil } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import {
-  PLANS,
-  PAID_PLAN_IDS,
   TRIAL_DURATION_DAYS,
   TRIAL_PLAN,
   formatLimit,
   formatPlanPrice,
+  paidPlansByPrice,
   type PaidPlanId,
+  type PlanCatalog,
 } from "@/lib/plans";
 import {
   GRADING_OPTIONS,
@@ -175,11 +175,13 @@ function OverLimit({
 }
 
 export function PlanStep({
+  plans,
   choice,
   onChoiceChange,
   savedPayment,
   onEdit,
 }: Readonly<{
+  plans: PlanCatalog;
   choice: PlanChoice;
   onChoiceChange: (choice: PlanChoice) => void;
   savedPayment: SavedPayment | null;
@@ -188,9 +190,9 @@ export function PlanStep({
   const { getValues } = useFormContext<SetupInput>();
   const students = Number(getValues("expectedStudents")) || 0;
   const suggested: PaidPlanId | null = students
-    ? recommendedPlan(students)
+    ? recommendedPlan(plans, students)
     : null;
-  const trialLimit = PLANS[TRIAL_PLAN].limits.maxStudents;
+  const trialLimit = plans[TRIAL_PLAN].limits.maxStudents;
 
   return (
     <>
@@ -208,7 +210,7 @@ export function PlanStep({
           <div>
             <p className="font-semibold">We received your payment</p>
             <p className="mt-0.5 text-sm opacity-90">
-              Your {PLANS[savedPayment.plan]?.name ?? savedPayment.plan} plan is
+              Your {plans[savedPayment.plan]?.name ?? savedPayment.plan} plan is
               paid. Finish setup to create your school; you won&apos;t be
               charged again.
             </p>
@@ -242,7 +244,7 @@ export function PlanStep({
                   <Badge>No payment</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Every {PLANS[TRIAL_PLAN].name} feature for{" "}
+                  Every {plans[TRIAL_PLAN].name} feature for{" "}
                   {TRIAL_DURATION_DAYS} days, up to {formatLimit(trialLimit)}{" "}
                   students. Choose a plan when the trial ends.
                 </p>
@@ -263,8 +265,8 @@ export function PlanStep({
             </label>
 
             <div className="grid gap-4 md:grid-cols-3">
-              {PAID_PLAN_IDS.map((id) => {
-                const plan = PLANS[id];
+              {paidPlansByPrice(plans).map((plan) => {
+                const { id } = plan;
                 const badge =
                   suggested === id
                     ? "Fits your school"
@@ -312,7 +314,7 @@ export function PlanStep({
                         </li>
                       ))}
                     </ul>
-                    {!fitsPlan(id, students) && (
+                    {!fitsPlan(plans, id, students) && (
                       <OverLimit
                         limit={plan.limits.maxStudents}
                         students={students}

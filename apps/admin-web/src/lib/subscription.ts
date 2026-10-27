@@ -1,7 +1,13 @@
 import { prisma, SubscriptionPlan, SubscriptionStatus } from "@schoolos/db";
-import { TRIAL_DURATION_DAYS } from "@/lib/plans";
+import {
+  TRIAL_DURATION_DAYS,
+  getPlan,
+  planIncludes,
+  type FeatureKey,
+  type PlanCatalog,
+} from "@/lib/plans";
 
-export type FeatureKey = "EXAMS" | "TIMETABLE" | "ANALYTICS" | "TRANSPORT";
+export type { FeatureKey };
 
 export interface SubscriptionEvaluation {
   status: SubscriptionStatus;
@@ -190,39 +196,19 @@ export function evaluateSubscriptionValidity(
 }
 
 /**
- * Evaluates whether a given feature is allowed under the current plan and subscription status.
- * Note: During an active TRIAL, institutions receive full PRO access!
+ * Whether the plan unlocks `feature`, per the live catalogue (`getPlanCatalog()`).
+ * During an active TRIAL every feature is unlocked.
  */
 export function hasFeatureAccess(
   plan: SubscriptionPlan | string,
   status: SubscriptionStatus | string,
   feature: FeatureKey,
+  plans: PlanCatalog,
 ): boolean {
-  // During an active trial, all features are unlocked
   if (status === SubscriptionStatus.TRIAL) {
     return true;
   }
-
-  const p = plan as SubscriptionPlan;
-
-  switch (feature) {
-    case "EXAMS":
-    case "TIMETABLE":
-    case "ANALYTICS":
-      // Requires PRO or ENTERPRISE
-      return p === SubscriptionPlan.PRO || p === SubscriptionPlan.ENTERPRISE;
-
-    case "TRANSPORT":
-      // Basic, Pro, and Enterprise include transport
-      return (
-        p === SubscriptionPlan.BASIC ||
-        p === SubscriptionPlan.PRO ||
-        p === SubscriptionPlan.ENTERPRISE
-      );
-
-    default:
-      return true;
-  }
+  return planIncludes(getPlan(plans, plan), feature);
 }
 
 /**

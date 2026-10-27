@@ -8,6 +8,7 @@ import { calculateReportCardSummary, calculateSubjectGrade } from "../grading";
 import { invalidateStudentsCache } from "@/lib/redis";
 import { compareRollNumbers } from "@schoolos/types";
 import { toActionResult } from "@/lib/action-errors";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -51,6 +52,7 @@ async function requireExamAccess(
       school.plan,
       school.subscription?.status || "ACTIVE",
       "EXAMS",
+      await getPlanCatalog(),
     );
     if (!allowed) {
       throw new Error(

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BillingContent } from "@/components/billing/billing-content";
 import { evaluateSubscriptionValidity } from "@/lib/subscription";
 import { isPaidPlan } from "@/lib/plans";
+import { getPlanCatalog } from "@/lib/plan-catalog";
 
 export const metadata = { title: "Plan & Billing — Kora" };
 
@@ -49,6 +50,7 @@ export default async function BillingPage(props: {
 
   return (
     <BillingContent
+      plans={await getPlanCatalog()}
       schoolName={school.name}
       canPay={user.role === "SCHOOL_ADMIN"}
       status={{

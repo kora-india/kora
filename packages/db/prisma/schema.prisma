@@ -142,6 +142,28 @@ model PlanLimit {
   @@map("plan_limits")
 }
 
+/// A plan as the super admin set it up (U1). Saved for every plan at once;
+/// until then the defaults in apps/admin-web/src/lib/plans.ts apply.
+model PlanConfig {
+  plan            SubscriptionPlan @id
+  name            String
+  tagline         String
+  monthlyPriceInr Int
+  /// null means unlimited.
+  maxStudents     Int?
+  maxTeachers     Int?
+  maxClasses      Int?
+  /// Gated modules the plan unlocks: TRANSPORT, EXAMS, TIMETABLE, ANALYTICS.
+  modules         String[]
+  /// Benefit lines shown on pricing, setup and billing.
+  benefits        String[]
+  popular         Boolean          @default(false)
+  updatedBy       String?
+  updatedAt       DateTime         @updatedAt
+
+  @@map("plan_configs")
+}
+
 model User {
   id                 String       @id @default(cuid())
   schoolId           String?

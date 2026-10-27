@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AnalyticsContent } from "@/components/analytics/analytics-content";
 import { getCache } from "@/lib/redis";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+import { cheapestPlanWith } from "@/lib/plans";
 
 export const metadata = { title: "Analytics" };
 
@@ -266,10 +268,12 @@ export default async function AnalyticsPage() {
   });
 
   const { hasFeatureAccess } = await import("@/lib/subscription");
+  const plans = await getPlanCatalog();
   const canAccess = hasFeatureAccess(
     school?.plan || "FREE",
     school?.subscription?.status || "ACTIVE",
     "ANALYTICS",
+    plans,
   );
 
   if (!canAccess) {
@@ -279,7 +283,7 @@ export default async function AnalyticsPage() {
       <PlanUpgradeGate
         featureName="Advanced Analytics & Trends"
         description="Unlock comprehensive fee collections, attendance rate trends, cohort metrics, and cash flow projections."
-        requiredPlan="PRO"
+        requiredPlan={cheapestPlanWith(plans, "ANALYTICS")}
         highlights={[
           "Real-time fee collection vs pending trends",
           "Student attendance rate and absence metrics",

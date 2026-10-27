@@ -10,6 +10,11 @@ import { PricingSection } from "@/components/landing/pricing-section";
 import { FaqSection } from "@/components/landing/faq-section";
 import { CtaBand } from "@/components/landing/cta-band";
 import { LandingFooter } from "@/components/landing/landing-footer";
+import { getPlanCatalog } from "@/lib/plan-catalog";
+
+// Plans come from the database: rebuilt when the super admin saves a plan
+// (see updatePlan), and at least every five minutes.
+export const revalidate = 300;
 
 // The feature section's photo: drop a transparent cut-out at one of these
 // paths in /public and it's used on the next build.
@@ -27,7 +32,8 @@ function featurePhoto() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const plans = await getPlanCatalog();
   return (
     <div className="min-h-screen overflow-x-hidden bg-white font-sans text-slate-900 antialiased selection:bg-violet-200 selection:text-violet-950">
       <LandingNav />
@@ -35,11 +41,11 @@ export default function Home() {
         <HeroSection />
         <ModuleStrip />
         <FeatureShowcase photoSrc={featurePhoto()} />
-        <FactsBand />
+        <FactsBand plans={plans} />
         <HowItWorks />
-        <PricingSection />
-        <FaqSection />
-        <CtaBand />
+        <PricingSection plans={plans} />
+        <FaqSection plans={plans} />
+        <CtaBand plans={plans} />
       </main>
       <LandingFooter />
     </div>

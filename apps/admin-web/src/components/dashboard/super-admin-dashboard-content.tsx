@@ -74,6 +74,7 @@ interface SuperAdminDashboardProps {
       email: string | null;
       phone: string | null;
       plan: string;
+      planName: string;
       isActive: boolean;
       createdAt: string;
       studentCount: number;
@@ -85,6 +86,7 @@ interface SuperAdminDashboardProps {
       id: string;
       name: string;
       plan: string;
+      planName: string;
       current: number;
       max: number;
       percent: number;
@@ -182,7 +184,7 @@ export function SuperAdminDashboardContent({
   }).format(new Date());
 
   const planChartData = data.planDistribution.map((p) => ({
-    name: `${p.plan} (${p.count})`,
+    name: `${p.name} (${p.count})`,
     value: p.count,
   }));
 
@@ -354,7 +356,7 @@ export function SuperAdminDashboardContent({
                 key={p.plan}
                 className="flex items-center justify-between px-2 py-1 rounded bg-muted/40"
               >
-                <span className="text-muted-foreground">{p.plan}:</span>
+                <span className="text-muted-foreground">{p.name}:</span>
                 <span className="font-semibold">{p.count}</span>
               </div>
             ))}
@@ -426,7 +428,7 @@ export function SuperAdminDashboardContent({
                             PLAN_BADGE[s.plan] ?? PLAN_BADGE.FREE
                           }`}
                         >
-                          {s.plan}
+                          {s.planName}
                         </span>
                       </td>
                       <td className="py-3 px-3">
@@ -523,7 +525,7 @@ export function SuperAdminDashboardContent({
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                       <span>
-                        {item.current} / {item.max} students ({item.plan})
+                        {item.current} / {item.max} students ({item.planName})
                       </span>
                       <Link
                         href={`/schools?search=${encodeURIComponent(item.name)}`}
