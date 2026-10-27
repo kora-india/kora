@@ -225,6 +225,7 @@ export function SubscriptionsContent({
                 <button
                   type="button"
                   onClick={() => setEditingPlan(id)}
+                  aria-label={`Edit ${plan.name} plan`}
                   className="h-8 text-xs font-semibold rounded-lg transition-colors border bg-violet-600 text-white border-violet-600 hover:bg-violet-700 flex items-center justify-center gap-1.5"
                 >
                   <Pencil className="w-3 h-3" /> Edit plan

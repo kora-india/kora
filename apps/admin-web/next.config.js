@@ -27,6 +27,10 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  // The end-to-end tests build into their own folder (e2e/env.ts), so a test
+  // run never replaces the build or dev cache in .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   // @schoolos/db intentionally excluded — Prisma must not be bundled by webpack
   // or it loses the __dirname reference needed to locate the native .node engine.
   transpilePackages: [

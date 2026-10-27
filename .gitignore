@@ -5,6 +5,7 @@ node_modules
 
 # Build outputs & caches
 .next
+.next-e2e
 out
 dist
 build
@@ -16,6 +17,9 @@ tsconfig.tsbuildinfo
 # Testing & Coverage
 coverage
 .nyc_output
+test-results
+playwright-report
+blob-report
 
 # Environment files
 .env

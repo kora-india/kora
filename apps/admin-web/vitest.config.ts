@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
@@ -18,6 +18,8 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./src/test/setup.ts"],
+    // Playwright runs e2e/ against the built app (playwright.config.ts).
+    exclude: [...configDefaults.exclude, "e2e/**"],
     globals: true,
     fileParallelism: false,
     testTimeout: 30000,

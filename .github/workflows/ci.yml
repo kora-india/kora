@@ -86,3 +86,60 @@ jobs:
         run: pnpm run build
         env:
           NODE_ENV: production
+
+  e2e:
+    name: End-to-end Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Each run wipes this database (see apps/admin-web/playwright.config.ts).
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: schoolos_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.15.9
+          run_install: false
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm run db:generate
+
+      - name: Install Playwright's Chromium
+        run: pnpm --filter @schoolos/admin-web exec playwright install --with-deps chromium
+
+      - name: Run End-to-end Tests
+        run: pnpm --filter @schoolos/admin-web run test:e2e
+
+      - name: Upload Playwright Report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/admin-web/playwright-report
+          retention-days: 7
