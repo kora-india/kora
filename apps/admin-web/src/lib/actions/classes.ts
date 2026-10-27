@@ -58,11 +58,12 @@ const CreateSectionsSchema = z.object({
     .refine((arr) => arr.length > 0, "At least one section name is required"),
 });
 
-import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
-  return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const access = await requirePermission("classes", "manage");
+  return isError(access) ? null : access;
 }
 
 export async function createClass(data: unknown) {

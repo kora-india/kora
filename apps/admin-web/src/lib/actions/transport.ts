@@ -1,6 +1,6 @@
 "use server";
 
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { hasFeatureAccess } from "@/lib/subscription";
 import {
   prisma,
@@ -19,15 +19,8 @@ import { getPlanCatalog } from "@/lib/plan-catalog";
 
 const logger = createTenantLogger("global", "transport-actions");
 
-async function getTransportSession(
-  allowedRoles: string[] = [
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-    "TEACHER",
-  ],
-) {
-  const guard = await requireActiveSchoolSession(allowedRoles as any);
+async function getTransportSession(level: "view" | "manage" = "view") {
+  const guard = await requirePermission("transport", level);
   if ("error" in guard) return null;
 
   if (guard.role !== "SUPER_ADMIN") {
@@ -210,7 +203,7 @@ const VehicleSchema = z.object({
 });
 
 export async function createVehicle(data: z.infer<typeof VehicleSchema>) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const parsed = VehicleSchema.safeParse(data);
@@ -238,7 +231,7 @@ export async function createVehicle(data: z.infer<typeof VehicleSchema>) {
 }
 
 export async function updateVehicle(id: string, data: unknown) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const parsed = VehicleSchema.partial().safeParse(data);
@@ -260,7 +253,7 @@ export async function updateVehicle(id: string, data: unknown) {
 }
 
 export async function deleteVehicle(id: string) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const existing = await prisma.vehicle.findFirst({
@@ -301,7 +294,7 @@ const RouteSchema = z.object({
 });
 
 export async function createRoute(data: z.infer<typeof RouteSchema>) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const parsed = RouteSchema.safeParse(data);
@@ -347,7 +340,7 @@ export async function updateRoute(
   id: string,
   data: z.infer<typeof RouteSchema>,
 ) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const parsed = RouteSchema.safeParse(data);
@@ -435,7 +428,7 @@ export async function updateRoute(
  * with active enrollments can't be removed until they are moved or cancelled.
  */
 export async function deleteRoute(id: string) {
-  const user = await getTransportSession(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const existing = await prisma.transportRoute.findFirst({
@@ -497,11 +490,7 @@ const EnrollmentSchema = z.object({
 export async function enrollStudentTransport(
   data: z.infer<typeof EnrollmentSchema>,
 ) {
-  const user = await getTransportSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-  ]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const parsed = EnrollmentSchema.safeParse(data);
@@ -611,11 +600,7 @@ export async function enrollStudentTransport(
 }
 
 export async function cancelStudentTransport(enrollmentId: string) {
-  const user = await getTransportSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-  ]);
+  const user = await getTransportSession("manage");
   if (!user) return { error: "Unauthorized" };
 
   const existing = await prisma.studentTransport.findFirst({

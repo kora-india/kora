@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@schoolos/auth";
+import { isError, requirePermission } from "@/lib/auth-guard";
 import { prisma, PaymentMethod } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -24,13 +24,8 @@ const ExpenseSchema = z.object({
 });
 
 async function getFinanceSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(user.role))
-    return null;
-  return { ...user, schoolId: user.schoolId };
+  const access = await requirePermission("expenses", "manage");
+  return isError(access) ? null : access;
 }
 
 export async function createExpenseCategory(data: unknown) {

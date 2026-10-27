@@ -28,16 +28,8 @@ const CreateSchoolSchema = z.object({
   seedDefaultClasses: z.boolean().default(false),
 });
 
-import crypto from "crypto";
+import { generateTempPassword } from "@/lib/temp-password";
 import { actionErrorMessage } from "@/lib/action-errors";
-
-function generateTempPassword(): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from(
-    { length: 16 },
-    () => chars[crypto.randomInt(0, chars.length)],
-  ).join("");
-}
 
 async function getSuperAdminSession() {
   const session = await auth();

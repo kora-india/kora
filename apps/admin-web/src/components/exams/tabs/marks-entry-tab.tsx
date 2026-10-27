@@ -35,12 +35,15 @@ interface MarksEntryTabProps {
   exams: any[];
   classes: any[];
   selectedExamIdProp?: string;
+  /** marks: view only; the sheet shows but can't be saved. */
+  readOnly?: boolean;
 }
 
 export function MarksEntryTab({
   exams,
   classes,
   selectedExamIdProp,
+  readOnly = false,
 }: Readonly<MarksEntryTabProps>) {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [selectedExamId, setSelectedExamId] = useQueryState<string>(
@@ -80,7 +83,7 @@ export function MarksEntryTab({
   const [originalEntries, setOriginalEntries] = useState<typeof entries>({});
   const [loadedAt, setLoadedAt] = useState<string | undefined>();
 
-  const isLocked = Boolean(sheetData?.examSubject?.isPublished);
+  const isLocked = readOnly || Boolean(sheetData?.examSubject?.isPublished);
   const maxMarksValue = Number(sheetData?.examSubject?.maxMarks ?? 0);
   const changedStudentIds = useMemo(
     () =>

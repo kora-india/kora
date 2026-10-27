@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { notFound, redirect } from "next/navigation";
 import { TeacherProfile } from "@/components/teachers/profile/teacher-profile";
 import { serializeSlip, type SalarySlipRecord } from "@/lib/payroll";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Teacher Profile" };
 
@@ -17,8 +19,8 @@ export default async function TeacherProfilePage({
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role))
-    redirect("/dashboard");
+  // The profile shows salary and payroll, so it needs staff: manage.
+  if (!can(await getPermissions(), "staff", "manage")) redirect("/dashboard");
 
   const [teacher, classes, school] = await Promise.all([
     prisma.teacher.findFirst({

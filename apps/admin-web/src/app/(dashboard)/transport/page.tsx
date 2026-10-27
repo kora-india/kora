@@ -7,6 +7,8 @@ import { hasFeatureAccess } from "@/lib/subscription";
 import { PlanUpgradeGate } from "@/components/subscriptions/plan-upgrade-gate";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { cheapestPlanWith } from "@/lib/plans";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = {
   title: "Transport & Fleet Management | Kora",
@@ -21,6 +23,8 @@ export default async function TransportPage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) redirect("/login");
+  const permissions = await getPermissions();
+  if (!can(permissions, "transport")) redirect("/dashboard");
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -80,5 +84,10 @@ export default async function TransportPage() {
     );
   }
 
-  return <TransportContent initialData={data as any} />;
+  return (
+    <TransportContent
+      initialData={data as any}
+      canManage={can(permissions, "transport", "manage")}
+    />
+  );
 }

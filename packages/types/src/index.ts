@@ -8,3 +8,4 @@ export * from "./fee";
 export * from "./notice";
 export * from "./assignment";
 export * from "./dashboard";
+export * from "./permissions";

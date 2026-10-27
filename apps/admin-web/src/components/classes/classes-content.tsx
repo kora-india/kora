@@ -52,12 +52,15 @@ interface Props {
   classes: any[];
   teachers?: any[];
   academicYear?: string | null;
+  /** False for someone who may only see classes (classes: view). */
+  canEdit?: boolean;
 }
 
 export function ClassesContent({
   classes,
   teachers = [],
   academicYear,
+  canEdit = true,
 }: Readonly<Props>) {
   const router = useRouter();
   const [classDialog, setClassDialog] = useState<"closed" | "create" | "edit">(
@@ -253,14 +256,16 @@ export function ClassesContent({
             {classes.length} classes configured
           </p>
         </div>
-        <button
-          id="tour-classes-add-btn"
-          type="button"
-          onClick={openCreateClass}
-          className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Class
-        </button>
+        {canEdit && (
+          <button
+            id="tour-classes-add-btn"
+            type="button"
+            onClick={openCreateClass}
+            className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add Class
+          </button>
+        )}
       </div>
 
       <div
@@ -279,24 +284,26 @@ export function ClassesContent({
                 <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-bold text-violet-700 dark:text-violet-300 text-sm flex-shrink-0">
                   {classShortLabel(cls.name)}
                 </div>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    aria-label="Edit class"
-                    onClick={() => openEditClass(cls)}
-                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-                  >
-                    <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete class"
-                    onClick={() => setDeleteClassTarget(cls)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      aria-label="Edit class"
+                      onClick={() => openEditClass(cls)}
+                      className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete class"
+                      onClick={() => setDeleteClassTarget(cls)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <p className="text-sm font-semibold truncate" title={cls.name}>
@@ -332,23 +339,27 @@ export function ClassesContent({
                   <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-800 px-2 py-0.5 rounded-full font-medium">
                     {s.name}
                   </span>
-                  <button
-                    type="button"
-                    aria-label={`Delete section ${s.name}`}
-                    onClick={() => setDeleteSectionTarget(s)}
-                    className="hidden group-hover:flex w-3.5 h-3.5 rounded-full bg-red-100 text-red-600 items-center justify-center"
-                  >
-                    <Trash2 className="w-2 h-2" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      aria-label={`Delete section ${s.name}`}
+                      onClick={() => setDeleteSectionTarget(s)}
+                      className="hidden group-hover:flex w-3.5 h-3.5 rounded-full bg-red-100 text-red-600 items-center justify-center"
+                    >
+                      <Trash2 className="w-2 h-2" />
+                    </button>
+                  )}
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={() => openAddSections(cls)}
-                className="text-[10px] px-2 py-0.5 rounded-full border border-dashed text-muted-foreground hover:border-violet-400 hover:text-violet-600 transition-colors flex items-center gap-1"
-              >
-                <Plus className="w-2.5 h-2.5" /> Section
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => openAddSections(cls)}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-dashed text-muted-foreground hover:border-violet-400 hover:text-violet-600 transition-colors flex items-center gap-1"
+                >
+                  <Plus className="w-2.5 h-2.5" /> Section
+                </button>
+              )}
             </div>
           </motion.div>
         ))}
@@ -362,13 +373,15 @@ export function ClassesContent({
             <p className="text-xs text-muted-foreground mb-4 max-w-xs">
               Create your first class to start organizing students and sections.
             </p>
-            <button
-              type="button"
-              onClick={openCreateClass}
-              className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Class
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={openCreateClass}
+                className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Class
+              </button>
+            )}
           </div>
         )}
       </div>

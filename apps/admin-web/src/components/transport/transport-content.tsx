@@ -67,10 +67,13 @@ interface TransportContentProps {
     metrics: any;
     userRole: string;
   };
+  /** transport: manage; without it the page is read-only. */
+  canManage?: boolean;
 }
 
 export function TransportContent({
   initialData,
+  canManage,
 }: Readonly<TransportContentProps>) {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const router = useRouter();
@@ -112,8 +115,10 @@ export function TransportContent({
   const [manifestRouteId, setManifestRouteId] = useState<string>("");
 
   const { metrics, vehicles, routes, enrollments, userRole } = initialData;
-  const canMutate = userRole === "SCHOOL_ADMIN" || userRole === "SUPER_ADMIN";
-  const canEnroll = canMutate || userRole === "ACCOUNTANT";
+  // transport: manage covers vehicles, routes and enrolments alike.
+  const canMutate =
+    canManage ?? (userRole === "SCHOOL_ADMIN" || userRole === "SUPER_ADMIN");
+  const canEnroll = canManage ?? (canMutate || userRole === "ACCOUNTANT");
 
   const refreshData = () => {
     router.refresh();

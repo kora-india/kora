@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { FeesContent } from "@/components/fees/fees-content";
 
 import { getCache } from "@/lib/redis";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Fees Management" };
 
@@ -14,9 +16,9 @@ export default async function FeesPage() {
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
-  const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(
-    user.role,
-  );
+  const permissions = await getPermissions();
+  if (!can(permissions, "fees")) redirect("/dashboard");
+  const canEdit = can(permissions, "fees", "manage");
 
   // Fetch configuration data and recent transactions in parallel with selected lightweight fields
   const [

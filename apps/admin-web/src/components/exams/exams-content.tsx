@@ -27,6 +27,11 @@ interface ExamsContentProps {
   userRole?: string;
   /** The school's grading system from setup; new exams start with it. */
   defaultGradingSystem?: string | null;
+  /** exams: manage. */
+  canManageExams?: boolean;
+  /** marks: view, and marks: manage to save. */
+  canSeeMarks?: boolean;
+  canEnterMarks?: boolean;
 }
 
 export function ExamsContent({
@@ -34,6 +39,9 @@ export function ExamsContent({
   classes,
   userRole,
   defaultGradingSystem,
+  canManageExams = true,
+  canSeeMarks = true,
+  canEnterMarks = true,
 }: Readonly<ExamsContentProps>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useQueryTab<
@@ -122,15 +130,17 @@ export function ExamsContent({
             </p>
           </div>
 
-          <button
-            id="tour-exams-create-btn"
-            type="button"
-            onClick={() => handleOpenCreate()}
-            className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            New Examination
-          </button>
+          {canManageExams && (
+            <button
+              id="tour-exams-create-btn"
+              type="button"
+              onClick={() => handleOpenCreate()}
+              className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors shadow-sm self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              New Examination
+            </button>
+          )}
         </div>
 
         {/* Metric KPI Cards */}
@@ -230,18 +240,20 @@ export function ExamsContent({
             </span>
           </button>
 
-          <button
-            id="tour-exams-marksheet"
-            onClick={() => setActiveTab("marks")}
-            className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition relative ${
-              activeTab === "marks"
-                ? "border-violet-600 text-violet-600"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <PenTool className="w-4 h-4" />
-            Batch Marks Entry
-          </button>
+          {canSeeMarks && (
+            <button
+              id="tour-exams-marksheet"
+              onClick={() => setActiveTab("marks")}
+              className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition relative ${
+                activeTab === "marks"
+                  ? "border-violet-600 text-violet-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <PenTool className="w-4 h-4" />
+              Batch Marks Entry
+            </button>
+          )}
 
           <button
             id="tour-exams-report-cards"
@@ -267,14 +279,17 @@ export function ExamsContent({
             onOpenSubjects={handleOpenSubjects}
             onNavigateTab={handleNavigateTab}
             onRefresh={handleRefresh}
+            canManage={canManageExams}
+            canSeeMarks={canSeeMarks}
           />
         )}
 
-        {activeTab === "marks" && (
+        {activeTab === "marks" && canSeeMarks && (
           <MarksEntryTab
             exams={exams}
             classes={classes}
             selectedExamIdProp={selectedExamIdForTab}
+            readOnly={!canEnterMarks}
           />
         )}
 

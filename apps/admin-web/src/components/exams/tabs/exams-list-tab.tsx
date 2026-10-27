@@ -33,6 +33,10 @@ interface ExamsListTabProps {
   onOpenSubjects: (exam: any) => void;
   onNavigateTab: (tab: "marks" | "results", examId?: string) => void;
   onRefresh: () => void;
+  /** exams: manage; create, edit, publish and set up subjects. */
+  canManage?: boolean;
+  /** marks: view; shows the way into marks entry. */
+  canSeeMarks?: boolean;
 }
 
 export function ExamsListTab({
@@ -43,6 +47,8 @@ export function ExamsListTab({
   onOpenSubjects,
   onNavigateTab,
   onRefresh,
+  canManage = true,
+  canSeeMarks = true,
 }: Readonly<ExamsListTabProps>) {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -169,99 +175,101 @@ export function ExamsListTab({
             </div>
 
             {/* 3 Quick Starter Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button
-                onClick={() =>
-                  handleQuickTemplate(
-                    ExamType.TERM_1,
-                    "Term 1 Examination 2026-27",
-                    100,
-                    33,
-                  )
-                }
-                className="group p-5 rounded-2xl border bg-background hover:border-violet-500 hover:shadow-md transition-all text-left space-y-3"
-              >
-                <div className="w-9 h-9 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 block">
-                    Recommended
-                  </span>
-                  <h4 className="text-sm font-bold text-foreground mt-0.5">
-                    Term 1 Examination
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Standard term assessment with core subjects across all
-                    classes (Max 100, Pass 33).
-                  </p>
-                </div>
-                <div className="text-xs font-semibold text-violet-600 flex items-center gap-1 group-hover:underline">
-                  Create Term 1 &rarr;
-                </div>
-              </button>
+            {canManage && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() =>
+                    handleQuickTemplate(
+                      ExamType.TERM_1,
+                      "Term 1 Examination 2026-27",
+                      100,
+                      33,
+                    )
+                  }
+                  className="group p-5 rounded-2xl border bg-background hover:border-violet-500 hover:shadow-md transition-all text-left space-y-3"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-violet-500/10 text-violet-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 block">
+                      Recommended
+                    </span>
+                    <h4 className="text-sm font-bold text-foreground mt-0.5">
+                      Term 1 Examination
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Standard term assessment with core subjects across all
+                      classes (Max 100, Pass 33).
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-violet-600 flex items-center gap-1 group-hover:underline">
+                    Create Term 1 &rarr;
+                  </div>
+                </button>
 
-              <button
-                onClick={() =>
-                  handleQuickTemplate(
-                    ExamType.HALF_YEARLY,
-                    "Half-Yearly Examination 2026-27",
-                    100,
-                    33,
-                  )
-                }
-                className="group p-5 rounded-2xl border bg-background hover:border-indigo-500 hover:shadow-md transition-all text-left space-y-3"
-              >
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <BookOpen className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
-                    Mid-Session
-                  </span>
-                  <h4 className="text-sm font-bold text-foreground mt-0.5">
-                    Half-Yearly Examination
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Mid-year scholastic evaluation with CBSE 9-point grading
-                    scale.
-                  </p>
-                </div>
-                <div className="text-xs font-semibold text-indigo-600 flex items-center gap-1 group-hover:underline">
-                  Create Half-Yearly &rarr;
-                </div>
-              </button>
+                <button
+                  onClick={() =>
+                    handleQuickTemplate(
+                      ExamType.HALF_YEARLY,
+                      "Half-Yearly Examination 2026-27",
+                      100,
+                      33,
+                    )
+                  }
+                  className="group p-5 rounded-2xl border bg-background hover:border-indigo-500 hover:shadow-md transition-all text-left space-y-3"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 block">
+                      Mid-Session
+                    </span>
+                    <h4 className="text-sm font-bold text-foreground mt-0.5">
+                      Half-Yearly Examination
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Mid-year scholastic evaluation with CBSE 9-point grading
+                      scale.
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-indigo-600 flex items-center gap-1 group-hover:underline">
+                    Create Half-Yearly &rarr;
+                  </div>
+                </button>
 
-              <button
-                onClick={() =>
-                  handleQuickTemplate(
-                    ExamType.UNIT_TEST,
-                    "Unit Test 1 (2026-27)",
-                    50,
-                    18,
-                  )
-                }
-                className="group p-5 rounded-2xl border bg-background hover:border-emerald-500 hover:shadow-md transition-all text-left space-y-3"
-              >
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
-                    Periodic
-                  </span>
-                  <h4 className="text-sm font-bold text-foreground mt-0.5">
-                    Unit / Monthly Test
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Short periodic test with quick 25/50 marks per subject.
-                  </p>
-                </div>
-                <div className="text-xs font-semibold text-emerald-600 flex items-center gap-1 group-hover:underline">
-                  Create Unit Test &rarr;
-                </div>
-              </button>
-            </div>
+                <button
+                  onClick={() =>
+                    handleQuickTemplate(
+                      ExamType.UNIT_TEST,
+                      "Unit Test 1 (2026-27)",
+                      50,
+                      18,
+                    )
+                  }
+                  className="group p-5 rounded-2xl border bg-background hover:border-emerald-500 hover:shadow-md transition-all text-left space-y-3"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
+                      Periodic
+                    </span>
+                    <h4 className="text-sm font-bold text-foreground mt-0.5">
+                      Unit / Monthly Test
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Short periodic test with quick 25/50 marks per subject.
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-600 flex items-center gap-1 group-hover:underline">
+                    Create Unit Test &rarr;
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -307,7 +315,7 @@ export function ExamsListTab({
                         onClick={() =>
                           handleTogglePublish(exam.id, exam.isPublished)
                         }
-                        disabled={loadingId === exam.id}
+                        disabled={loadingId === exam.id || !canManage}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition ${
                           exam.isPublished
                             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 hover:bg-emerald-100"
@@ -365,22 +373,26 @@ export function ExamsListTab({
                   {/* Card Action Footer */}
                   <div className="border-t pt-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onOpenSubjects(exam)}
-                        className="px-2.5 py-1.5 rounded-lg border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1 transition shadow-2xs"
-                        title="Manage subjects and marks per class"
-                      >
-                        <BookOpen className="w-3.5 h-3.5 text-violet-600" />{" "}
-                        Subjects
-                      </button>
-                      <button
-                        onClick={() => onNavigateTab("marks", exam.id)}
-                        className="px-2.5 py-1.5 rounded-lg border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1 transition shadow-2xs"
-                        title="Batch enter marks"
-                      >
-                        <PenTool className="w-3.5 h-3.5 text-indigo-600" />{" "}
-                        Marks
-                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => onOpenSubjects(exam)}
+                          className="px-2.5 py-1.5 rounded-lg border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1 transition shadow-2xs"
+                          title="Manage subjects and marks per class"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 text-violet-600" />{" "}
+                          Subjects
+                        </button>
+                      )}
+                      {canSeeMarks && (
+                        <button
+                          onClick={() => onNavigateTab("marks", exam.id)}
+                          className="px-2.5 py-1.5 rounded-lg border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1 transition shadow-2xs"
+                          title="Batch enter marks"
+                        >
+                          <PenTool className="w-3.5 h-3.5 text-indigo-600" />{" "}
+                          Marks
+                        </button>
+                      )}
                       <button
                         onClick={() => onNavigateTab("results", exam.id)}
                         className="p-1.5 rounded-lg border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition shadow-2xs"
@@ -390,22 +402,24 @@ export function ExamsListTab({
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => onOpenEdit(exam)}
-                        className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition"
-                        title="Edit exam details"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(exam.id, exam.name)}
-                        className="p-1.5 rounded-lg hover:bg-rose-50 hover:text-rose-600 text-muted-foreground transition"
-                        title="Delete exam"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    {canManage && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onOpenEdit(exam)}
+                          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition"
+                          title="Edit exam details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(exam.id, exam.name)}
+                          className="p-1.5 rounded-lg hover:bg-rose-50 hover:text-rose-600 text-muted-foreground transition"
+                          title="Delete exam"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, KeyRound, Bell, Server } from "lucide-react";
+import { Building2, KeyRound, Bell, Server, ShieldCheck } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
 
@@ -10,7 +10,7 @@ interface SettingsNavProps {
   userRole?: UserRole;
 }
 
-const SCHOOL_ADMIN_NAV_ITEMS = [
+const SCHOOL_NAV_ITEMS = [
   {
     label: "School Profile",
     href: "/settings/school-profile",
@@ -19,19 +19,29 @@ const SCHOOL_ADMIN_NAV_ITEMS = [
   { label: "Change Password", href: "/settings/account", icon: KeyRound },
 ];
 
+const SCHOOL_ADMIN_NAV_ITEMS = [
+  SCHOOL_NAV_ITEMS[0],
+  { label: "Team & Access", href: "/settings/team", icon: ShieldCheck },
+  SCHOOL_NAV_ITEMS[1],
+];
+
 const SUPER_ADMIN_NAV_ITEMS = [
   { label: "Platform Overview", href: "/settings/platform", icon: Server },
   { label: "Change Password", href: "/settings/account", icon: KeyRound },
 ];
 
+// Team & Access is the school admin's: teachers and accountants don't see it.
+function navItemsFor(role: UserRole) {
+  if (role === UserRole.SUPER_ADMIN) return SUPER_ADMIN_NAV_ITEMS;
+  if (role === UserRole.SCHOOL_ADMIN) return SCHOOL_ADMIN_NAV_ITEMS;
+  return SCHOOL_NAV_ITEMS;
+}
+
 export function SettingsNav({
   userRole = UserRole.SCHOOL_ADMIN,
 }: Readonly<SettingsNavProps>) {
   const pathname = usePathname();
-  const navItems =
-    userRole === UserRole.SUPER_ADMIN
-      ? SUPER_ADMIN_NAV_ITEMS
-      : SCHOOL_ADMIN_NAV_ITEMS;
+  const navItems = navItemsFor(userRole);
 
   return (
     <div

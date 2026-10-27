@@ -72,6 +72,8 @@ interface Expense {
 interface ExpensesContentProps {
   categories: ExpenseCategory[];
   expenses: Expense[];
+  /** expenses: manage; without it the page is read-only. */
+  canEdit?: boolean;
 }
 
 const PAYMENT_METHOD_TAGS: Record<string, { color: string; label: string }> = {
@@ -102,6 +104,7 @@ const CATEGORY_COLORS = [
 export function ExpensesContent({
   categories,
   expenses,
+  canEdit = true,
 }: Readonly<ExpensesContentProps>) {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const { resolvedTheme } = useTheme();
@@ -517,22 +520,26 @@ export function ExpensesContent({
               >
                 Export CSV
               </Button>
-              <Button
-                icon={<Settings className="w-4 h-4" />}
-                onClick={() => setIsManageCategoriesOpen(true)}
-                className="text-xs font-medium border-border"
-              >
-                Categories ({categories.length})
-              </Button>
-              <Button
-                id="tour-expenses-add-btn"
-                type="primary"
-                icon={<Plus className="w-4 h-4" />}
-                onClick={() => setIsAddExpenseOpen(true)}
-                className="bg-violet-600 hover:bg-violet-700 font-semibold text-xs shadow-sm"
-              >
-                Add Expense
-              </Button>
+              {canEdit && (
+                <>
+                  <Button
+                    icon={<Settings className="w-4 h-4" />}
+                    onClick={() => setIsManageCategoriesOpen(true)}
+                    className="text-xs font-medium border-border"
+                  >
+                    Categories ({categories.length})
+                  </Button>
+                  <Button
+                    id="tour-expenses-add-btn"
+                    type="primary"
+                    icon={<Plus className="w-4 h-4" />}
+                    onClick={() => setIsAddExpenseOpen(true)}
+                    className="bg-violet-600 hover:bg-violet-700 font-semibold text-xs shadow-sm"
+                  >
+                    Add Expense
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
@@ -766,7 +773,9 @@ export function ExpensesContent({
             >
               <Table
                 dataSource={paginatedExpenses}
-                columns={columns}
+                columns={
+                  canEdit ? columns : columns.filter((c) => c.key !== "actions")
+                }
                 rowKey="id"
                 pagination={false}
                 scroll={{ x: 800 }}

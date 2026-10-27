@@ -5,6 +5,8 @@ import { AnalyticsContent } from "@/components/analytics/analytics-content";
 import { getCache } from "@/lib/redis";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { cheapestPlanWith } from "@/lib/plans";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Analytics" };
 
@@ -258,6 +260,8 @@ export default async function AnalyticsPage() {
   const schoolId = user.schoolId;
   if (!schoolId)
     return <div className="p-6 text-muted-foreground">No school assigned.</div>;
+  // School analytics include revenue.
+  if (!can(await getPermissions(), "analytics")) redirect("/dashboard");
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },

@@ -2,6 +2,8 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AssignmentsContent } from "@/components/assignments/assignments-content";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Assignments" };
 
@@ -11,6 +13,8 @@ export default async function AssignmentsPage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
+  const permissions = await getPermissions();
+  if (!can(permissions, "assignments")) redirect("/dashboard");
 
   let classFilter: object = { schoolId: schoolId };
 
@@ -25,8 +29,12 @@ export default async function AssignmentsPage() {
     if (teacher) {
       const secClassIds = teacher.assignedSections.map((as) => as.classId);
       const ctClassIds = teacher.classTeacherOf.map((ct) => ct.id);
-      const legacyClassId = teacher.assignedClassId ? [teacher.assignedClassId] : [];
-      const assignedClassIds = Array.from(new Set([...secClassIds, ...ctClassIds, ...legacyClassId]));
+      const legacyClassId = teacher.assignedClassId
+        ? [teacher.assignedClassId]
+        : [];
+      const assignedClassIds = Array.from(
+        new Set([...secClassIds, ...ctClassIds, ...legacyClassId]),
+      );
       if (assignedClassIds.length > 0) {
         classFilter = { schoolId: schoolId, classId: { in: assignedClassIds } };
       }
@@ -57,6 +65,7 @@ export default async function AssignmentsPage() {
       classes={classes}
       currentUserId={user.id}
       userRole={user.role}
+      canPost={can(permissions, "assignments", "manage")}
     />
   );
 }

@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { LedgerContent } from "@/components/ledger/ledger-content";
 import { getCache } from "@/lib/redis";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 import { getLedgerData } from "@/lib/reports/ledger";
 import {
   ledgerQueryToSearch,
@@ -25,10 +27,7 @@ export default async function LedgerPage(props: {
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
-  const canView = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(
-    user.role,
-  );
-  if (!canView) redirect("/dashboard");
+  if (!can(await getPermissions(), "ledger")) redirect("/dashboard");
 
   // P2: filters come from the URL and are applied in SQL; the stat cards are
   // totals over every matching row, the table lists the newest `limit`.

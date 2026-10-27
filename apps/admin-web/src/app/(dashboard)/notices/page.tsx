@@ -2,6 +2,8 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { NoticesContent } from "@/components/notices/notices-content";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Notices" };
 
@@ -17,6 +19,8 @@ export default async function NoticesPage({
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
+  const permissions = await getPermissions();
+  if (!can(permissions, "notices")) redirect("/dashboard");
 
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -46,6 +50,7 @@ export default async function NoticesPage({
       classes={classes}
       currentUserId={user.id}
       userRole={user.role}
+      canPost={can(permissions, "notices", "manage")}
       page={page}
       totalPages={Math.max(1, Math.ceil(totalNotices / PAGE_SIZE))}
       totalCount={totalNotices}

@@ -9,6 +9,7 @@ import { invalidateStudentsCache } from "@/lib/redis";
 import { compareRollNumbers } from "@schoolos/types";
 import { toActionResult } from "@/lib/action-errors";
 import { getPlanCatalog } from "@/lib/plan-catalog";
+import { isError, requirePermission } from "@/lib/auth-guard";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -21,8 +22,10 @@ const examSchema = z.object({
   endDate: z.string().or(z.date()),
 });
 
+/** Exams and results are the "exams" module; marks sheets are "marks". */
 async function requireExamAccess(
-  allowedRoles?: ("SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "ACCOUNTANT")[],
+  module: "exams" | "marks" = "exams",
+  level: "view" | "manage" = "view",
 ) {
   const session = await auth();
   if (!session?.user?.schoolId) {
@@ -31,9 +34,8 @@ async function requireExamAccess(
   const user = session.user;
   const schoolId = user.schoolId as string;
 
-  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
-    throw new Error("Forbidden: You do not have permission for this action");
-  }
+  const access = await requirePermission(module, level);
+  if (isError(access)) throw new Error(access.error);
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -135,7 +137,7 @@ async function createExamImpl(data: {
     examDate?: string | Date;
   }[];
 }) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
   const schoolId = user.schoolId;
 
   const validated = examSchema.parse(data);
@@ -203,7 +205,7 @@ async function updateExamImpl(
     isPublished?: boolean;
   },
 ) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
 
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
@@ -229,7 +231,7 @@ export async function deleteExam(...args: Parameters<typeof deleteExamImpl>) {
 }
 
 async function deleteExamImpl(examId: string) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
 
   await prisma.exam.delete({
     where: { id: examId, schoolId: user.schoolId },
@@ -247,7 +249,7 @@ export async function togglePublishExam(
 }
 
 async function togglePublishExamImpl(examId: string) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
 
   const exam = await prisma.exam.findFirst({
     where: { id: examId, schoolId: user.schoolId },
@@ -280,7 +282,7 @@ async function addExamSubjectImpl(data: {
   passMarks?: number;
   examDate?: string | Date;
 }) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
 
   // Ensure exam belongs to school
   const exam = await prisma.exam.findFirst({
@@ -329,7 +331,7 @@ export async function deleteExamSubject(
 }
 
 async function deleteExamSubjectImpl(examSubjectId: string) {
-  const { user } = await requireExamAccess(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const { user } = await requireExamAccess("exams", "manage");
 
   // Check ownership through exam
   const examSubject = await prisma.examSubject.findFirst({
@@ -360,11 +362,7 @@ async function getExamMarksSheetImpl(
   examSubjectId: string,
   sectionId?: string,
 ) {
-  const { user } = await requireExamAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "TEACHER",
-  ]);
+  const { user } = await requireExamAccess("marks");
 
   const examSubject = await prisma.examSubject.findFirst({
     where: {
@@ -512,11 +510,7 @@ async function saveBatchMarksImpl(
       conflictStudentIds?: string[];
     }
 > {
-  const { user } = await requireExamAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "TEACHER",
-  ]);
+  const { user } = await requireExamAccess("marks", "manage");
 
   const examSubject = await prisma.examSubject.findFirst({
     where: {

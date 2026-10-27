@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@schoolos/db";
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache } from "@/lib/redis";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
@@ -12,11 +12,7 @@ import {
 } from "@/lib/fees/billing-period";
 
 async function getFinanceSession() {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-  ]);
+  const guard = await requirePermission("fees", "manage");
   if ("error" in guard) return null;
   return { ...guard, schoolId: guard.schoolId! };
 }

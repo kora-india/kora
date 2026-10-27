@@ -49,6 +49,10 @@ interface Props {
     name: string;
     sections: { id: string; name: string }[];
   }[];
+  /** False for someone who may only see the list (staff: view). */
+  canEdit?: boolean;
+  /** Salary slips and payouts: school admins only. */
+  canRunPayroll?: boolean;
 }
 
 const OCCUPATION_COLORS: Record<
@@ -96,6 +100,8 @@ export function TeachersContent({
   teachers,
   staffList = [],
   classes,
+  canEdit = true,
+  canRunPayroll = true,
 }: Readonly<Props>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useQueryTab<"teachers" | "staff">({
@@ -188,7 +194,7 @@ export function TeachersContent({
         </div>
 
         <div id="tour-teachers-actions" className="flex items-center gap-2.5">
-          {activeTab === "teachers" ? (
+          {!canEdit ? null : activeTab === "teachers" ? (
             <button
               type="button"
               onClick={() => setTeacherDialog("create")}
@@ -341,74 +347,86 @@ export function TeachersContent({
                     </div>
                     <div className="min-w-0">
                       {/* Stretched link: the whole card opens the profile. */}
-                      <Link
-                        href={`/teachers/${t.id}`}
-                        className="block text-sm font-semibold truncate hover:text-violet-700 dark:hover:text-violet-300 focus:outline-none after:absolute after:inset-0 after:rounded-xl"
-                      >
-                        {t.name}
-                      </Link>
+                      {canEdit ? (
+                        <Link
+                          href={`/teachers/${t.id}`}
+                          className="block text-sm font-semibold truncate hover:text-violet-700 dark:hover:text-violet-300 focus:outline-none after:absolute after:inset-0 after:rounded-xl"
+                        >
+                          {t.name}
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-semibold truncate">
+                          {t.name}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground font-medium truncate">
                         {t.subject}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex-shrink-0 relative z-10">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={`Actions for ${t.name}`}
-                          className="p-1 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52">
-                        <DropdownMenuItem
-                          onClick={() => router.push(`/teachers/${t.id}`)}
-                        >
-                          <UserRound className="w-3.5 h-3.5" />
-                          <span>View Profile</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditTeacher(t);
-                            setTeacherDialog("edit");
-                          }}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          <span>Edit Teacher</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            router.push(
-                              `/teachers/${t.id}?tab=payroll&action=generate`,
-                            )
-                          }
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>Generate Salary Slip</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            router.push(`/teachers/${t.id}?tab=payroll`)
-                          }
-                        >
-                          <IndianRupee className="w-3.5 h-3.5" />
-                          <span>View Payroll</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setDeleteTeacherTarget(t)}
-                          className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
-                        >
-                          <UserX className="w-3.5 h-3.5" />
-                          <span>Deactivate Teacher</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  {canEdit && (
+                    <div className="flex-shrink-0 relative z-10">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Actions for ${t.name}`}
+                            className="p-1 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem
+                            onClick={() => router.push(`/teachers/${t.id}`)}
+                          >
+                            <UserRound className="w-3.5 h-3.5" />
+                            <span>View Profile</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditTeacher(t);
+                              setTeacherDialog("edit");
+                            }}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            <span>Edit Teacher</span>
+                          </DropdownMenuItem>
+                          {canRunPayroll && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(
+                                    `/teachers/${t.id}?tab=payroll&action=generate`,
+                                  )
+                                }
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>Generate Salary Slip</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  router.push(`/teachers/${t.id}?tab=payroll`)
+                                }
+                              >
+                                <IndianRupee className="w-3.5 h-3.5" />
+                                <span>View Payroll</span>
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeleteTeacherTarget(t)}
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                          >
+                            <UserX className="w-3.5 h-3.5" />
+                            <span>Deactivate Teacher</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
@@ -514,13 +532,15 @@ export function TeachersContent({
                   Clear search
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setTeacherDialog("create")}
-                  className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Teacher
-                </button>
+                canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setTeacherDialog("create")}
+                    className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Teacher
+                  </button>
+                )
               )}
             </div>
           )}
@@ -567,38 +587,40 @@ export function TeachersContent({
                       </div>
                     </div>
 
-                    <div className="flex-shrink-0">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label="Staff actions"
-                            className="p-1 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
-                          >
-                            <MoreVertical className="w-3.5 h-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-36">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditStaff(s);
-                              setStaffDialog("edit");
-                            }}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span>Edit</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => setDeleteStaffTarget(s)}
-                            className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                    {canEdit && (
+                      <div className="flex-shrink-0">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Staff actions"
+                              className="p-1 rounded-lg hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500/20 data-[state=open]:bg-muted"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditStaff(s);
+                                setStaffDialog("edit");
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteStaffTarget(s)}
+                              className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950/20"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
                   </div>
 
                   {/* Staff Info Details */}
@@ -677,13 +699,15 @@ export function TeachersContent({
                   Clear filters
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setStaffDialog("create")}
-                  className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Staff Member
-                </button>
+                canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setStaffDialog("create")}
+                    className="flex items-center gap-2 h-8 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Staff Member
+                  </button>
+                )
               )}
             </div>
           )}

@@ -105,3 +105,18 @@ export async function fillSchoolDetails(page: Page, schoolName: string) {
 
   await expect(heading).toHaveText("Review and choose how to start");
 }
+
+/** Opens each path in turn and expects to be sent to `landing` instead. */
+export async function expectTurnedAway(
+  page: Page,
+  paths: string[],
+  landing: RegExp,
+) {
+  for (const path of paths) {
+    await page.goto(path);
+    await expect(page, `${path} should be refused`).toHaveURL(landing);
+  }
+}
+
+export const sidebarLink = (page: Page, name: string) =>
+  page.getByRole("complementary").getByRole("link", { name, exact: true });

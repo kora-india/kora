@@ -5,6 +5,8 @@ import { ExamsContent } from "@/components/exams/exams-content";
 import { getExams } from "@/lib/actions/exams";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { cheapestPlanWith } from "@/lib/plans";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Examinations & Report Cards | Kora" };
 
@@ -15,6 +17,9 @@ export default async function ExamsPage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
+  // Marks entry works from the exam list, so it needs exams: view too.
+  const permissions = await getPermissions();
+  if (!can(permissions, "exams")) redirect("/dashboard");
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -69,6 +74,9 @@ export default async function ExamsPage() {
       classes={classes}
       userRole={user.role}
       defaultGradingSystem={school?.gradingSystem ?? null}
+      canManageExams={can(permissions, "exams", "manage")}
+      canSeeMarks={can(permissions, "marks")}
+      canEnterMarks={can(permissions, "marks", "manage")}
     />
   );
 }

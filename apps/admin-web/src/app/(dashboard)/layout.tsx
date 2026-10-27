@@ -7,6 +7,7 @@ import { PageTransition } from "@/components/layout/page-transition";
 import { TourProvider } from "@/components/tour/tour-provider";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { getPlan } from "@/lib/plans";
+import { getPermissions } from "@/lib/auth-guard";
 
 export default async function DashboardRootLayout({
   children,
@@ -72,6 +73,7 @@ export default async function DashboardRootLayout({
       <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
         <Sidebar
           userRole={user.role}
+          permissions={schoolId ? await getPermissions() : undefined}
           schoolName={schoolName}
           schoolPlan={schoolPlan}
           planName={planName}

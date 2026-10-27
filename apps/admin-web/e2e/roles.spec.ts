@@ -1,17 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { SEEDED, SUPER_ADMIN } from "./env";
-import { signIn } from "./helpers";
-
-/** Opens each path in turn and expects to be sent to `landing` instead. */
-async function expectTurnedAway(page: Page, paths: string[], landing: RegExp) {
-  for (const path of paths) {
-    await page.goto(path);
-    await expect(page, `${path} should be refused`).toHaveURL(landing);
-  }
-}
-
-const sidebarLink = (page: Page, name: string) =>
-  page.getByRole("complementary").getByRole("link", { name, exact: true });
+import { expectTurnedAway, sidebarLink, signIn } from "./helpers";
 
 test("nobody signed in gets past the login page", async ({ page }) => {
   await expectTurnedAway(
@@ -63,7 +52,13 @@ test("a school admin runs their school, not the platform", async ({ page }) => {
 test("a teacher gets the classroom, not the office", async ({ page }) => {
   await signIn(page, SEEDED.teacher.email, SEEDED.teacher.password);
   await expect(sidebarLink(page, "Attendance")).toBeVisible();
-  for (const name of ["Fees", "Expenses", "Teachers / Staff", "Settings"]) {
+  for (const name of [
+    "Fees",
+    "Expenses",
+    "Teachers / Staff",
+    "Analytics",
+    "Settings",
+  ]) {
     await expect(sidebarLink(page, name)).toHaveCount(0);
   }
 
@@ -72,8 +67,10 @@ test("a teacher gets the classroom, not the office", async ({ page }) => {
     [
       "/teachers",
       "/classes",
+      "/fees",
       "/expenses",
       "/ledger",
+      "/analytics",
       "/schools",
       "/subscriptions",
     ],

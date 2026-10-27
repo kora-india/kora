@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { auth } from "@schoolos/auth";
+import { isError, requirePermission } from "@/lib/auth-guard";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { z } from "zod";
@@ -23,19 +23,14 @@ const MarkAttendanceSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = session.user;
-    if (!user.schoolId)
-      return NextResponse.json({ error: "No school" }, { status: 403 });
-    if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) {
+    const access = await requirePermission("attendance", "manage");
+    if (isError(access)) {
       return NextResponse.json(
-        { error: "Forbidden: role not authorized to mark attendance" },
-        { status: 403 },
+        { error: access.error },
+        { status: access.error === "Unauthorized" ? 401 : 403 },
       );
     }
+    const user = access;
 
     const schoolId = user.schoolId;
     const body = await req.json();
@@ -178,11 +173,14 @@ const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = session.user;
+    const access = await requirePermission("attendance");
+    if (isError(access)) {
+      return NextResponse.json(
+        { error: access.error },
+        { status: access.error === "Unauthorized" ? 401 : 403 },
+      );
+    }
+    const user = access;
     const { searchParams } = new URL(req.url);
     const classId = searchParams.get("classId");
     const date = searchParams.get("date");

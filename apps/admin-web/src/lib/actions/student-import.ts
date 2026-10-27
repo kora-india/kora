@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@schoolos/db";
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { checkClassLimit } from "@/lib/plan-limits";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { getPlan } from "@/lib/plans";
@@ -50,10 +50,7 @@ class ImportAbort extends Error {}
  * introduces, happen in one transaction, so a failed import changes nothing.
  */
 export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const guard = await requirePermission("students", "manage");
   if ("error" in guard) {
     return {
       imported: 0,

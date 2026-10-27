@@ -48,6 +48,8 @@ interface Props {
   }[];
   currentUserId: string;
   userRole: string;
+  /** assignments: manage; teachers still change only their own. */
+  canPost?: boolean;
 }
 
 export function AssignmentsContent({
@@ -55,6 +57,7 @@ export function AssignmentsContent({
   classes,
   currentUserId,
   userRole,
+  canPost = true,
 }: Readonly<Props>) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"closed" | "create" | "edit">("closed");
@@ -63,7 +66,7 @@ export function AssignmentsContent({
 
   const isAdmin = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(userRole);
   const canManage = (assignment: any) =>
-    isAdmin || assignment.teacher?.userId === currentUserId;
+    isAdmin || (canPost && assignment.teacher?.userId === currentUserId);
 
   const {
     register,
@@ -137,14 +140,16 @@ export function AssignmentsContent({
             {assignments.length} assignments
           </p>
         </div>
-        <button
-          id="tour-assignments-create-btn"
-          type="button"
-          onClick={openCreate}
-          className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Assignment
-        </button>
+        {canPost && (
+          <button
+            id="tour-assignments-create-btn"
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Assignment
+          </button>
+        )}
       </div>
 
       <div

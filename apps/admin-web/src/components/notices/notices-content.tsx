@@ -72,6 +72,8 @@ interface Props {
   classes: { id: string; name: string }[];
   currentUserId: string;
   userRole: string;
+  /** notices: manage; teachers still change only their own. */
+  canPost?: boolean;
   page: number;
   totalPages: number;
   totalCount: number;
@@ -82,6 +84,7 @@ export function NoticesContent({
   classes,
   currentUserId,
   userRole,
+  canPost = true,
   page,
   totalPages,
   totalCount,
@@ -100,7 +103,7 @@ export function NoticesContent({
 
   const canEdit = (notice: any) =>
     ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(userRole) ||
-    notice.publishedById === currentUserId;
+    (canPost && notice.publishedById === currentUserId);
 
   const {
     register,
@@ -231,14 +234,16 @@ export function NoticesContent({
             {totalCount} notices
           </p>
         </div>
-        <button
-          id="tour-notices-create-btn"
-          type="button"
-          onClick={openCreate}
-          className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Publish Notice
-        </button>
+        {canPost && (
+          <button
+            id="tour-notices-create-btn"
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Publish Notice
+          </button>
+        )}
       </div>
 
       <div id="tour-notices-list" className="space-y-3">

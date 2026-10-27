@@ -1,6 +1,8 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/permissions";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import Link from "next/link";
 import { ArrowLeft, Search } from "lucide-react";
@@ -10,6 +12,7 @@ import { getTeacherSections } from "@/lib/teacher-sections";
 export default async function StudentsPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!can(await getPermissions(), "students")) redirect("/");
   const user = session.user;
   if (!user.schoolId) redirect("/login");
 

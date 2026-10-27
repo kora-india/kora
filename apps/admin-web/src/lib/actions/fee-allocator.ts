@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma, FeeStatus, PaymentMethod, type Prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache, invalidateCache } from "@/lib/redis";
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { allocateReceiptNumber } from "@/lib/fees/receipt-number";
 import { recomputeChargeStatus } from "@/lib/fees/charge-status";
 import { waiveChargeItemInTx } from "@/lib/fees/waive";
@@ -17,12 +17,9 @@ import { actionErrorMessage } from "@/lib/action-errors";
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
-async function getFinanceSession() {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-  ]);
+/** Reading dues and receipts needs fees view; anything that moves money, manage. */
+async function getFinanceSession(level: "view" | "manage" = "manage") {
+  const guard = await requirePermission("fees", level);
   if ("error" in guard) return null;
   return guard;
 }
@@ -1070,7 +1067,7 @@ async function buildReceiptData(
 export async function getFeeReceiptDetails(
   receiptNo: string,
 ): Promise<{ success: boolean; data?: FeeReceiptData; error?: string }> {
-  const user = await getFinanceSession();
+  const user = await getFinanceSession("view");
   if (!user) return { success: false, error: "Unauthorized" };
 
   try {
@@ -1161,7 +1158,7 @@ export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
 
 // B11: Side-effect-free student fee dues query
 export async function getStudentFeeDues(studentId: string) {
-  const user = await getFinanceSession();
+  const user = await getFinanceSession("view");
   if (!user) return { error: "Unauthorized" };
 
   try {

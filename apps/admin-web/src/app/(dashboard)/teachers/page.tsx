@@ -2,6 +2,8 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { TeachersContent } from "@/components/teachers/teachers-content";
+import { can, isStaffRole } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Teachers & Staff" };
 
@@ -11,7 +13,12 @@ export default async function TeachersPage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role)) redirect("/dashboard");
+  const permissions = await getPermissions();
+  if (!can(permissions, "staff")) redirect("/dashboard");
+  const canEdit = can(permissions, "staff", "manage");
+  // Salaries are for those who may change them.
+  const withPay = <T extends { salary: unknown }>(rows: T[]) =>
+    canEdit ? rows : rows.map((row) => ({ ...row, salary: null }));
 
   const teachers = await prisma.teacher.findMany({
     where: { schoolId: schoolId, isActive: true },
@@ -47,5 +54,13 @@ export default async function TeachersPage() {
     take: 200,
   });
 
-  return <TeachersContent teachers={teachers} staffList={staffList} classes={classes} />;
+  return (
+    <TeachersContent
+      teachers={withPay(teachers)}
+      staffList={withPay(staffList)}
+      classes={classes}
+      canEdit={canEdit}
+      canRunPayroll={!isStaffRole(user.role)}
+    />
+  );
 }

@@ -1,6 +1,8 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { UserRole } from "@schoolos/types";
 import { getCache } from "@/lib/redis";
@@ -174,6 +176,33 @@ async function getDashboardData(schoolId: string) {
   };
 }
 
+type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+
+function visibleDashboardData(
+  data: DashboardData,
+  { seeFees, seeExpenses }: { seeFees: boolean; seeExpenses: boolean },
+): DashboardData {
+  if (seeFees && seeExpenses) return data;
+  return {
+    ...data,
+    stats: {
+      ...data.stats,
+      pendingFees: seeFees ? data.stats.pendingFees : 0,
+      monthlyRevenue: seeFees ? data.stats.monthlyRevenue : 0,
+      monthlyExpenses: seeExpenses ? data.stats.monthlyExpenses : 0,
+    },
+    revenueData: seeFees
+      ? data.revenueData.map((r) => (seeExpenses ? r : { ...r, expenses: 0 }))
+      : [],
+    revenueAreaData: seeFees
+      ? data.revenueAreaData.filter((d) => seeExpenses || d.type !== "Expenses")
+      : [],
+    recentStudents: seeFees
+      ? data.recentStudents
+      : data.recentStudents.map((s) => ({ ...s, feeCharges: [] })),
+  };
+}
+
 import { SuperAdminDashboardContent } from "@/components/dashboard/super-admin-dashboard-content";
 import { getSuperAdminDashboardData } from "@/lib/actions/super-admin";
 
@@ -207,7 +236,23 @@ export default async function DashboardPage() {
     300, // 5 minutes TTL
   );
 
+  // The cached figures are the whole school's; leave out the money this
+  // person may not see before anything reaches the browser.
+  const permissions = await getPermissions();
+  const access = {
+    addStudents: can(permissions, "students", "manage"),
+    seeFees: can(permissions, "fees"),
+    collectFees: can(permissions, "fees", "manage"),
+    seeExpenses: can(permissions, "expenses"),
+    postNotices: can(permissions, "notices", "manage"),
+  };
+
   return (
-    <DashboardContent data={data} userRole={user.role} userName={user.name} />
+    <DashboardContent
+      data={visibleDashboardData(data, access)}
+      userRole={user.role}
+      userName={user.name}
+      access={access}
+    />
   );
 }

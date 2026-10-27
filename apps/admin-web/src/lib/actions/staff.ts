@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@schoolos/db";
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache } from "@/lib/redis";
@@ -24,10 +24,7 @@ const StaffSchema = z.object({
 });
 
 async function getAdminSession() {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const guard = await requirePermission("staff", "manage");
   if ("error" in guard) return null;
   return { ...guard, schoolId: guard.schoolId! };
 }
@@ -151,12 +148,7 @@ export async function deleteStaff(id: string) {
 }
 
 export async function getStaffList() {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "TEACHER",
-    "ACCOUNTANT",
-  ]);
+  const guard = await requirePermission("staff");
   if ("error" in guard) return [];
   const schoolId = guard.schoolId!;
 

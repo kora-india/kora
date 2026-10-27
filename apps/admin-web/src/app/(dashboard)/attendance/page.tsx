@@ -2,6 +2,8 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AttendanceContent } from "@/components/attendance/attendance-content";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Attendance" };
 
@@ -11,6 +13,8 @@ export default async function AttendancePage() {
   const user = session.user;
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
+  const permissions = await getPermissions();
+  if (!can(permissions, "attendance")) redirect("/dashboard");
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -31,10 +35,15 @@ export default async function AttendancePage() {
     if (teacher) {
       const secClassIds = teacher.assignedSections.map((as) => as.classId);
       const ctClassIds = teacher.classTeacherOf.map((ct) => ct.id);
-      const legacyClassId = teacher.assignedClassId ? [teacher.assignedClassId] : [];
-      assignedClassIds = Array.from(new Set([...secClassIds, ...ctClassIds, ...legacyClassId]));
+      const legacyClassId = teacher.assignedClassId
+        ? [teacher.assignedClassId]
+        : [];
+      assignedClassIds = Array.from(
+        new Set([...secClassIds, ...ctClassIds, ...legacyClassId]),
+      );
       assignedSectionIds = teacher.assignedSections.map((as) => as.sectionId);
-      if (teacher.assignedSectionId) assignedSectionIds.push(teacher.assignedSectionId);
+      if (teacher.assignedSectionId)
+        assignedSectionIds.push(teacher.assignedSectionId);
       assignedSectionIds = Array.from(new Set(assignedSectionIds));
 
       assignedClassId = assignedClassIds[0] ?? null;
@@ -78,8 +87,12 @@ export default async function AttendancePage() {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const dateStr = d.toDateString();
-    const dayRecords = weekAttendances.filter((a) => new Date(a.date).toDateString() === dateStr);
-    const present = dayRecords.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
+    const dayRecords = weekAttendances.filter(
+      (a) => new Date(a.date).toDateString() === dateStr,
+    );
+    const present = dayRecords.filter(
+      (a) => a.status === "PRESENT" || a.status === "LATE",
+    ).length;
     const absent = dayRecords.filter((a) => a.status === "ABSENT").length;
     return {
       day: dayNames[i],
@@ -107,6 +120,7 @@ export default async function AttendancePage() {
       assignedSectionId={assignedSectionId}
       assignedClassIds={assignedClassIds}
       assignedSectionIds={assignedSectionIds}
+      canMark={can(permissions, "attendance", "manage")}
     />
   );
 }

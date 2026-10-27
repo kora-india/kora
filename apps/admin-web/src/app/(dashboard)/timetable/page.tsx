@@ -5,6 +5,8 @@ import { TimetableContent } from "@/components/timetable/timetable-content";
 import { getTimetable, getTimetablePeriods } from "@/lib/actions/timetable";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { cheapestPlanWith } from "@/lib/plans";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Timetable & Scheduling | Kora" };
 
@@ -17,6 +19,8 @@ export default async function TimetablePage() {
   if (!schoolId) {
     return <div className="p-6">No school assigned.</div>;
   }
+  const permissions = await getPermissions();
+  if (!can(permissions, "timetable")) redirect("/dashboard");
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -82,6 +86,7 @@ export default async function TimetablePage() {
       initialPeriods={periods as any}
       initialSlots={initialSlots}
       userRole={user.role}
+      canEdit={can(permissions, "timetable", "manage")}
     />
   );
 }

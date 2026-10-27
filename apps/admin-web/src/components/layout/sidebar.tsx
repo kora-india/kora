@@ -31,10 +31,17 @@ import {
   ReceiptText,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
-import { UserRole } from "@schoolos/types";
+import {
+  UserRole,
+  can,
+  type PermissionModule,
+  type Permissions,
+} from "@schoolos/types";
 
 interface SidebarProps {
   userRole: UserRole;
+  /** A teacher's or accountant's permissions; they decide the menu. */
+  permissions?: Permissions;
   schoolName?: string;
   schoolPlan?: string;
   planName?: string;
@@ -87,14 +94,46 @@ const accountantNavItems = [
   { label: "Students", href: "/students", icon: Users },
 ];
 
-function getNavItems(role: UserRole) {
+// The module behind each school page. The dashboard is open to everyone.
+const NAV_MODULES: Record<string, PermissionModule> = {
+  "/students": "students",
+  "/teachers": "staff",
+  "/classes": "classes",
+  "/timetable": "timetable",
+  "/attendance": "attendance",
+  "/exams": "exams",
+  "/fees": "fees",
+  "/expenses": "expenses",
+  "/ledger": "ledger",
+  "/transport": "transport",
+  "/assignments": "assignments",
+  "/notices": "notices",
+  "/analytics": "analytics",
+};
+
+/**
+ * A teacher's or accountant's menu: their role's usual pages first, then any
+ * other page the school admin opened to them, keeping only what they may see.
+ */
+function staffNavItems(base: typeof adminNavItems, permissions?: Permissions) {
+  const extra = adminNavItems.filter(
+    (item) => !base.some((b) => b.href === item.href),
+  );
+  return [...base, ...extra].filter((item) => {
+    const pageModule = NAV_MODULES[item.href];
+    if (!pageModule) return item.href === "/dashboard";
+    return permissions ? can(permissions, pageModule) : base.includes(item);
+  });
+}
+
+function getNavItems(role: UserRole, permissions?: Permissions) {
   switch (role) {
     case UserRole.SUPER_ADMIN:
       return superAdminNavItems;
     case UserRole.TEACHER:
-      return teacherNavItems;
+      return staffNavItems(teacherNavItems, permissions);
     case UserRole.ACCOUNTANT:
-      return accountantNavItems;
+      return staffNavItems(accountantNavItems, permissions);
     default:
       return adminNavItems;
   }
@@ -171,6 +210,7 @@ function planBadgeStyle(plan: string) {
 
 export function Sidebar({
   userRole,
+  permissions,
   schoolName,
   schoolPlan,
   planName,
@@ -178,7 +218,7 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
-  const navItems = getNavItems(userRole);
+  const navItems = getNavItems(userRole, permissions);
   const roleBadge = getRoleBadge(userRole);
   const planBadge = getPlanBadge(schoolPlan, planName);
 

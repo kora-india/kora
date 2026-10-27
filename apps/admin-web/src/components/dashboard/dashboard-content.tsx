@@ -48,10 +48,28 @@ const FEE_BADGE: Record<string, string> = {
     "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-800",
 };
 
+/** What this person's permissions let the dashboard show and offer. */
+export interface DashboardAccess {
+  addStudents: boolean;
+  seeFees: boolean;
+  collectFees: boolean;
+  seeExpenses: boolean;
+  postNotices: boolean;
+}
+
+const FULL_DASHBOARD: DashboardAccess = {
+  addStudents: true,
+  seeFees: true,
+  collectFees: true,
+  seeExpenses: true,
+  postNotices: true,
+};
+
 interface DashboardContentProps {
   data: any;
   userRole: UserRole;
   userName: string;
+  access?: DashboardAccess;
 }
 
 function StatCard({ title, value, icon: Icon, trend, color, href }: any) {
@@ -100,6 +118,7 @@ export function DashboardContent({
   data,
   userRole,
   userName,
+  access = FULL_DASHBOARD,
 }: Readonly<DashboardContentProps>) {
   const stats = data?.stats;
   const revenueAreaData = data?.revenueAreaData || [];
@@ -150,27 +169,33 @@ export function DashboardContent({
           animate={{ opacity: 1, scale: 1 }}
           className="flex items-center gap-2.5 flex-wrap"
         >
-          <Link
-            href="/students"
-            className="flex items-center gap-1.5 h-9 px-3.5 bg-background border rounded-lg text-xs font-medium hover:bg-muted transition-colors shadow-sm"
-          >
-            <UserPlus className="w-3.5 h-3.5 text-violet-600" />
-            Add Student
-          </Link>
-          <Link
-            href="/fees"
-            className="flex items-center gap-1.5 h-9 px-3.5 bg-background border rounded-lg text-xs font-medium hover:bg-muted transition-colors shadow-sm"
-          >
-            <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-            Collect Fee
-          </Link>
-          <Link
-            href="/notices"
-            className="flex items-center gap-1.5 h-9 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors shadow-sm"
-          >
-            <Bell className="w-3.5 h-3.5" />
-            New Notice
-          </Link>
+          {access.addStudents && (
+            <Link
+              href="/students"
+              className="flex items-center gap-1.5 h-9 px-3.5 bg-background border rounded-lg text-xs font-medium hover:bg-muted transition-colors shadow-sm"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-violet-600" />
+              Add Student
+            </Link>
+          )}
+          {access.collectFees && (
+            <Link
+              href="/fees"
+              className="flex items-center gap-1.5 h-9 px-3.5 bg-background border rounded-lg text-xs font-medium hover:bg-muted transition-colors shadow-sm"
+            >
+              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+              Collect Fee
+            </Link>
+          )}
+          {access.postNotices && (
+            <Link
+              href="/notices"
+              className="flex items-center gap-1.5 h-9 px-4 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors shadow-sm"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              New Notice
+            </Link>
+          )}
         </motion.div>
       </div>
 
@@ -201,14 +226,16 @@ export function DashboardContent({
           }}
           href="/teachers"
         />
-        <StatCard
-          title="Pending Fees"
-          value={formatCurrency(stats?.pendingFees || 0)}
-          icon={IndianRupee}
-          color="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
-          trend={{ up: false, label: "Outstanding Dues" }}
-          href="/fees"
-        />
+        {access.seeFees && (
+          <StatCard
+            title="Pending Fees"
+            value={formatCurrency(stats?.pendingFees || 0)}
+            icon={IndianRupee}
+            color="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+            trend={{ up: false, label: "Outstanding Dues" }}
+            href="/fees"
+          />
+        )}
         <StatCard
           title="Attendance Today"
           value={`${stats?.attendancePercentage || 0}%`}
@@ -217,71 +244,79 @@ export function DashboardContent({
           trend={{ up: true, label: "Daily presence" }}
           href="/attendance"
         />
-        <StatCard
-          title="Monthly Revenue"
-          value={formatCurrency(stats?.monthlyRevenue || 0)}
-          icon={TrendingUp}
-          color="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-          trend={{
-            up: true,
-            label: `Collected in ${new Intl.DateTimeFormat("en-IN", { month: "short" }).format(new Date())}`,
-          }}
-          href="/analytics"
-        />
-        <StatCard
-          title="Monthly Expenses"
-          value={formatCurrency(stats?.monthlyExpenses || 0)}
-          icon={CreditCard}
-          color="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
-          trend={{ up: false, label: "Operational cost" }}
-          href="/expenses"
-        />
+        {access.seeFees && (
+          <StatCard
+            title="Monthly Revenue"
+            value={formatCurrency(stats?.monthlyRevenue || 0)}
+            icon={TrendingUp}
+            color="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
+            trend={{
+              up: true,
+              label: `Collected in ${new Intl.DateTimeFormat("en-IN", { month: "short" }).format(new Date())}`,
+            }}
+            href="/analytics"
+          />
+        )}
+        {access.seeExpenses && (
+          <StatCard
+            title="Monthly Expenses"
+            value={formatCurrency(stats?.monthlyExpenses || 0)}
+            icon={CreditCard}
+            color="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+            trend={{ up: false, label: "Operational cost" }}
+            href="/expenses"
+          />
+        )}
       </motion.div>
 
       {/* Main Visuals Row: AntV Area Chart & Attendance Overview */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* AntV Area Chart: Fee Collection vs Pending Dues */}
-        <motion.div
-          id="tour-dashboard-revenue-chart"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
-          className="xl:col-span-2 rounded-xl border bg-card p-5 shadow-sm space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-violet-600" /> Fee
-                Collection & Financial Trend
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly revenue collected vs operational expenses & pending
-                balances (AntV Area)
-              </p>
+        {access.seeFees && (
+          <motion.div
+            id="tour-dashboard-revenue-chart"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
+            className="xl:col-span-2 rounded-xl border bg-card p-5 shadow-sm space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-violet-600" /> Fee
+                  Collection & Financial Trend
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Monthly revenue collected vs operational expenses & pending
+                  balances (AntV Area)
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-medium">
+                <span className="flex items-center gap-1 text-violet-600 dark:text-violet-400">
+                  <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />{" "}
+                  Collected
+                </span>
+                {access.seeExpenses && (
+                  <span className="flex items-center gap-1 text-rose-500">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />{" "}
+                    Expenses
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-amber-500">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{" "}
+                  Pending
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-xs font-medium">
-              <span className="flex items-center gap-1 text-violet-600 dark:text-violet-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />{" "}
-                Collected
-              </span>
-              <span className="flex items-center gap-1 text-rose-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />{" "}
-                Expenses
-              </span>
-              <span className="flex items-center gap-1 text-amber-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{" "}
-                Pending
-              </span>
-            </div>
-          </div>
 
-          {hasRevenueData ? (
-            <AntvRevenueAreaChart data={revenueAreaData} height={230} />
-          ) : (
-            <div className="h-[230px] flex flex-col items-center justify-center text-xs text-muted-foreground bg-muted/10 rounded-xl border border-dashed">
-              No recorded fee transactions in the last 6 months
-            </div>
-          )}
-        </motion.div>
+            {hasRevenueData ? (
+              <AntvRevenueAreaChart data={revenueAreaData} height={230} />
+            ) : (
+              <div className="h-[230px] flex flex-col items-center justify-center text-xs text-muted-foreground bg-muted/10 rounded-xl border border-dashed">
+                No recorded fee transactions in the last 6 months
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Attendance Overview Progress Card */}
         <motion.div
@@ -409,9 +444,11 @@ export function DashboardContent({
                   <th className="h-9 px-4 text-left font-medium uppercase">
                     Class & Section
                   </th>
-                  <th className="h-9 px-4 text-left font-medium uppercase">
-                    Fee Status
-                  </th>
+                  {access.seeFees && (
+                    <th className="h-9 px-4 text-left font-medium uppercase">
+                      Fee Status
+                    </th>
+                  )}
                   <th className="h-9 px-4 text-right font-medium uppercase">
                     Action
                   </th>
@@ -450,13 +487,15 @@ export function DashboardContent({
                       <td className="h-12 px-4 text-xs text-muted-foreground font-medium">
                         {s.class?.name || "Class"} · {s.section?.name || "A"}
                       </td>
-                      <td className="h-12 px-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${badgeCls}`}
-                        >
-                          {feeStatus}
-                        </span>
-                      </td>
+                      {access.seeFees && (
+                        <td className="h-12 px-4">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${badgeCls}`}
+                          >
+                            {feeStatus}
+                          </span>
+                        </td>
+                      )}
                       <td className="h-12 px-4 text-right">
                         <Link
                           href="/students"

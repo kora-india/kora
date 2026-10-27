@@ -17,6 +17,7 @@ import {
 import { generateAiScheduleDraft, AiTimetableResponse } from "../gemini";
 import { toActionResult } from "@/lib/action-errors";
 import { getPlanCatalog } from "@/lib/plan-catalog";
+import { isError, requirePermission } from "@/lib/auth-guard";
 
 const slotSchema = z.object({
   id: z.string().optional(),
@@ -61,9 +62,7 @@ function checkAiRateLimit(schoolId: string): {
   return { allowed: true };
 }
 
-async function requireTimetableAccess(
-  allowedRoles?: ("SUPER_ADMIN" | "SCHOOL_ADMIN" | "TEACHER" | "ACCOUNTANT")[],
-) {
+async function requireTimetableAccess(level: "view" | "manage" = "view") {
   const session = await auth();
   if (!session?.user?.schoolId) {
     throw new Error("Unauthorized");
@@ -71,9 +70,8 @@ async function requireTimetableAccess(
   const user = session.user;
   const schoolId = user.schoolId as string;
 
-  if (allowedRoles && !allowedRoles.includes(user.role as any)) {
-    throw new Error("Forbidden: You do not have permission for this action");
-  }
+  const access = await requirePermission("timetable", level);
+  if (isError(access)) throw new Error(access.error);
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
@@ -182,10 +180,7 @@ export async function savePeriodSettings(
       affectedClasses?: number;
     }
 > {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
 
   const parsed = periodSettingsSchema.safeParse(periodsData);
@@ -421,10 +416,7 @@ export async function checkSlotConflict(data: {
 }
 
 export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
   const data = slotSchema.parse(rawData);
 
@@ -540,10 +532,7 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
 }
 
 export async function deleteTimetableSlot(slotId: string) {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
 
   await prisma.timetableSlot.deleteMany({
@@ -555,10 +544,7 @@ export async function deleteTimetableSlot(slotId: string) {
 }
 
 export async function clearSectionTimetable(sectionId: string) {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
 
   const deleted = await prisma.timetableSlot.deleteMany({
@@ -584,10 +570,7 @@ async function generateAutomatedTimetableActionImpl(params: {
   replaceExisting?: boolean;
   academicYear?: string;
 }) {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
 
   const classObj = await prisma.class.findFirst({
@@ -762,10 +745,7 @@ async function generateAiTimetableActionImpl(params: {
   academicYear?: string;
   customPrompt?: string;
 }) {
-  const { user } = await requireTimetableAccess([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-  ]);
+  const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
   checkAiRateLimit(schoolId);
   const daysOfWeek = params.daysOfWeek || [1, 2, 3, 4, 5, 6];

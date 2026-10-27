@@ -26,20 +26,13 @@ const TeacherSchema = z.object({
   assignedSectionIds: z.array(z.string()).optional().default([]),
 });
 
-import crypto from "crypto";
-import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { generateTempPassword } from "@/lib/temp-password";
+import { isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 
 async function getAdminSession() {
-  return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
-}
-
-function generateTempPassword(): string {
-  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from(
-    { length: 16 },
-    () => chars[crypto.randomInt(0, chars.length)],
-  ).join("");
+  const access = await requirePermission("staff", "manage");
+  return isError(access) ? null : access;
 }
 
 export async function createTeacher(data: unknown) {

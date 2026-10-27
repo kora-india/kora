@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/permissions";
 import { attendanceDateError, parseAttendanceDate } from "@schoolos/utils";
 import { z } from "zod";
 import { canTakeSection, getTeacherSections } from "@/lib/teacher-sections";
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
   const user = session.user;
   if (!user.schoolId)
     return NextResponse.json({ error: "No school" }, { status: 403 });
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role)) {
+  if (!can(await getPermissions(), "attendance", "manage")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const schoolId = user.schoolId;

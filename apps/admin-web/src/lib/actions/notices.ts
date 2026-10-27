@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@schoolos/db";
-import { requireActiveSchoolSession } from "@/lib/auth-guard";
+import { requirePermission } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
@@ -16,11 +16,7 @@ const NoticeSchema = z.object({
 });
 
 async function getAuthorizedSession() {
-  const guard = await requireActiveSchoolSession([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "TEACHER",
-  ]);
+  const guard = await requirePermission("notices", "manage");
   if ("error" in guard) return null;
   return { ...guard, schoolId: guard.schoolId! };
 }

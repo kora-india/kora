@@ -37,20 +37,24 @@ const StudentSchema = z.object({
   state: z.string().optional(),
 });
 
-import { getActiveSchoolUser } from "@/lib/auth-guard";
+import { can } from "@schoolos/types";
+import { getSchoolAccess, isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 
+/** Adding, changing and opening a student's full profile. */
 async function getAdminSession() {
-  return getActiveSchoolUser(["SUPER_ADMIN", "SCHOOL_ADMIN"]);
+  const access = await requirePermission("students", "manage");
+  return isError(access) ? null : access;
 }
 
+/** Finding students: the student list, or enrolling riders in transport. */
 async function getStaffSession() {
-  return getActiveSchoolUser([
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "ACCOUNTANT",
-    "TEACHER",
-  ]);
+  const access = await getSchoolAccess();
+  if (isError(access)) return null;
+  const { permissions } = access;
+  return can(permissions, "students") || can(permissions, "transport", "manage")
+    ? access
+    : null;
 }
 
 /**

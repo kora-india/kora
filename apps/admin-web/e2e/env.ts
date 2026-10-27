@@ -26,6 +26,12 @@ export const SEEDED = {
   school: "Delhi Public School - Test",
   schoolAdmin: { email: "admin@test-dps.com", password: "test1234" },
   teacher: { email: "amit@test-dps.com", password: "test1234" },
+  // Only e2e/permissions.spec.ts changes this teacher's access.
+  otherTeacher: {
+    name: "Priya Singh",
+    email: "priya@test-dps.com",
+    password: "test1234",
+  },
 };
 
 const DEFAULT_DATABASE_URL =

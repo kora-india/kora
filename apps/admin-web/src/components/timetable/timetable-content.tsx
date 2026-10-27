@@ -56,6 +56,8 @@ interface TimetableContentProps {
   initialPeriods: PeriodDefinition[];
   initialSlots: any[];
   userRole?: string;
+  /** False for someone who may only see timetables (timetable: view). */
+  canEdit?: boolean;
 }
 
 export function TimetableContent({
@@ -65,6 +67,7 @@ export function TimetableContent({
   initialPeriods,
   initialSlots,
   userRole,
+  canEdit = userRole !== "TEACHER",
 }: TimetableContentProps) {
   const { theme } = useTheme();
 
@@ -228,7 +231,7 @@ export function TimetableContent({
     window.print();
   };
 
-  const isTeacherRole = userRole === "TEACHER";
+  const isReadOnly = !canEdit;
 
   // KPIs
   const totalClassesScheduled = slots.length;
@@ -279,7 +282,7 @@ export function TimetableContent({
           </div>
 
           {/* Quick Actions */}
-          {!isTeacherRole && (
+          {!isReadOnly && (
             <div
               id="tour-timetable-actions"
               className="flex items-center gap-2 flex-wrap"
@@ -585,7 +588,7 @@ export function TimetableContent({
               onAddSlot={handleOpenAddSlot}
               onEditSlot={handleOpenEditSlot}
               onDeleteSlot={handleDeleteSlot}
-              isReadOnly={isTeacherRole}
+              isReadOnly={isReadOnly}
             />
           )}
         </div>

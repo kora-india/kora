@@ -3,6 +3,15 @@
 
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import {
+  NO_ACCESS,
+  can,
+  isStaffRole,
+  resolvePermissions,
+  type AccessLevel,
+  type PermissionModule,
+  type Permissions,
+} from "@schoolos/types";
 
 export type GuardedUser = {
   id: string;
@@ -81,6 +90,51 @@ export async function getActiveSchoolUser(
   const res = await requireActiveSchoolSession(allowedRoles);
   if (isError(res)) return null;
   return res;
+}
+
+export type PermittedUser = GuardedUser & { permissions: Permissions };
+
+/**
+ * The session user with their permissions, for an active login at an active
+ * school. Admins have full access; a teacher's or accountant's permissions
+ * are read on every check, so a change the school admin saves applies at once.
+ */
+export async function getSchoolAccess(): Promise<
+  PermittedUser | { error: string }
+> {
+  const user = await requireActiveSchoolSession();
+  if (isError(user)) return user;
+  if (!isStaffRole(user.role)) {
+    return { ...user, permissions: resolvePermissions(user.role, null) };
+  }
+  const record = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { isActive: true, permissions: true },
+  });
+  if (!record?.isActive) return { error: "Unauthorized" };
+  return {
+    ...user,
+    permissions: resolvePermissions(user.role, record.permissions),
+  };
+}
+
+/** Requires `level` in `module`; what server actions and routes check. */
+export async function requirePermission(
+  module: PermissionModule,
+  level: Exclude<AccessLevel, "none"> = "view",
+): Promise<PermittedUser | { error: string }> {
+  const access = await getSchoolAccess();
+  if (isError(access)) return access;
+  if (!can(access.permissions, module, level)) {
+    return { error: "Forbidden: You do not have permission for this action" };
+  }
+  return access;
+}
+
+/** For pages and layouts: no access without an active school login. */
+export async function getPermissions(): Promise<Permissions> {
+  const access = await getSchoolAccess();
+  return isError(access) ? { ...NO_ACCESS } : access.permissions;
 }
 
 /** Validates that a record belongs to the session user's school. */

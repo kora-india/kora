@@ -1,6 +1,8 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/permissions";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import Link from "next/link";
 import { ArrowLeft, Plus } from "lucide-react";
@@ -11,6 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!can(await getPermissions(), "attendance")) redirect("/");
   const user = session.user;
   if (!user.schoolId) redirect("/login");
 

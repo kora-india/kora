@@ -62,6 +62,8 @@ interface Props {
   assignedSectionId?: string | null;
   assignedClassIds?: string[];
   assignedSectionIds?: string[];
+  /** False for someone who may only see attendance (attendance: view). */
+  canMark?: boolean;
 }
 
 const STATUS_CONFIG = {
@@ -96,6 +98,7 @@ export function AttendanceContent({
   assignedSectionId,
   assignedClassIds = [],
   assignedSectionIds = [],
+  canMark = true,
 }: Readonly<Props>) {
   const router = useRouter();
   // The local calendar day (toISOString would give yesterday before 05:30 IST).
@@ -380,16 +383,17 @@ export function AttendanceContent({
               <span className="text-xs text-muted-foreground mr-1">
                 Mark all:
               </span>
-              {(Object.keys(STATUS_CONFIG) as AttendanceStatus[]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => markAll(s)}
-                  className={`text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors ${STATUS_CONFIG[s].color}`}
-                >
-                  {STATUS_CONFIG[s].label}
-                </button>
-              ))}
+              {canMark &&
+                (Object.keys(STATUS_CONFIG) as AttendanceStatus[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => markAll(s)}
+                    className={`text-[10px] px-2.5 py-1 rounded-full font-medium border transition-colors ${STATUS_CONFIG[s].color}`}
+                  >
+                    {STATUS_CONFIG[s].label}
+                  </button>
+                ))}
               <span className="ml-auto text-xs text-muted-foreground">
                 {markedCount}/{students.length} marked
               </span>
@@ -440,6 +444,7 @@ export function AttendanceContent({
                             key={s}
                             type="button"
                             title={STATUS_CONFIG[s].label}
+                            disabled={!canMark}
                             onClick={() =>
                               setAttendance((prev) => ({
                                 ...prev,
@@ -462,27 +467,29 @@ export function AttendanceContent({
               })}
             </div>
 
-            <div className="p-4 border-t flex items-center justify-end gap-3">
-              {markedCount < students.length && (
-                <span className="text-xs text-muted-foreground">
-                  {students.length - markedCount} not marked
-                </span>
-              )}
-              <button
-                id="tour-attendance-submit-btn"
-                type="button"
-                onClick={saveAttendance}
-                disabled={saving || markedCount < students.length}
-                className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
-              >
-                {saving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
+            {canMark && (
+              <div className="p-4 border-t flex items-center justify-end gap-3">
+                {markedCount < students.length && (
+                  <span className="text-xs text-muted-foreground">
+                    {students.length - markedCount} not marked
+                  </span>
                 )}
-                Save Attendance
-              </button>
-            </div>
+                <button
+                  id="tour-attendance-submit-btn"
+                  type="button"
+                  onClick={saveAttendance}
+                  disabled={saving || markedCount < students.length}
+                  className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  Save Attendance
+                </button>
+              </div>
+            )}
           </>
         )}
 

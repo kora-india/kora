@@ -1,6 +1,8 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/permissions";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { AttendanceTaker } from "@/components/attendance/attendance-taker";
@@ -17,6 +19,7 @@ export default async function TakeAttendancePage(
 ) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  if (!can(await getPermissions(), "attendance", "manage")) redirect("/");
 
   const user = session.user;
   if (!user.schoolId) redirect("/login");

@@ -1,7 +1,7 @@
 "use server";
 
-import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { isError, requirePermission } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionErrorMessage } from "@/lib/action-errors";
@@ -15,13 +15,8 @@ const AssignmentSchema = z.object({
 });
 
 async function getTeacherSession() {
-  const session = await auth();
-  if (!session?.user) return null;
-  const user = session.user;
-  if (!user.schoolId) return null;
-  if (!["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"].includes(user.role))
-    return null;
-  return { ...user, schoolId: user.schoolId };
+  const access = await requirePermission("assignments", "manage");
+  return isError(access) ? null : access;
 }
 
 async function resolveTeacherId(userId: string, schoolId: string) {

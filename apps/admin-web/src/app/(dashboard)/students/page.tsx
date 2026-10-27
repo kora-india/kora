@@ -3,6 +3,8 @@ import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { StudentsContent } from "@/components/students/students-content";
 import { getCache } from "@/lib/redis";
+import { can } from "@schoolos/types";
+import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Students" };
 
@@ -22,7 +24,9 @@ export default async function StudentsPage({
   const schoolId = user.schoolId;
   if (!schoolId) return <div className="p-6">No school assigned.</div>;
 
-  const canEdit = ["SUPER_ADMIN", "SCHOOL_ADMIN"].includes(user.role);
+  const permissions = await getPermissions();
+  if (!can(permissions, "students")) redirect("/dashboard");
+  const canEdit = can(permissions, "students", "manage");
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
