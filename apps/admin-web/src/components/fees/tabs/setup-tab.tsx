@@ -878,7 +878,7 @@ export function SetupTab({
 
         {/* Right Column (7 Cols): Fee Components Catalog */}
         <div className="lg:col-span-7">
-          <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-4 h-full flex flex-col justify-between">
+          <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-4">
             <div className="space-y-4">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
@@ -928,7 +928,7 @@ export function SetupTab({
               </div>
 
               {/* Component Tiles Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[460px] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {filteredComponents.map((c: any) => (
                   <div
                     key={c.id}
