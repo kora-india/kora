@@ -21,6 +21,13 @@ export const SUPER_ADMIN = {
   password: "e2e-super-admin-password",
 };
 
+/** Made by packages/db/src/seed.ts, which every run starts from. */
+export const SEEDED = {
+  school: "Delhi Public School - Test",
+  schoolAdmin: { email: "admin@test-dps.com", password: "test1234" },
+  teacher: { email: "amit@test-dps.com", password: "test1234" },
+};
+
 const DEFAULT_DATABASE_URL =
   "postgresql://postgres:password@localhost:5432/schoolos_e2e?schema=public";
 

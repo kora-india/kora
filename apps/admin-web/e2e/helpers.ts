@@ -63,6 +63,11 @@ export async function signUp(page: Page, account: Account) {
   await expect(page).toHaveURL(/\/setup$/);
 }
 
+/**
+ * The whole run shares one login limit: 15 attempts from this machine per 15
+ * minutes (packages/auth), failed ones included. Each test that signs in
+ * uses one.
+ */
 export async function signIn(page: Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByPlaceholder("admin@school.edu.in").fill(email);
