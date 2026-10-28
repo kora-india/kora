@@ -612,3 +612,182 @@ export async function saveFeeCollectionPolicy(data: {
     return { error: actionErrorMessage(e) };
   }
 }
+
+// -- Copy fee structures to a new session
+const CopyStructuresSchema = z
+  .object({
+    fromSessionId: z.string().min(1),
+    toSessionId: z.string().min(1),
+    /** Raise (or lower) every amount by this percentage; 0 keeps them. */
+    increasePercent: z.coerce.number().min(-50).max(100).default(0),
+    /** Round changed amounts to a multiple of this many rupees. */
+    roundTo: z
+      .union([z.literal(1), z.literal(10), z.literal(50), z.literal(100)])
+      .default(1),
+    /** Also copy each student's discounts, custom amounts and exemptions. */
+    includeConcessions: z.boolean().default(true),
+  })
+  .refine((d) => d.fromSessionId !== d.toSessionId, {
+    message: "Choose two different sessions",
+  });
+
+/**
+ * Starts a new session's fees from an earlier one: each active structure is
+ * copied with its fee heads and the classes it's assigned to. A structure the
+ * new session already has (same name) is left alone, and so is a class that
+ * already has a structure there. Student concessions keep their amounts.
+ */
+export async function copyFeeStructures(data: unknown) {
+  const user = await getFinanceSession();
+  if (!user) return { error: "Unauthorized" };
+
+  const parsed = CopyStructuresSchema.safeParse(data);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Invalid copy request" };
+  }
+  const {
+    fromSessionId,
+    toSessionId,
+    increasePercent,
+    roundTo,
+    includeConcessions,
+  } = parsed.data;
+
+  const sessions = await prisma.academicSession.findMany({
+    where: {
+      id: { in: [fromSessionId, toSessionId] },
+      schoolId: user.schoolId,
+    },
+    select: { id: true, name: true },
+  });
+  if (sessions.length !== 2) {
+    return { error: "Academic session not found in your school" };
+  }
+
+  const adjust = (amount: number) =>
+    increasePercent === 0
+      ? amount
+      : Math.round((amount * (1 + increasePercent / 100)) / roundTo) * roundTo;
+
+  try {
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const [sources, existing, assignedClasses] = await Promise.all([
+          tx.feeStructure.findMany({
+            where: {
+              schoolId: user.schoolId,
+              sessionId: fromSessionId,
+              status: "ACTIVE",
+            },
+            include: {
+              items: { include: { component: true } },
+              classAssignments: {
+                include: { class: { select: { name: true } } },
+              },
+            },
+            orderBy: { createdAt: "asc" },
+          }),
+          tx.feeStructure.findMany({
+            where: { schoolId: user.schoolId, sessionId: toSessionId },
+            select: { name: true },
+          }),
+          tx.classFeeStructure.findMany({
+            where: {
+              structure: { schoolId: user.schoolId, sessionId: toSessionId },
+            },
+            select: { classId: true },
+          }),
+        ]);
+        const existingNames = new Set(
+          existing.map((s) => s.name.trim().toLowerCase()),
+        );
+        const taken = new Set(assignedClasses.map((a) => a.classId));
+
+        const copied: string[] = [];
+        const skippedStructures: string[] = [];
+        const skippedClasses: string[] = [];
+        let classesAssigned = 0;
+
+        for (const source of sources) {
+          if (existingNames.has(source.name.trim().toLowerCase())) {
+            skippedStructures.push(source.name);
+            continue;
+          }
+          const created = await tx.feeStructure.create({
+            data: {
+              schoolId: user.schoolId,
+              sessionId: toSessionId,
+              name: source.name,
+              description: source.description,
+              items: {
+                create: source.items.map((item) => ({
+                  componentId: item.componentId,
+                  // Unchanged amounts keep following the fee head's own
+                  // amount; a raise sets them explicitly.
+                  amount:
+                    increasePercent === 0
+                      ? item.amount
+                      : adjust(Number(item.amount ?? item.component.amount)),
+                })),
+              },
+            },
+          });
+          copied.push(source.name);
+
+          for (const assignment of source.classAssignments) {
+            if (taken.has(assignment.classId)) {
+              skippedClasses.push(assignment.class.name);
+              continue;
+            }
+            await tx.classFeeStructure.create({
+              data: { classId: assignment.classId, structureId: created.id },
+            });
+            taken.add(assignment.classId);
+            classesAssigned++;
+          }
+        }
+
+        let concessions = 0;
+        if (includeConcessions) {
+          const overrides = await tx.studentFeeOverride.findMany({
+            where: {
+              sessionId: fromSessionId,
+              student: { schoolId: user.schoolId, isActive: true },
+            },
+          });
+          const made = await tx.studentFeeOverride.createMany({
+            data: overrides.map((o) => ({
+              studentId: o.studentId,
+              sessionId: toSessionId,
+              componentId: o.componentId,
+              discountAmount: o.discountAmount,
+              isExempt: o.isExempt,
+              amount: o.amount,
+              remarks: o.remarks,
+            })),
+            skipDuplicates: true,
+          });
+          concessions = made.count;
+        }
+
+        return {
+          copied,
+          skippedStructures,
+          classesAssigned,
+          skippedClasses,
+          concessions,
+        };
+      },
+      { maxWait: 10_000, timeout: 60_000 },
+    );
+
+    await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
+    await invalidateCache(`cache:${user.schoolId}:classes:*`);
+    await invalidateCache(`cache:${user.schoolId}:students:*`);
+    revalidatePath("/fees");
+    revalidatePath("/classes");
+    return { success: true as const, ...result };
+  } catch (e: any) {
+    return { error: actionErrorMessage(e) };
+  }
+}

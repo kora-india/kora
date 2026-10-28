@@ -19,6 +19,7 @@ import {
   CreditCard,
   Printer,
   Loader2,
+  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -28,6 +29,7 @@ import { useQueryState } from "@/hooks/use-query-state";
 import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
+import { PromoteStudentsDialog } from "./promote-students-dialog";
 import { StudentFeeCollection } from "./student-fee-collection";
 import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
 import {
@@ -136,6 +138,8 @@ interface Props {
     sections: { id: string; name: string }[];
   }[];
   canEdit: boolean;
+  /** School admins move the whole school up at the end of the year. */
+  canPromote?: boolean;
   /** The search, class and section filters the server used to load `students`. */
   appliedFilters?: { q: string; classId: string; sectionId: string };
 }
@@ -146,6 +150,7 @@ export function StudentsContent({
   students,
   classes,
   canEdit,
+  canPromote = false,
   appliedFilters,
 }: Readonly<Props>) {
   const router = useRouter();
@@ -187,9 +192,9 @@ export function StudentsContent({
   }, [search, selectedClass, selectedSection, appliedFilters, router]);
   const [page, setPage] = useState(1);
 
-  const [dialog, setDialog] = useState<"closed" | "create" | "edit" | "import">(
-    "closed",
-  );
+  const [dialog, setDialog] = useState<
+    "closed" | "create" | "edit" | "import" | "promote"
+  >("closed");
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [waiveOnRemove, setWaiveOnRemove] = useState(false);
@@ -522,6 +527,16 @@ export function StudentsContent({
           </div>
           {canEdit && (
             <div id="tour-students-actions" className="flex items-center gap-3">
+              {canPromote && (
+                <button
+                  type="button"
+                  onClick={() => setDialog("promote")}
+                  className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  Promote
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDialog("import")}
@@ -894,6 +909,12 @@ export function StudentsContent({
           classes={classes}
         />
 
+        <PromoteStudentsDialog
+          open={dialog === "promote"}
+          onOpenChange={(open) => {
+            if (!open) setDialog("closed");
+          }}
+        />
         <ImportStudentsDialog
           open={dialog === "import"}
           onOpenChange={(open) => {

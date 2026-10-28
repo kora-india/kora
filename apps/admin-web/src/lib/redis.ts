@@ -26,7 +26,14 @@ interface MemoryCacheEntry {
   data: string;
   expiresAt: number;
 }
-const memoryCache = new Map<string, MemoryCacheEntry>();
+// One cache for the whole server process. Next.js can load this module more
+// than once (server actions and page rendering get separate copies), and a
+// cache per copy meant a change saved by an action never cleared what pages
+// had cached, so pages stayed stale until the entry expired.
+const globalForCache = globalThis as typeof globalThis & {
+  __koraMemoryCache?: Map<string, MemoryCacheEntry>;
+};
+const memoryCache = (globalForCache.__koraMemoryCache ??= new Map());
 
 /**
  * Smart caching wrapper.

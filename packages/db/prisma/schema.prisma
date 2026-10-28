@@ -72,6 +72,7 @@ model School {
   payments                    Payment[]
   sections                    Section[]
   students                    Student[]
+  studentPromotions           StudentPromotion[]
   subscription                Subscription?
   teachers                    Teacher[]
   staff                       Staff[]
@@ -278,6 +279,7 @@ model Student {
   feeOverrides    StudentFeeOverride[]
   transports      StudentTransport[]
   examMarks       ExamMark[]
+  promotions      StudentPromotion[]
   class           Class                  @relation(fields: [classId], references: [id])
   school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section         Section                @relation(fields: [sectionId], references: [id])
@@ -1151,4 +1153,44 @@ model PayrollPayout {
   @@index([schoolId])
   @@index([salarySlipId])
   @@map("payroll_payouts")
+}
+
+// ─── Year-end promotion ────────────────────────────────────────────────────
+
+enum PromotionAction {
+  PROMOTED
+  REPEATED
+  STAYED
+  GRADUATED
+  LEFT
+}
+
+/// Where each student was before a year-end promotion, so the school has a
+/// record of past classes and the latest promotion can be undone. One batch
+/// per run of the promotion.
+model StudentPromotion {
+  id                    String          @id @default(cuid())
+  schoolId              String
+  batchId               String
+  studentId             String
+  action                PromotionAction
+  fromClassId           String
+  fromSectionId         String
+  fromRollNumber        String
+  toClassId             String
+  toSectionId           String
+  toRollNumber          String
+  /// Bus enrollments ended because the student left; undo restores them.
+  cancelledTransportIds String[]
+  /// The session that was current when the promotion ran.
+  sessionId             String?
+  createdById           String?
+  undoneAt              DateTime?
+  createdAt             DateTime        @default(now())
+  school                School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  student               Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, batchId])
+  @@index([studentId])
+  @@map("student_promotions")
 }

@@ -101,6 +101,7 @@ export default async function StudentsPage({
       students={students}
       classes={classes}
       canEdit={canEdit}
+      canPromote={user.role === "SCHOOL_ADMIN"}
       appliedFilters={{
         q: query ?? "",
         classId: classId ?? "",

@@ -34,7 +34,8 @@ import {
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Banknote } from "lucide-react";
+import { ShieldCheck, Banknote, Copy } from "lucide-react";
+import { CopyFeeStructuresDialog } from "@/components/fees/copy-fee-structures-dialog";
 
 interface Props {
   sessions: any[];
@@ -62,6 +63,11 @@ export function SetupTab({
 
   // Search & Filter State
   const [structureSearch, setStructureSearch] = useState("");
+  const [copyDialog, setCopyDialog] = useState(false);
+  // Structures belong to a session; show the current one's unless asked.
+  const [structureSession, setStructureSession] = useState<string>(
+    () => sessions.find((s: any) => s.isCurrent)?.id ?? "all",
+  );
   const [componentSearch, setComponentSearch] = useState("");
 
   // Forms
@@ -353,15 +359,23 @@ export function SetupTab({
   // Helper Calculations
   const activeSession = sessions.find((s) => s.isCurrent) || sessions[0];
 
+  const sessionNames = useMemo(
+    () => new Map(sessions.map((s: any) => [s.id, s.name as string])),
+    [sessions],
+  );
   const filteredStructures = useMemo(() => {
-    if (!structureSearch.trim()) return structures;
+    const inSession =
+      structureSession === "all"
+        ? structures
+        : structures.filter((s: any) => s.sessionId === structureSession);
+    if (!structureSearch.trim()) return inSession;
     const q = structureSearch.toLowerCase();
-    return structures.filter(
+    return inSession.filter(
       (s: any) =>
         s.name.toLowerCase().includes(q) ||
         s.items?.some((i: any) => i.component?.name?.toLowerCase().includes(q)),
     );
-  }, [structures, structureSearch]);
+  }, [structures, structureSearch, structureSession]);
 
   const filteredComponents = useMemo(() => {
     if (!componentSearch.trim()) return components;
@@ -1016,7 +1030,7 @@ export function SetupTab({
                   Class Fee Structures
                 </h2>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-                  {structures.length} Plans Defined
+                  {filteredStructures.length} Plans Defined
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -1026,7 +1040,21 @@ export function SetupTab({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <select
+              aria-label="Session"
+              value={structureSession}
+              onChange={(e) => setStructureSession(e.target.value)}
+              className="py-1.5 px-2.5 text-xs rounded-xl border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="all">All sessions</option>
+              {sessions.map((s: any) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                  {s.isCurrent ? " (current)" : ""}
+                </option>
+              ))}
+            </select>
             {/* Search Structures */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1039,6 +1067,16 @@ export function SetupTab({
               />
             </div>
 
+            {canEdit && sessions.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setCopyDialog(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold border bg-background hover:bg-muted text-foreground rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Copy from another year</span>
+              </button>
+            )}
             {canEdit && (
               <button
                 type="button"
@@ -1070,9 +1108,14 @@ export function SetupTab({
                 {/* Structure Header */}
                 <div className="space-y-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold text-sm text-foreground group-hover:text-blue-600 transition-colors">
-                      {s.name}
-                    </h3>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-foreground group-hover:text-blue-600 transition-colors">
+                        {s.name}
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        {sessionNames.get(s.sessionId) ?? "No session"}
+                      </p>
+                    </div>
                     {canEdit && (
                       <button
                         type="button"
@@ -1130,12 +1173,31 @@ export function SetupTab({
             <div className="col-span-full text-center py-12 border border-dashed rounded-2xl bg-muted/10">
               <Layers className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
               <p className="text-sm font-medium text-foreground">
-                No fee structures match your search.
+                {structureSearch.trim()
+                  ? "No fee structures match your search."
+                  : structureSession !== "all"
+                    ? `${sessionNames.get(structureSession) ?? "This session"} has no fee structures yet.`
+                    : "No fee structures yet."}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Create bundles for classes like &quot;Class 10 General&quot; or
                 &quot;Science Stream&quot;.
               </p>
+              {canEdit &&
+                !structureSearch.trim() &&
+                structureSession !== "all" &&
+                structures.some(
+                  (s: any) => s.sessionId !== structureSession,
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() => setCopyDialog(true)}
+                    className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy from another year
+                  </button>
+                )}
             </div>
           )}
         </div>
@@ -1144,6 +1206,16 @@ export function SetupTab({
       {/* ------------------------------------------------------------- */}
       {/* DIALOGS: Polished Modals with Real-Time Total Calculations     */}
       {/* ------------------------------------------------------------- */}
+
+      <CopyFeeStructuresDialog
+        open={copyDialog}
+        onOpenChange={setCopyDialog}
+        sessions={sessions}
+        structures={structures}
+        defaultToSessionId={
+          structureSession !== "all" ? structureSession : undefined
+        }
+      />
 
       {/* 1. Academic Session Dialog */}
       <Dialog
