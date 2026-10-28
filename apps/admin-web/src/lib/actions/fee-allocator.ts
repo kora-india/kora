@@ -849,7 +849,9 @@ async function buildReceiptData(
         const compAmount = Number(it.amount || 0);
 
         if (isLateFeeComp(it)) {
-          totalLateFeeAcrossCharges += compAmount;
+          totalLateFeeAcrossCharges = roundMoney(
+            totalLateFeeAcrossCharges + compAmount,
+          );
           if (singleLateFeeRate === 0 && compAmount > 0) {
             singleLateFeeRate = compAmount;
           }
@@ -870,7 +872,9 @@ async function buildReceiptData(
       const compAmount = Number(item?.amount || alloc.amount || 0);
 
       if (isLateFeeComp(item)) {
-        totalLateFeeAcrossCharges += Number(alloc.amount || 0);
+        totalLateFeeAcrossCharges = roundMoney(
+          totalLateFeeAcrossCharges + Number(alloc.amount || 0),
+        );
         if (singleLateFeeRate === 0) singleLateFeeRate = compAmount;
       } else {
         if (!regularHeadMap.has(compName) && compAmount > 0) {
@@ -933,14 +937,14 @@ async function buildReceiptData(
         if (it.status !== FeeStatus.WAIVED) {
           const amt = Number(it.amount || 0);
           const pd = Number(it.paidAmount || 0);
-          chargeBilled += amt;
-          chargePaid += pd;
+          chargeBilled = roundMoney(chargeBilled + amt);
+          chargePaid = roundMoney(chargePaid + pd);
         }
       });
-      monthTotalBilled += chargeBilled;
-      monthTotalPaid += chargePaid;
-      const due = Math.max(0, chargeBilled - chargePaid);
-      monthRemainingDue += due;
+      monthTotalBilled = roundMoney(monthTotalBilled + chargeBilled);
+      monthTotalPaid = roundMoney(monthTotalPaid + chargePaid);
+      const due = roundMoney(Math.max(0, chargeBilled - chargePaid));
+      monthRemainingDue = roundMoney(monthRemainingDue + due);
       if (due > 0 || charge.status !== FeeStatus.PAID) {
         isPartial = true;
       }
@@ -962,17 +966,21 @@ async function buildReceiptData(
 
     charge.items?.forEach((it: any) => {
       if (it.status !== FeeStatus.WAIVED) {
-        feeDue += Number(it.amount || 0);
-        totalPaidSoFar += Number(it.paidAmount || 0);
+        feeDue = roundMoney(feeDue + Number(it.amount || 0));
+        totalPaidSoFar = roundMoney(
+          totalPaidSoFar + Number(it.paidAmount || 0),
+        );
       }
     });
 
-    const paidNow = payment.allocations
-      .filter((a: any) => a.chargeItem?.chargeId === charge.id)
-      .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0);
+    const paidNow = roundMoney(
+      payment.allocations
+        .filter((a: any) => a.chargeItem?.chargeId === charge.id)
+        .reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0),
+    );
 
-    const previouslyPaid = Math.max(0, totalPaidSoFar - paidNow);
-    const balanceDue = Math.max(0, feeDue - totalPaidSoFar);
+    const previouslyPaid = roundMoney(Math.max(0, totalPaidSoFar - paidNow));
+    const balanceDue = roundMoney(Math.max(0, feeDue - totalPaidSoFar));
     const status: "PAID" | "PARTIALLY PAID" | "UNPAID" =
       balanceDue <= 0
         ? "PAID"
@@ -984,7 +992,7 @@ async function buildReceiptData(
         ? Math.round(((previouslyPaid + paidNow) / feeDue) * 100)
         : 100;
 
-    outstandingBefore += feeDue - previouslyPaid;
+    outstandingBefore = roundMoney(outstandingBefore + feeDue - previouslyPaid);
 
     monthAllocations.push({
       chargeId: charge.id,
@@ -999,11 +1007,16 @@ async function buildReceiptData(
     });
   });
 
-  const totalAllocatedToCharges = monthAllocations.reduce(
-    (sum, m) => sum + m.paidNow,
-    0,
+  const totalAllocatedToCharges = roundMoney(
+    monthAllocations.reduce((sum, m) => sum + m.paidNow, 0),
   );
-  const advanceSurplus = Math.max(0, txAmount - totalAllocatedToCharges);
+  // What the months still owe after this payment, before the advance line.
+  const remainingOutstanding = roundMoney(
+    monthAllocations.reduce((sum, m) => sum + m.balanceDue, 0),
+  );
+  const advanceSurplus = roundMoney(
+    Math.max(0, txAmount - totalAllocatedToCharges),
+  );
   if (advanceSurplus > 0) {
     monthAllocations.push({
       chargeId: "advance-deposit",
@@ -1021,7 +1034,6 @@ async function buildReceiptData(
     outstandingBefore = txAmount;
   }
 
-  const remainingOutstanding = Math.max(0, outstandingBefore - txAmount);
   const paymentStatus: "PAID_IN_FULL" | "PARTIAL_PAYMENT" =
     remainingOutstanding <= 0 ? "PAID_IN_FULL" : "PARTIAL_PAYMENT";
   const paymentStatusText =

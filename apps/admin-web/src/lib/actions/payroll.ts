@@ -9,6 +9,11 @@ import { z } from "zod";
 import { formatCurrency } from "@schoolos/utils";
 import { sendMail } from "@/lib/mailer";
 import {
+  invalidateCache,
+  invalidateDashboardCache,
+  invalidateLedgerCache,
+} from "@/lib/redis";
+import {
   EDITABLE_STATUSES,
   MAX_AMOUNT,
   PAYABLE_STATUSES,
@@ -169,6 +174,33 @@ export async function generateSalarySlip(data: unknown) {
   }
 }
 
+/** The expense category salary payouts are recorded under. */
+const SALARY_CATEGORY = "Salaries";
+
+/**
+ * The school's salaries category, made on first use. Outside the payout's
+ * transaction, so two first payouts at once can't fail on the unique name.
+ */
+async function salaryCategoryId(schoolId: string) {
+  const where = { schoolId_name: { schoolId, name: SALARY_CATEGORY } };
+  const existing = await prisma.expenseCategory.findUnique({ where });
+  if (existing) return existing.id;
+  try {
+    return (
+      await prisma.expenseCategory.create({
+        data: {
+          schoolId,
+          name: SALARY_CATEGORY,
+          description: "Teacher salary payouts, recorded by payroll",
+        },
+      })
+    ).id;
+  } catch (e: any) {
+    if (e?.code !== "P2002") throw e;
+    return (await prisma.expenseCategory.findUniqueOrThrow({ where })).id;
+  }
+}
+
 function newTransactionId(date = new Date()) {
   const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
   return `PAY-${ymd}-${randomBytes(3).toString("hex").toUpperCase()}`;
@@ -179,6 +211,8 @@ function newTransactionId(date = new Date()) {
  * payment made by bank transfer, UPI or cash. The slip is claimed with a
  * conditional update inside the transaction, so two concurrent submissions
  * can't both succeed, and it only becomes PAID once the payout is saved.
+ * The payout is also recorded as an expense, so the ledger, dashboard and
+ * analytics count salaries as money out.
  */
 export async function processPayout(data: unknown) {
   const user = await getAdminSession();
@@ -189,6 +223,7 @@ export async function processPayout(data: unknown) {
   const { slipId, method, reference } = parsed.data;
 
   try {
+    const categoryId = await salaryCategoryId(user.schoolId);
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         const claimed = await tx.salarySlip.updateMany({
@@ -219,7 +254,14 @@ export async function processPayout(data: unknown) {
 
         const slip = await tx.salarySlip.findUniqueOrThrow({
           where: { id: slipId },
-          select: { netSalary: true, teacherId: true },
+          select: {
+            netSalary: true,
+            teacherId: true,
+            slipNumber: true,
+            year: true,
+            month: true,
+            teacher: { select: { name: true } },
+          },
         });
 
         const payout = await tx.payrollPayout.create({
@@ -233,6 +275,20 @@ export async function processPayout(data: unknown) {
             transactionId: newTransactionId(),
             processedAt: new Date(),
             processedById: user.id,
+          },
+        });
+
+        await tx.expense.create({
+          data: {
+            schoolId: user.schoolId,
+            categoryId,
+            amount: slip.netSalary,
+            date: payout.processedAt ?? new Date(),
+            title: `Salary: ${slip.teacher.name}, ${formatPayrollMonth(slip.year, slip.month)}`,
+            description: `Payout ${payout.transactionId} for slip ${slip.slipNumber}`,
+            paymentMethod: method,
+            referenceNo: payout.transactionId,
+            recordedById: user.id,
           },
         });
 
@@ -253,6 +309,14 @@ export async function processPayout(data: unknown) {
 
     if ("error" in result) return { error: result.error };
     revalidateTeacher(result.teacherId);
+    await Promise.all([
+      invalidateCache(`cache:${user.schoolId}:expenses:*`),
+      invalidateLedgerCache(user.schoolId),
+      invalidateDashboardCache(user.schoolId),
+    ]);
+    revalidatePath("/expenses");
+    revalidatePath("/ledger");
+    revalidatePath("/dashboard");
     const slip = serializeSlip(result.slip);
     return {
       success: true,

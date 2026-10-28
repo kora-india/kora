@@ -101,6 +101,20 @@ export async function deleteExpense(id: string) {
       where: { id, schoolId: user.schoolId },
     });
     if (!existing) return { error: "Expense not found in your school" };
+    // Salaries are recorded by payroll; deleting one here would leave the
+    // teacher paid with no money out.
+    if (existing.referenceNo) {
+      const payout = await prisma.payrollPayout.findFirst({
+        where: { schoolId: user.schoolId, transactionId: existing.referenceNo },
+        select: { id: true },
+      });
+      if (payout) {
+        return {
+          error:
+            "This is a salary payout recorded by payroll, so it can't be deleted here.",
+        };
+      }
+    }
 
     await prisma.expense.delete({
       where: { id: existing.id },

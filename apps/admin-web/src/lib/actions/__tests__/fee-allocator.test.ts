@@ -92,10 +92,11 @@ describe("Fee Allocator Actions", () => {
   });
 
   beforeEach(async () => {
-    // Reset transaction data
-    await prisma.feeCharge.deleteMany();
-    await prisma.paymentTransaction.deleteMany();
-    await prisma.advanceLedger.deleteMany();
+    // Reset this school's transaction data (only its own: other tests' and
+    // any real data in the database stay).
+    await prisma.feeCharge.deleteMany({ where: { schoolId } });
+    await prisma.paymentTransaction.deleteMany({ where: { schoolId } });
+    await prisma.advanceLedger.deleteMany({ where: { student: { schoolId } } });
 
     const charge = await prisma.feeCharge.create({
       data: {

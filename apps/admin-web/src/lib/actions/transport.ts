@@ -552,19 +552,24 @@ export async function enrollStudentTransport(
     },
   });
 
-  // If monthlyFee > 0, find any active fee charge for this student and ensure Transport Fee item exists
+  // The bus starts now, so only the student's newest bill gets its fee, and
+  // only while that bill is open. An older unpaid month must not; once the
+  // newest bill is paid, the next month's bill includes the bus.
   if (parsed.data.monthlyFee > 0) {
     const latestCharge = await prisma.feeCharge.findFirst({
       where: {
         studentId: parsed.data.studentId,
         schoolId,
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        sessionId: currentSession.id,
       },
       orderBy: { dueDate: "desc" },
       include: { items: true },
     });
 
-    if (latestCharge) {
+    if (
+      latestCharge &&
+      ["PENDING", "PARTIAL", "OVERDUE"].includes(latestCharge.status)
+    ) {
       const existingItem = latestCharge.items.find(
         (i) => i.componentId === transportComp.id,
       );
