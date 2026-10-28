@@ -14,6 +14,7 @@ import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { logger } from "@/lib/logger";
 import { generateTempPassword } from "@/lib/temp-password";
+import { emailLoginDetails } from "@/lib/login-details";
 
 /**
  * Settings → Team & access: what each teacher and accountant may do, and
@@ -107,8 +108,8 @@ const AccountantSchema = z.object({
 
 /**
  * A login for an accountant, with the accountant defaults and a temporary
- * password shown once. An accountant removed earlier with the same email gets
- * their login back instead.
+ * password, emailed to them and shown once. An accountant removed earlier with
+ * the same email gets their login back instead.
  */
 export async function createAccountant(data: unknown) {
   const admin = await getAdminSession();
@@ -163,10 +164,20 @@ export async function createAccountant(data: unknown) {
       { schoolId: admin.schoolId, userId: user.id, by: admin.id },
     );
     revalidatePath("/settings/team");
+
+    const emailed = await emailLoginDetails({
+      schoolId: admin.schoolId,
+      to: email,
+      name,
+      role: "accountant",
+      tempPassword,
+      reactivated: Boolean(rehire),
+    });
     return {
       success: true,
       id: user.id,
       tempPassword,
+      emailed,
       reactivated: Boolean(rehire),
     };
   } catch (e: any) {

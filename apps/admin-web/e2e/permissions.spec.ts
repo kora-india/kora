@@ -4,6 +4,7 @@ import {
   chooseOwnPassword,
   expect,
   expectTurnedAway,
+  lastEmail,
   newContext,
   sidebarLink,
   signIn,
@@ -72,8 +73,15 @@ test("an accountant login gets the money pages and nothing else", async ({
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByRole("button", { name: "Create login" }).click();
   await expect(dialog.getByText("Accountant added")).toBeVisible();
+  await expect(
+    dialog.getByText(`We've emailed the sign-in details to ${email}`),
+  ).toBeVisible();
   await dialog.getByRole("button", { name: "Show password" }).click();
   const password = (await dialog.getByTestId("temp-password").textContent())!;
+  // The accountant gets the same details by email.
+  const welcome = await lastEmail(email, /^Your Kora login for /);
+  expect(welcome.subject).toBe(`Your Kora login for ${SEEDED.school}`);
+  expect(welcome.html).toContain(password);
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText(name)).toBeVisible();
 

@@ -67,6 +67,64 @@ export async function sendMail(options: {
   }
 }
 
+/** Where people sign in: this app's address, without a trailing slash. */
+export function appUrl() {
+  return (
+    process.env.NEXTAUTH_URL ||
+    process.env.AUTH_URL ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
+}
+
+/** Names come from forms, so they're escaped before going into an email. */
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * A new teacher's or accountant's sign-in details. The password is
+ * temporary: Kora makes them choose their own the first time they sign in.
+ */
+export async function sendLoginDetailsEmail(details: {
+  to: string;
+  name: string;
+  schoolName: string;
+  role: "teacher" | "accountant";
+  tempPassword: string;
+  reactivated?: boolean;
+}) {
+  const name = escapeHtml(details.name);
+  const school = escapeHtml(details.schoolName);
+  const email = escapeHtml(details.to);
+  const loginUrl = `${appUrl()}/login`;
+  const intro = details.reactivated
+    ? `${school} has turned your Kora login back on.`
+    : `${school} has added you to Kora as ${details.role === "teacher" ? "a teacher" : "an accountant"}.`;
+
+  return sendMail({
+    to: details.to,
+    subject: `Your Kora login for ${details.schoolName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2 style="color: #7c3aed;">Welcome to Kora, ${name}</h2>
+        <p>${intro} Sign in with:</p>
+        <table style="border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 4px 16px 4px 0; color: #666;">Email</td><td style="padding: 4px 0;"><strong>${email}</strong></td></tr>
+          <tr><td style="padding: 4px 16px 4px 0; color: #666;">Temporary password</td><td style="padding: 4px 0;"><code style="font-size: 15px; background: #f4f4f5; padding: 2px 6px; border-radius: 4px;">${escapeHtml(details.tempPassword)}</code></td></tr>
+        </table>
+        <p><a href="${loginUrl}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Sign in to Kora</a></p>
+        <p>When you sign in, Kora will ask you to choose your own password. Until then, keep this email private.</p>
+        <p style="color:#666;font-size:13px;">Weren't expecting this? Contact your school's office.</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   if (process.env.NODE_ENV === "development") {
     console.log("\n==============================================");

@@ -75,6 +75,25 @@ export async function emailedCode(email: string) {
   return code;
 }
 
+/** The last email sent to `email` with a matching subject, from the mail catcher. */
+export async function lastEmail(email: string, subject: RegExp) {
+  let found: { subject: string; html: string } | undefined;
+  await expect
+    .poll(
+      async () => {
+        const res = await fetch(
+          `${MAILBOX_URL}/messages?to=${encodeURIComponent(email)}`,
+        );
+        const messages: { subject: string; html: string }[] = await res.json();
+        found = messages.filter((m) => subject.test(m.subject)).at(-1);
+        return Boolean(found);
+      },
+      { message: `an email to ${email} about ${subject}` },
+    )
+    .toBe(true);
+  return found!;
+}
+
 export interface Account {
   name: string;
   email: string;

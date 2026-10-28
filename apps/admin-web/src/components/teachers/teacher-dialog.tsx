@@ -11,6 +11,7 @@ import { Select } from "antd";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import { createTeacher, updateTeacher } from "@/lib/actions/teachers";
+import { LoginEmailNotice } from "@/components/auth/login-email-notice";
 
 const Schema = z.object({
   name: z.string().min(2, "Required"),
@@ -44,6 +45,7 @@ export function TeacherDialog({
   const router = useRouter();
   const isEdit = !!teacher;
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState({ to: "", emailed: false });
   const [showTempPassword, setShowTempPassword] = useState(false);
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([]);
 
@@ -126,6 +128,7 @@ export function TeacherDialog({
         "This email belonged to a removed teacher, so their account was reactivated with a new password.",
       );
     }
+    setLoginEmail({ to: payload.email, emailed: Boolean(result.emailed) });
     setTempPassword(result.tempPassword);
     setShowTempPassword(false);
     router.refresh();
@@ -144,7 +147,11 @@ export function TeacherDialog({
           if (!o) handleDone();
         }}
         title="Teacher Added"
-        description="Share these credentials with the teacher securely."
+        description={
+          loginEmail.emailed
+            ? "Their sign-in details are on the way to their inbox."
+            : "Share these sign-in details with the teacher securely."
+        }
       >
         <div className="space-y-4">
           <div className="bg-muted/40 rounded-xl p-4 space-y-3">
@@ -186,10 +193,10 @@ export function TeacherDialog({
               </div>
             </div>
           </div>
-          <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            ⚠️ Save this password now. It will not be shown again. The teacher
-            should change it after first login.
-          </p>
+          <LoginEmailNotice
+            emailed={loginEmail.emailed}
+            email={loginEmail.to}
+          />
           <button
             type="button"
             onClick={handleDone}

@@ -7,10 +7,12 @@ import { Copy, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import { createAccountant } from "@/lib/actions/team";
+import { LoginEmailNotice } from "@/components/auth/login-email-notice";
 
 /**
- * Adds an accountant login with the accountant defaults, then shows its
- * temporary password once. Mount it when it opens.
+ * Adds an accountant login with the accountant defaults, emails them their
+ * sign-in details, then shows the temporary password once. Mount it when it
+ * opens.
  */
 export function AddAccountantDialog({
   open,
@@ -21,6 +23,7 @@ export function AddAccountantDialog({
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<{
     tempPassword: string;
+    emailed: boolean;
     reactivated: boolean;
   } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +43,7 @@ export function AddAccountantDialog({
     }
     setCreated({
       tempPassword: result.tempPassword,
+      emailed: result.emailed,
       reactivated: result.reactivated,
     });
     router.refresh();
@@ -53,7 +57,7 @@ export function AddAccountantDialog({
         title={
           created.reactivated ? "Accountant login restored" : "Accountant added"
         }
-        description={`Share these details with ${form.name} securely. They get the accountant defaults; change them with Edit access.`}
+        description={`${created.emailed ? `We've emailed ${form.name} these details.` : `Share these details with ${form.name} securely.`} They get the accountant defaults; change them with Edit access.`}
       >
         <div className="space-y-4">
           <div className="bg-muted/40 rounded-xl p-4 space-y-3">
@@ -106,10 +110,10 @@ export function AddAccountantDialog({
               </div>
             </div>
           </div>
-          <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-            Save this password now. It won&apos;t be shown again. They should
-            change it after signing in.
-          </p>
+          <LoginEmailNotice
+            emailed={created.emailed}
+            email={form.email.trim().toLowerCase()}
+          />
           <button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -127,7 +131,7 @@ export function AddAccountantDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Add accountant"
-      description="Creates a login with a temporary password. Accountants start with Fees, Expenses, Ledger and Transport, and can see students."
+      description="Creates a login with a temporary password and emails it to them. Accountants start with Fees, Expenses, Ledger and Transport, and can see students."
     >
       <form onSubmit={submit} className="space-y-4">
         <FormField label="Full name" htmlFor="accountant-name" required>

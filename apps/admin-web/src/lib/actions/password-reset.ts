@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
 import { headers } from "next/headers";
-import { sendPasswordResetEmail } from "@/lib/mailer";
+import { appUrl, sendPasswordResetEmail } from "@/lib/mailer";
 import { logger } from "@/lib/logger";
 import { passwordResetRatelimit } from "@/lib/ratelimit";
 
@@ -68,6 +68,14 @@ export async function requestPasswordReset(data: unknown) {
   // The super admin's password comes from SUPER_ADMIN_PASSWORD, so no link
   // is sent; the reply is the same so the account isn't revealed.
   if (!user || !user.isActive || user.role === "SUPER_ADMIN") {
+    // The server log says why, without the address; the person doesn't.
+    logger.info("Password reset requested; no email sent", {
+      reason: !user
+        ? "no account uses this email"
+        : !user.isActive
+          ? "login is turned off"
+          : "super admin",
+    });
     // Return success message silently without sending email to prevent user enumeration
     return {
       success: true,
@@ -87,9 +95,7 @@ export async function requestPasswordReset(data: unknown) {
     data: { resetToken: hashedToken, resetTokenExpiry },
   });
 
-  const baseUrl =
-    process.env.NEXTAUTH_URL || process.env.AUTH_URL || "http://localhost:3000";
-  const resetUrl = `${baseUrl.replace(/\/$/, "")}/reset-password?token=${rawToken}`;
+  const resetUrl = `${appUrl()}/reset-password?token=${rawToken}`;
 
   const emailResult = await sendPasswordResetEmail(user.email, resetUrl);
   if (!emailResult.success) {

@@ -84,18 +84,26 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">
+                <label
+                  htmlFor="new-password"
+                  className="text-sm font-medium mb-1.5 block"
+                >
                   New Password
                 </label>
                 <div className="relative">
                   <input
+                    id="new-password"
                     {...register("newPassword")}
                     type={showPassword ? "text" : "password"}
-                    placeholder="At least 6 characters"
+                    autoComplete="new-password"
+                    placeholder="At least 8 characters"
                     className="w-full h-10 px-3 pr-10 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                   />
                   <button
                     type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
@@ -114,11 +122,16 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">
+                <label
+                  htmlFor="confirm-password"
+                  className="text-sm font-medium mb-1.5 block"
+                >
                   Confirm Password
                 </label>
                 <input
+                  id="confirm-password"
                   {...register("confirmPassword")}
+                  autoComplete="new-password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Repeat new password"
                   className="w-full h-10 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"

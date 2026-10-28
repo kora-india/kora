@@ -27,6 +27,7 @@ const TeacherSchema = z.object({
 });
 
 import { generateTempPassword } from "@/lib/temp-password";
+import { emailLoginDetails } from "@/lib/login-details";
 import { isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 
@@ -174,10 +175,20 @@ export async function createTeacher(data: unknown) {
     revalidatePath("/teachers");
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
+
+    const emailed = await emailLoginDetails({
+      schoolId: user.schoolId,
+      to: rest.email,
+      name: rest.name,
+      role: "teacher",
+      tempPassword,
+      reactivated: Boolean(rehire),
+    });
     return {
       success: true,
       id: result.id,
       tempPassword,
+      emailed,
       reactivated: Boolean(rehire),
     };
   } catch (e: any) {
