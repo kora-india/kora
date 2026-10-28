@@ -4,8 +4,10 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { ThemeColorSchema } from "@schoolos/types";
 import { invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
 
 const UpdateSchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -48,6 +50,29 @@ export async function updateSchoolProfile(data: unknown) {
     revalidatePath("/settings/school-profile");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    return { success: true };
+  } catch (e: any) {
+    return { error: actionErrorMessage(e) };
+  }
+}
+
+/** The school admin picks the school's theme color; everyone there sees it. */
+export async function updateSchoolThemeColor(
+  color: unknown,
+): Promise<{ success: true; error?: never } | { error: string }> {
+  const user = await requireSchoolAdmin();
+  if (isError(user)) return { error: user.error };
+
+  const parsed = ThemeColorSchema.safeParse(color);
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  try {
+    await prisma.school.update({
+      where: { id: user.schoolId },
+      data: { themeColor: parsed.data },
+    });
+    // Every page's layout reads the color.
+    revalidatePath("/", "layout");
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

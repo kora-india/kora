@@ -21,7 +21,6 @@ export function TopLoader() {
     }
   }, [pathname, searchParams, loading]);
 
-
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (loading && progress < 90) {
@@ -60,7 +59,8 @@ export function TopLoader() {
 
       if (
         targetUrl.origin === currentUrl.origin &&
-        (targetUrl.pathname !== currentUrl.pathname || targetUrl.search !== currentUrl.search)
+        (targetUrl.pathname !== currentUrl.pathname ||
+          targetUrl.search !== currentUrl.search)
       ) {
         setLoading(true);
         setProgress(20);
@@ -68,7 +68,8 @@ export function TopLoader() {
     };
 
     document.addEventListener("click", handleClick, { capture: true });
-    return () => document.removeEventListener("click", handleClick, { capture: true });
+    return () =>
+      document.removeEventListener("click", handleClick, { capture: true });
   }, []);
 
   if (!loading && progress === 0) return null;
@@ -79,8 +80,11 @@ export function TopLoader() {
       style={{
         width: `${progress}%`,
         opacity: progress === 100 ? 0 : 1,
-        background: "linear-gradient(90deg, #7c3aed 0%, #8b5cf6 50%, #c084fc 100%)",
-        boxShadow: "0 0 10px rgba(139, 92, 246, 0.7), 0 0 5px rgba(124, 58, 237, 0.5)",
+        // The school's theme color (globals.css).
+        background:
+          "linear-gradient(90deg, rgb(var(--brand-600)) 0%, rgb(var(--brand-500)) 50%, rgb(var(--brand-400)) 100%)",
+        boxShadow:
+          "0 0 10px rgb(var(--brand-500) / 0.7), 0 0 5px rgb(var(--brand-600) / 0.5)",
       }}
     />
   );

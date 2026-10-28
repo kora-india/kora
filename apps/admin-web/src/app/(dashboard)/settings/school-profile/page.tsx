@@ -1,5 +1,6 @@
 import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
+import { themeColorOf } from "@schoolos/types";
 import { redirect } from "next/navigation";
 import { SchoolProfileContent } from "@/components/settings/school-profile-content";
 
@@ -16,9 +17,23 @@ export default async function SchoolProfilePage() {
 
   const school = await prisma.school.findUnique({
     where: { id: schoolId },
-    select: { id: true, name: true, address: true, phone: true, email: true, subdomain: true, plan: true },
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      phone: true,
+      email: true,
+      subdomain: true,
+      plan: true,
+      themeColor: true,
+    },
   });
   if (!school) return <div className="p-6">School not found.</div>;
 
-  return <SchoolProfileContent school={school} canEdit={canEdit} />;
+  return (
+    <SchoolProfileContent
+      school={{ ...school, themeColor: themeColorOf(school.themeColor) }}
+      canEdit={canEdit}
+    />
+  );
 }

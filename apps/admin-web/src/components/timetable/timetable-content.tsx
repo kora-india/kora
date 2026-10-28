@@ -19,6 +19,7 @@ import {
   message,
 } from "antd";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import {
   Calendar,
@@ -70,6 +71,7 @@ export function TimetableContent({
   canEdit = userRole !== "TEACHER",
 }: TimetableContentProps) {
   const { theme } = useTheme();
+  const brandColor = useBrandHex();
 
   // Mode: class vs teacher perspective
   const [viewMode, setViewMode] = useQueryTab<"class" | "teacher">({
@@ -262,7 +264,7 @@ export function TimetableContent({
         algorithm:
           theme === "dark" ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
         token: {
-          colorPrimary: "#7c3aed",
+          colorPrimary: brandColor,
           borderRadius: 10,
         },
       }}

@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { useQueryState } from "@/hooks/use-query-state";
 import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
@@ -149,6 +150,7 @@ export function StudentsContent({
 }: Readonly<Props>) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -494,7 +496,7 @@ export function StudentsContent({
       theme={{
         algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
         token: {
-          colorPrimary: "#7c3aed",
+          colorPrimary: brandColor,
           borderRadius: 8,
           colorBgContainer: isDark ? "#09090b" : "#ffffff",
           colorBgElevated: isDark ? "#18181b" : "#ffffff",

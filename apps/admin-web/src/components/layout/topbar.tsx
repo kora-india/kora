@@ -18,13 +18,13 @@ import {
   Compass,
   Menu,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
 import { cn } from "@schoolos/utils";
 import type { SessionUser } from "@schoolos/types";
 import type { SubscriptionEvaluation } from "@/lib/subscription";
 import { useTour } from "@/components/tour/tour-provider";
 import { useMobileNav } from "./mobile-nav";
+import { useColorMode } from "./color-mode";
 
 interface TopbarProps {
   user: SessionUser;
@@ -42,7 +42,7 @@ export function Topbar({
   schoolPlan,
   planName,
 }: TopbarProps) {
-  const { theme, setTheme } = useTheme();
+  const colorMode = useColorMode();
   const { startTour, pageTitle } = useTour();
   const [menuOpen, setMenuOpen] = useState(false);
   const mobileNav = useMobileNav();
@@ -164,11 +164,11 @@ export function Topbar({
         {/* Theme Toggle Button */}
         <button
           id="tour-topbar-theme-btn"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          onClick={() => colorMode.choose(colorMode.isDark ? "light" : "dark")}
           className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors"
-          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          title={`Switch to ${colorMode.isDark ? "light" : "dark"} mode`}
         >
-          {theme === "dark" ? (
+          {colorMode.isDark ? (
             <Sun className="w-4 h-4" />
           ) : (
             <Moon className="w-4 h-4" />

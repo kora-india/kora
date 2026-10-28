@@ -11,6 +11,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Download, Printer } from "lucide-react";
 import { Button, ConfigProvider, theme as antTheme } from "antd";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 import { LedgerFilterBar, type LedgerFilterState } from "./ledger-filter-bar";
@@ -98,6 +99,7 @@ export function LedgerContent({
   userRole,
 }: Readonly<Props>) {
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
   const isDark = resolvedTheme === "dark";
   const router = useRouter();
   const pathname = usePathname();
@@ -390,7 +392,7 @@ export function LedgerContent({
       theme={{
         algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
         token: {
-          colorPrimary: "#7c3aed",
+          colorPrimary: brandColor,
           borderRadius: 10,
           colorBgContainer: isDark ? "#09090b" : "#ffffff",
           colorBgElevated: isDark ? "#18181b" : "#ffffff",

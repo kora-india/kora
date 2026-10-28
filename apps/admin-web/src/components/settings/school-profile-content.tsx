@@ -10,7 +10,9 @@ import { useRouter } from "next/navigation";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { AdmissionNumberConfigCard } from "@/components/settings/admission-number-config-card";
+import { ThemeColorCard } from "@/components/settings/theme-color-card";
 import { updateSchoolProfile } from "@/lib/actions/settings";
+import type { ThemeColor } from "@schoolos/types";
 
 const SchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -30,6 +32,7 @@ interface Props {
     email: string | null;
     subdomain: string;
     plan: string;
+    themeColor: ThemeColor;
   };
   canEdit: boolean;
 }
@@ -175,6 +178,8 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
           </dl>
         )}
       </SettingsCard>
+
+      {canEdit && <ThemeColorCard current={school.themeColor} />}
 
       <AdmissionNumberConfigCard canEdit={canEdit} />
     </div>

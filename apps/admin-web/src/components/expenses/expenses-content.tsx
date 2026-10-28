@@ -40,6 +40,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { deleteExpense } from "@/lib/actions/expenses";
 import { formatCurrency } from "@schoolos/utils";
 import { useQueryState } from "@/hooks/use-query-state";
@@ -108,6 +109,7 @@ export function ExpensesContent({
 }: Readonly<ExpensesContentProps>) {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
   const isDark = resolvedTheme === "dark";
 
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -491,7 +493,7 @@ export function ExpensesContent({
             ? antTheme.darkAlgorithm
             : antTheme.defaultAlgorithm,
           token: {
-            colorPrimary: "#7c3aed",
+            colorPrimary: brandColor,
             borderRadius: 8,
             colorBgContainer: isDark ? "#09090b" : "#ffffff",
             colorBgElevated: isDark ? "#18181b" : "#ffffff",

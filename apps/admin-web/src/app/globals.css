@@ -10,7 +10,20 @@
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 262 83% 58%;
+    /* The school's theme color (packages/types/src/theme.ts), Kora's purple
+       until the school picks another. Tailwind's violet scale reads these. */
+    --brand-50: 245 243 255;
+    --brand-100: 237 233 254;
+    --brand-200: 221 214 254;
+    --brand-300: 196 181 253;
+    --brand-400: 167 139 250;
+    --brand-500: 139 92 246;
+    --brand-600: 124 58 237;
+    --brand-700: 109 40 217;
+    --brand-800: 91 33 182;
+    --brand-900: 76 29 149;
+    --brand-950: 46 16 101;
+    --brand-primary: var(--brand-600);
     --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
@@ -22,7 +35,6 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 262 83% 58%;
     --radius: 0.5rem;
     --sidebar-width: 240px;
     --sidebar-collapsed: 64px;
@@ -35,7 +47,7 @@
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 5%;
     --popover-foreground: 0 0% 98%;
-    --primary: 262 83% 65%;
+    --brand-primary: var(--brand-500);
     --primary-foreground: 0 0% 98%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
@@ -47,7 +59,6 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 262 83% 65%;
   }
 }
 

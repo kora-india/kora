@@ -1,10 +1,13 @@
 import { auth } from "@schoolos/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@schoolos/db";
+import { brandStyleSheet, colorModeOf, themeColorOf } from "@schoolos/types";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { PageTransition } from "@/components/layout/page-transition";
 import { MobileNavProvider } from "@/components/layout/mobile-nav";
+import { BrandProvider } from "@/components/layout/brand";
+import { ColorModeSync } from "@/components/layout/color-mode";
 import { TourProvider } from "@/components/tour/tour-provider";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { getPlan } from "@/lib/plans";
@@ -27,6 +30,7 @@ export default async function DashboardRootLayout({
 
   let schoolName = "";
   let schoolPlan = "";
+  let themeColor = themeColorOf(null);
   let subscriptionEvaluation = null;
 
   if (schoolId) {
@@ -36,6 +40,7 @@ export default async function DashboardRootLayout({
         isActive: true,
         name: true,
         plan: true,
+        themeColor: true,
         subscription: true,
       },
     });
@@ -43,6 +48,7 @@ export default async function DashboardRootLayout({
     if (school) {
       schoolName = school.name;
       schoolPlan = school.plan;
+      themeColor = themeColorOf(school.themeColor);
 
       if (user.role !== "SUPER_ADMIN") {
         if (!school.isActive) {
@@ -69,30 +75,44 @@ export default async function DashboardRootLayout({
     ? getPlan(await getPlanCatalog(), schoolPlan).name
     : "";
 
+  const account = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { colorMode: true },
+  });
+  const brandStyles = brandStyleSheet(themeColor);
+
   return (
-    <TourProvider>
-      <MobileNavProvider>
-        <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
-          <Sidebar
-            userRole={user.role}
-            permissions={schoolId ? await getPermissions() : undefined}
-            schoolName={schoolName}
-            schoolPlan={schoolPlan}
-            planName={planName}
-          />
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
-            <Topbar
-              user={user}
-              subscription={subscriptionEvaluation}
+    <BrandProvider color={themeColor}>
+      {/* Sets the variables on <html>, so dialogs and menus, which render
+          outside this layout, get the school's color too. */}
+      {brandStyles && (
+        <style dangerouslySetInnerHTML={{ __html: brandStyles }} />
+      )}
+      <ColorModeSync saved={colorModeOf(account?.colorMode)} />
+      <TourProvider>
+        <MobileNavProvider>
+          <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
+            <Sidebar
+              userRole={user.role}
+              permissions={schoolId ? await getPermissions() : undefined}
+              schoolName={schoolName}
               schoolPlan={schoolPlan}
               planName={planName}
             />
-            <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
-              <PageTransition>{children}</PageTransition>
-            </main>
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
+              <Topbar
+                user={user}
+                subscription={subscriptionEvaluation}
+                schoolPlan={schoolPlan}
+                planName={planName}
+              />
+              <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
+                <PageTransition>{children}</PageTransition>
+              </main>
+            </div>
           </div>
-        </div>
-      </MobileNavProvider>
-    </TourProvider>
+        </MobileNavProvider>
+      </TourProvider>
+    </BrandProvider>
   );
 }

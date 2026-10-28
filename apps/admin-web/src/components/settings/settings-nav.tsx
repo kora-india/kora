@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, KeyRound, Bell, Server, ShieldCheck } from "lucide-react";
+import { Building2, Bell, Server, ShieldCheck, UserRound } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import { UserRole } from "@schoolos/types";
 
@@ -16,7 +16,7 @@ const SCHOOL_NAV_ITEMS = [
     href: "/settings/school-profile",
     icon: Building2,
   },
-  { label: "Change Password", href: "/settings/account", icon: KeyRound },
+  { label: "Account", href: "/settings/account", icon: UserRound },
 ];
 
 const SCHOOL_ADMIN_NAV_ITEMS = [
@@ -27,7 +27,7 @@ const SCHOOL_ADMIN_NAV_ITEMS = [
 
 const SUPER_ADMIN_NAV_ITEMS = [
   { label: "Platform Overview", href: "/settings/platform", icon: Server },
-  { label: "Change Password", href: "/settings/account", icon: KeyRound },
+  { label: "Account", href: "/settings/account", icon: UserRound },
 ];
 
 // Team & Access is the school admin's: teachers and accountants don't see it.

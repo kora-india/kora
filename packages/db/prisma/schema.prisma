@@ -24,6 +24,9 @@ model School {
   email                       String?
   website                     String?
   logoUrl                     String?
+  /// The theme color the school admin picked (packages/types/src/theme.ts).
+  /// null means Kora's purple.
+  themeColor                  String?
   schoolType                  String?
   board                       String?
   mediumOfInstruction         String?
@@ -178,6 +181,9 @@ model User {
   /// What the school admin lets this teacher or accountant do, by module
   /// (packages/types/src/permissions.ts). null means their role's defaults.
   permissions        Json?
+  /// light, dark or system (packages/types/src/theme.ts). null until they
+  /// pick one, so the browser's last choice applies.
+  colorMode          String?
   passwordChangedAt  DateTime?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt

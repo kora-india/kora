@@ -12,13 +12,21 @@ module.exports = {
         mono: ["var(--font-geist-mono)", "monospace"],
       },
       colors: {
+        // The school's theme color (packages/types/src/theme.ts): violet
+        // classes read the --brand-* variables, Kora's purple by default.
+        violet: Object.fromEntries(
+          [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((shade) => [
+            shade,
+            `rgb(var(--brand-${shade}) / <alpha-value>)`,
+          ]),
+        ),
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        ring: "rgb(var(--brand-primary) / <alpha-value>)",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
+          DEFAULT: "rgb(var(--brand-primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {

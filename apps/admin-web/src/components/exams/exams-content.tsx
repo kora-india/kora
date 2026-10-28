@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { ConfigProvider, theme as antTheme } from "antd";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 
 interface ExamsContentProps {
   exams: any[];
@@ -104,6 +105,7 @@ export function ExamsContent({
   };
 
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
   const isDark = resolvedTheme === "dark";
 
   return (
@@ -111,7 +113,7 @@ export function ExamsContent({
       theme={{
         algorithm: isDark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
         token: {
-          colorPrimary: "#7c3aed",
+          colorPrimary: brandColor,
           borderRadius: 8,
           colorBgContainer: isDark ? "#09090b" : "#ffffff",
           colorBgElevated: isDark ? "#18181b" : "#ffffff",

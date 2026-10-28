@@ -11,6 +11,7 @@ import React, {
 import { usePathname } from "next/navigation";
 import { Tour, ConfigProvider, theme as antTheme } from "antd";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { getTourConfigForRoute } from "./tour-configs";
 
 interface TourContextValue {
@@ -40,6 +41,7 @@ interface TourProviderProps {
 export function TourProvider({ children }: TourProviderProps) {
   const pathname = usePathname() || "/dashboard";
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
 
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -133,7 +135,7 @@ export function TourProvider({ children }: TourProviderProps) {
               ? antTheme.darkAlgorithm
               : antTheme.defaultAlgorithm,
             token: {
-              colorPrimary: "#7c3aed", // violet-600
+              colorPrimary: brandColor,
               borderRadius: 12,
               colorBgElevated: isDark ? "#18181b" : "#ffffff",
               colorText: isDark ? "#f4f4f5" : "#09090b",

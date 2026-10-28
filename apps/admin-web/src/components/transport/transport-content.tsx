@@ -36,6 +36,7 @@ import {
   MenuProps,
 } from "antd";
 import { useTheme } from "next-themes";
+import { useBrandHex } from "@/components/layout/brand";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { VehicleDialog } from "./vehicle-dialog";
 import { RouteDialog } from "./route-dialog";
@@ -78,6 +79,7 @@ export function TransportContent({
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const router = useRouter();
   const { resolvedTheme } = useTheme();
+  const brandColor = useBrandHex();
   const isDark = resolvedTheme === "dark";
 
   const [activeTab, setActiveTab] = useQueryTab<
@@ -354,7 +356,7 @@ export function TransportContent({
             ? antTheme.darkAlgorithm
             : antTheme.defaultAlgorithm,
           token: {
-            colorPrimary: "#7c3aed",
+            colorPrimary: brandColor,
             borderRadius: 8,
             colorBgContainer: isDark ? "#09090b" : "#ffffff",
             colorBgElevated: isDark ? "#18181b" : "#ffffff",
