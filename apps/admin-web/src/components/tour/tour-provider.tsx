@@ -68,6 +68,8 @@ export function TourProvider({ children }: TourProviderProps) {
   // First-time onboarding trigger for dashboard
   useEffect(() => {
     if (!isMounted) return;
+    // The tour points at the sidebar and topbar, which phones tuck away.
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
 
     // Check if user has seen the onboarding tour
     const storageKey = `kora_tour_completed_${pathname.replace(/\//g, "_")}`;

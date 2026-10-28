@@ -279,7 +279,7 @@ export function DashboardContent({
             animate={{ opacity: 1, y: 0, transition: { delay: 0.2 } }}
             className="xl:col-span-2 rounded-xl border bg-card p-5 shadow-sm space-y-3"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-violet-600" /> Fee

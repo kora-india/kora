@@ -16,6 +16,7 @@ import {
   Crown,
   Shield,
   Compass,
+  Menu,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
@@ -23,6 +24,7 @@ import { cn } from "@schoolos/utils";
 import type { SessionUser } from "@schoolos/types";
 import type { SubscriptionEvaluation } from "@/lib/subscription";
 import { useTour } from "@/components/tour/tour-provider";
+import { useMobileNav } from "./mobile-nav";
 
 interface TopbarProps {
   user: SessionUser;
@@ -43,11 +45,22 @@ export function Topbar({
   const { theme, setTheme } = useTheme();
   const { startTour, pageTitle } = useTour();
   const [menuOpen, setMenuOpen] = useState(false);
+  const mobileNav = useMobileNav();
   const activePlan = subscription?.plan || schoolPlan;
   const activePlanName = planName || activePlan;
 
   return (
-    <header className="h-14 border-b bg-card/60 backdrop-blur-sm flex items-center px-6 gap-4 sticky top-0 z-10 print:hidden">
+    <header className="h-14 border-b bg-card/60 backdrop-blur-sm flex items-center px-3 sm:px-6 gap-2 sm:gap-4 sticky top-0 z-10 print:hidden">
+      <button
+        type="button"
+        onClick={() => mobileNav.setOpen(true)}
+        aria-label="Open menu"
+        aria-controls="app-sidebar"
+        aria-expanded={mobileNav.open}
+        className="h-9 w-9 -ml-1 flex flex-shrink-0 items-center justify-center rounded-lg hover:bg-muted transition-colors lg:hidden"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
       {breadcrumb && (
         <p className="text-sm text-muted-foreground">
           <span className="text-foreground font-medium">{breadcrumb}</span>
@@ -65,9 +78,12 @@ export function Topbar({
                 className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 text-xs font-semibold text-violet-700 dark:text-violet-300 shadow-xs hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 animate-pulse" />
-                <span>
+                <span className="hidden md:inline">
                   Free trial · {subscription.daysRemaining}d left · Choose a
                   plan
+                </span>
+                <span className="md:hidden">
+                  {subscription.daysRemaining}d trial
                 </span>
               </Link>
             ) : subscription?.isPastDue ? (
@@ -77,9 +93,10 @@ export function Topbar({
                 className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>
+                <span className="hidden md:inline">
                   {activePlanName} · Renew ({subscription.daysRemaining}d grace)
                 </span>
+                <span className="md:hidden">Renew</span>
               </Link>
             ) : (
               <div
@@ -107,7 +124,7 @@ export function Topbar({
                 {activePlan === "FREE" && (
                   <Sparkles className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 )}
-                <span>{activePlanName} Plan</span>
+                <span className="hidden sm:inline">{activePlanName} Plan</span>
               </div>
             )}
           </>
@@ -115,7 +132,7 @@ export function Topbar({
 
         <button
           id="tour-topbar-search"
-          className="h-8 px-3 flex items-center gap-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors"
+          className="h-8 px-3 hidden sm:flex items-center gap-2 rounded-lg border text-xs text-muted-foreground hover:bg-muted transition-colors"
         >
           <Search className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Search...</span>
@@ -139,7 +156,7 @@ export function Topbar({
           title={`Start tour for ${pageTitle}`}
           aria-label="Start Page Tour"
           id="tour-topbar-tour-btn"
-          className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground group"
+          className="h-8 w-8 hidden sm:flex items-center justify-center rounded-lg border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground group"
         >
           <Compass className="w-4 h-4 text-violet-600 dark:text-violet-400 group-hover:rotate-45 transition-transform duration-300" />
         </button>

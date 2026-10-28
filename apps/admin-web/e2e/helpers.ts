@@ -1,5 +1,37 @@
-import { expect, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Browser,
+  type Page,
+} from "@playwright/test";
 import { MAILBOX_URL } from "./env";
+
+export { expect };
+
+/**
+ * A made-up client address. The app limits sign-ins to 15 per address per 15
+ * minutes (packages/auth), failed ones included, and reads the address from
+ * X-Forwarded-For; giving each browser its own keeps tests from sharing one
+ * limit, as real users do.
+ */
+const clientAddress = () =>
+  `10.${[0, 0, 0].map(() => Math.floor(Math.random() * 254) + 1).join(".")}`;
+
+/** Playwright's test, with each test's browser on its own client address. */
+export const test = base.extend({
+  context: async ({ context }, use) => {
+    await context.setExtraHTTPHeaders({ "x-forwarded-for": clientAddress() });
+    await use(context);
+  },
+});
+
+/** A second, signed-out browser for the same test (its own address too). */
+export function newContext(browser: Browser, baseURL: string | undefined) {
+  return browser.newContext({
+    baseURL,
+    extraHTTPHeaders: { "x-forwarded-for": clientAddress() },
+  });
+}
 
 /** Different on every attempt, so a retry never collides with its first try. */
 export const uniqueId = () =>
@@ -63,16 +95,32 @@ export async function signUp(page: Page, account: Account) {
   await expect(page).toHaveURL(/\/setup$/);
 }
 
-/**
- * The whole run shares one login limit: 15 attempts from this machine per 15
- * minutes (packages/auth), failed ones included. Each test that signs in
- * uses one.
- */
-export async function signIn(page: Page, email: string, password: string) {
+/** Signs in and waits for `landing`: the dashboard, unless a test says otherwise. */
+export async function signIn(
+  page: Page,
+  email: string,
+  password: string,
+  landing: RegExp = /\/dashboard$/,
+) {
   await page.goto("/login");
   await page.getByPlaceholder("admin@school.edu.in").fill(email);
   await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(landing);
+}
+
+/** On the forced first-sign-in page: replaces the temporary password. */
+export async function chooseOwnPassword(
+  page: Page,
+  temporary: string,
+  password: string,
+) {
+  await expect(page).toHaveURL(/\/change-password$/);
+  await page.getByLabel("Temporary password").fill(temporary);
+  // The required-field asterisk is part of each label's name.
+  await page.getByLabel(/^New Password/).fill(password);
+  await page.getByLabel("Confirm New Password").fill(password);
+  await page.getByRole("button", { name: "Save and continue" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 

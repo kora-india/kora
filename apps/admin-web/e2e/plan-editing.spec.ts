@@ -1,10 +1,12 @@
-import { expect, test } from "@playwright/test";
 import { SUPER_ADMIN } from "./env";
 import {
+  expect,
   fillSchoolDetails,
+  newContext,
   signIn,
   signUp,
   stubThirdParties,
+  test,
   uniqueId,
 } from "./helpers";
 
@@ -24,7 +26,7 @@ test("a plan the super admin edits shows on the landing page and at sign-up", as
   ).toBeVisible();
   await expect(pricing.getByText(benefit)).toHaveCount(0);
 
-  const admin = await browser.newContext({ baseURL });
+  const admin = await newContext(browser, baseURL);
   const adminPage = await admin.newPage();
   await signIn(adminPage, SUPER_ADMIN.email, SUPER_ADMIN.password);
   await adminPage.goto("/subscriptions");

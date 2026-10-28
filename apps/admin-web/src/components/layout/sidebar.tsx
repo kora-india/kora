@@ -29,8 +29,10 @@ import {
   Shield,
   Sparkles,
   ReceiptText,
+  X,
 } from "lucide-react";
 import { cn } from "@schoolos/utils";
+import { useIsDesktop, useMobileNav } from "./mobile-nav";
 import {
   UserRole,
   can,
@@ -216,6 +218,9 @@ export function Sidebar({
   planName,
 }: Readonly<SidebarProps>) {
   const [collapsed, setCollapsed] = useState(false);
+  const isDesktop = useIsDesktop();
+  const isCollapsed = collapsed && isDesktop;
+  const { open, setOpen } = useMobileNav();
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
   const navItems = getNavItems(userRole, permissions);
@@ -227,148 +232,173 @@ export function Sidebar({
   }, [pathname]);
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 64 : 240 }}
-      transition={{ duration: 0.2, ease: "easeInOut" }}
-      className="relative flex flex-col h-screen bg-card border-r overflow-hidden flex-shrink-0 print:hidden"
-    >
-      {/* Logo */}
-      <div
+    <>
+      {open && (
+        <div
+          aria-hidden
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden print:hidden"
+        />
+      )}
+      <motion.aside
+        id="app-sidebar"
+        animate={{ width: isCollapsed ? 64 : isDesktop ? 240 : 272 }}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
         className={cn(
-          "flex items-center h-14 px-4 border-b gap-3",
-          collapsed && "justify-center",
+          "flex flex-col h-screen bg-card border-r overflow-hidden flex-shrink-0 print:hidden",
+          // Phones and tablets: a drawer over the page, hidden (not just moved) while shut.
+          "fixed inset-y-0 left-0 z-50 transition-[transform,visibility] duration-200 lg:relative lg:z-auto lg:visible lg:translate-x-0",
+          open
+            ? "visible translate-x-0 shadow-xl"
+            : "invisible -translate-x-full",
         )}
       >
-        <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
-          <Image
-            src="/kora-icon.png"
-            alt="Kora"
-            width={28}
-            height={28}
-            className="w-7 h-7 object-contain"
-          />
-        </div>
-        <AnimatePresence>
-          {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              className="font-bold text-sm tracking-tight whitespace-nowrap"
-            >
-              Kora
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* School info */}
-      {!collapsed && schoolName && (
-        <div className="px-3 py-2.5 border-b">
-          <div className="bg-muted/50 rounded-lg px-3 py-2 space-y-1.5">
-            <p className="text-xs font-semibold truncate text-foreground">
-              {schoolName}
-            </p>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span
-                className={cn(
-                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                  roleBadge.className,
-                )}
-              >
-                {roleBadge.label}
-              </span>
-              {planBadge && (
-                <span
-                  className={cn(
-                    "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 uppercase tracking-wider",
-                    planBadge.className,
-                  )}
-                >
-                  <planBadge.icon className="w-2.5 h-2.5 fill-current" />
-                  {planBadge.label}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Nav */}
-      <nav
-        id="tour-sidebar-nav"
-        className="flex-1 p-2 space-y-0.5 overflow-y-auto"
-      >
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          const isLoading = navigatingTo === item.href;
-          return (
-            <Link
-              key={item.href}
-              id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-              href={item.href}
-              onClick={() => {
-                if (pathname !== item.href) {
-                  setNavigatingTo(item.href);
-                }
-              }}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group",
-                isActive
-                  ? "bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-medium"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                collapsed && "justify-center px-2",
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "w-4 h-4 flex-shrink-0",
-                  isActive
-                    ? "text-violet-600 dark:text-violet-400"
-                    : "group-hover:text-foreground",
-                )}
-              />
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="whitespace-nowrap flex-1"
-                  >
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-              {!collapsed && isLoading && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Collapse toggle */}
-      <div className="p-2 border-t">
-        <button
-          type="button"
-          onClick={() => setCollapsed(!collapsed)}
+        {/* Logo */}
+        <div
           className={cn(
-            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
-            collapsed && "justify-center px-2",
+            "flex items-center h-14 px-4 border-b gap-3",
+            isCollapsed && "justify-center",
           )}
         >
-          <motion.div
-            animate={{ rotate: collapsed ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
+          <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <Image
+              src="/kora-icon.png"
+              alt="Kora"
+              width={28}
+              height={28}
+              className="w-7 h-7 object-contain"
+            />
+          </div>
+          <AnimatePresence>
+            {!isCollapsed && (
+              <motion.span
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="font-bold text-sm tracking-tight whitespace-nowrap"
+              >
+                Kora
+              </motion.span>
+            )}
+          </AnimatePresence>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close menu"
+            className="ml-auto h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
           >
-            <ChevronLeft className="w-4 h-4" />
-          </motion.div>
-          {!collapsed && <span>Collapse</span>}
-        </button>
-      </div>
-    </motion.aside>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* School info */}
+        {!isCollapsed && schoolName && (
+          <div className="px-3 py-2.5 border-b">
+            <div className="bg-muted/50 rounded-lg px-3 py-2 space-y-1.5">
+              <p className="text-xs font-semibold truncate text-foreground">
+                {schoolName}
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span
+                  className={cn(
+                    "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                    roleBadge.className,
+                  )}
+                >
+                  {roleBadge.label}
+                </span>
+                {planBadge && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 uppercase tracking-wider",
+                      planBadge.className,
+                    )}
+                  >
+                    <planBadge.icon className="w-2.5 h-2.5 fill-current" />
+                    {planBadge.label}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Nav */}
+        <nav
+          id="tour-sidebar-nav"
+          className="flex-1 p-2 space-y-0.5 overflow-y-auto"
+        >
+          {navItems.map((item) => {
+            const isActive =
+              pathname === item.href || pathname.startsWith(item.href + "/");
+            const isLoading = navigatingTo === item.href;
+            return (
+              <Link
+                key={item.href}
+                id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                href={item.href}
+                onClick={() => {
+                  if (pathname !== item.href) {
+                    setNavigatingTo(item.href);
+                  }
+                }}
+                title={isCollapsed ? item.label : undefined}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group",
+                  isActive
+                    ? "bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-medium"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  isCollapsed && "justify-center px-2",
+                )}
+              >
+                <item.icon
+                  className={cn(
+                    "w-4 h-4 flex-shrink-0",
+                    isActive
+                      ? "text-violet-600 dark:text-violet-400"
+                      : "group-hover:text-foreground",
+                  )}
+                />
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="whitespace-nowrap flex-1"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {!isCollapsed && isLoading && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Collapse toggle (desktop; the drawer has its own close button) */}
+        <div className="p-2 border-t hidden lg:block">
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-all",
+              isCollapsed && "justify-center px-2",
+            )}
+          >
+            <motion.div
+              animate={{ rotate: isCollapsed ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </motion.div>
+            {!isCollapsed && <span>Collapse</span>}
+          </button>
+        </div>
+      </motion.aside>
+    </>
   );
 }

@@ -1,6 +1,15 @@
-import { expect, test, type Locator } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { SEEDED } from "./env";
-import { expectTurnedAway, sidebarLink, signIn, uniqueId } from "./helpers";
+import {
+  chooseOwnPassword,
+  expect,
+  expectTurnedAway,
+  newContext,
+  sidebarLink,
+  signIn,
+  test,
+  uniqueId,
+} from "./helpers";
 
 /** Sets one module's level in the access editor. */
 async function setAccess(dialog: Locator, module: string, level: string) {
@@ -27,7 +36,7 @@ test("the school admin opens fees to a teacher and closes attendance", async ({
   await dialog.getByRole("button", { name: "Save access" }).click();
   await expect(page.getByText(`${teacher.name}'s access saved`)).toBeVisible();
 
-  const context = await browser.newContext({ baseURL });
+  const context = await newContext(browser, baseURL);
   const teacherPage = await context.newPage();
   await signIn(teacherPage, teacher.email, teacher.password);
 
@@ -68,9 +77,14 @@ test("an accountant login gets the money pages and nothing else", async ({
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText(name)).toBeVisible();
 
-  const context = await browser.newContext({ baseURL });
+  const context = await newContext(browser, baseURL);
   const accountant = await context.newPage();
-  await signIn(accountant, email, password.trim());
+  // The temporary password opens nothing but the page that replaces it.
+  await signIn(accountant, email, password.trim(), /\/change-password$/);
+  await expectTurnedAway(accountant, ["/fees"], /\/change-password$/);
+  const api = await accountant.request.get("/api/students");
+  expect(api.status()).toBe(403);
+  await chooseOwnPassword(accountant, password.trim(), "Meera-own-pass-1");
 
   for (const link of ["Fees", "Expenses", "Ledger", "Transport", "Students"]) {
     await expect(sidebarLink(accountant, link)).toBeVisible();

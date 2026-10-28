@@ -14,6 +14,19 @@ export default auth((req) => {
     );
   }
 
+  // A temporary password is replaced before anything else.
+  if (req.auth.user.mustChangePassword && role !== "SUPER_ADMIN") {
+    if (pathname === "/change-password" || pathname === "/api/account/password")
+      return NextResponse.next();
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Change your temporary password first" },
+        { status: 403 },
+      );
+    }
+    return NextResponse.redirect(new URL("/change-password", req.url));
+  }
+
   return NextResponse.next();
 });
 

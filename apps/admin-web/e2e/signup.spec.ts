@@ -1,8 +1,9 @@
-import { expect, test } from "@playwright/test";
 import {
+  expect,
   fillSchoolDetails,
   signUp,
   stubThirdParties,
+  test,
   uniqueId,
 } from "./helpers";
 

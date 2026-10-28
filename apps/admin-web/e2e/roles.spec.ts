@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
 import { SEEDED, SUPER_ADMIN } from "./env";
-import { expectTurnedAway, sidebarLink, signIn } from "./helpers";
+import { expect, expectTurnedAway, sidebarLink, signIn, test } from "./helpers";
 
 test("nobody signed in gets past the login page", async ({ page }) => {
   await expectTurnedAway(

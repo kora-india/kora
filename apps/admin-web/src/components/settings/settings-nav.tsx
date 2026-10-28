@@ -46,7 +46,7 @@ export function SettingsNav({
   return (
     <div
       id="tour-settings-tabs"
-      className="flex space-x-1 p-1 bg-muted/50 rounded-xl w-fit border shadow-sm"
+      className="flex space-x-1 p-1 bg-muted/50 rounded-xl w-fit max-w-full overflow-x-auto border shadow-sm"
     >
       {navItems.map((item) => {
         const isActive =
@@ -56,7 +56,7 @@ export function SettingsNav({
             key={item.href}
             href={item.href}
             className={cn(
-              "relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors z-10",
+              "relative flex flex-shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors z-10",
               isActive
                 ? "text-violet-700 dark:text-violet-300 bg-background shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -67,7 +67,7 @@ export function SettingsNav({
           </Link>
         );
       })}
-      <div className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg text-muted-foreground/50 cursor-not-allowed">
+      <div className="flex flex-shrink-0 items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap text-muted-foreground/50 cursor-not-allowed">
         <Bell className="w-4 h-4 flex-shrink-0" />
         Notifications
         <span className="ml-1 text-[10px] uppercase tracking-wide">Soon</span>

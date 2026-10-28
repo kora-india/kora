@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./middleware": "./src/middleware.ts"
+    "./middleware": "./src/middleware.ts",
+    "./password": "./src/password.ts"
   },
   "dependencies": {
     "@schoolos/db": "workspace:*",

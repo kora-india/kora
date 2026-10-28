@@ -4,6 +4,7 @@ import { prisma } from "@schoolos/db";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { PageTransition } from "@/components/layout/page-transition";
+import { MobileNavProvider } from "@/components/layout/mobile-nav";
 import { TourProvider } from "@/components/tour/tour-provider";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { getPlan } from "@/lib/plans";
@@ -70,26 +71,28 @@ export default async function DashboardRootLayout({
 
   return (
     <TourProvider>
-      <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
-        <Sidebar
-          userRole={user.role}
-          permissions={schoolId ? await getPermissions() : undefined}
-          schoolName={schoolName}
-          schoolPlan={schoolPlan}
-          planName={planName}
-        />
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
-          <Topbar
-            user={user}
-            subscription={subscriptionEvaluation}
+      <MobileNavProvider>
+        <div className="flex h-screen bg-background overflow-hidden print:h-auto print:overflow-visible print:block print:bg-white">
+          <Sidebar
+            userRole={user.role}
+            permissions={schoolId ? await getPermissions() : undefined}
+            schoolName={schoolName}
             schoolPlan={schoolPlan}
             planName={planName}
           />
-          <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
-            <PageTransition>{children}</PageTransition>
-          </main>
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 print:h-auto print:overflow-visible print:block">
+            <Topbar
+              user={user}
+              subscription={subscriptionEvaluation}
+              schoolPlan={schoolPlan}
+              planName={planName}
+            />
+            <main className="flex-1 overflow-y-auto w-full print:h-auto print:overflow-visible print:block print:p-0">
+              <PageTransition>{children}</PageTransition>
+            </main>
+          </div>
         </div>
-      </div>
+      </MobileNavProvider>
     </TourProvider>
   );
 }

@@ -56,9 +56,26 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
+  const user = req.auth.user;
+
+  // A login made with a temporary password (teachers, accountants, schools
+  // the super admin creates) chooses its own before anything else. The super
+  // admin's password comes from the environment, so it's never asked.
+  if (user?.mustChangePassword && user.role !== "SUPER_ADMIN") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Change your temporary password first" },
+        { status: 403 },
+      );
+    }
+    if (pathname !== "/change-password") {
+      return NextResponse.redirect(new URL("/change-password", req.url));
+    }
+    return NextResponse.next();
+  }
+
   // SUPER_ADMIN has no schoolId, so school-scoped pages have nothing to show them.
   // Redirect stray direct navigation to the page built for their role.
-  const user = req.auth.user;
   const SUPER_ADMIN_ALLOWED = [
     "/dashboard",
     "/schools",
