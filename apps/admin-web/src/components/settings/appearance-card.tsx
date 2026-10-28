@@ -48,7 +48,9 @@ export function AppearanceCard() {
                 name="appearance"
                 value={option}
                 checked={isSelected}
-                onChange={() => choose(option)}
+                onChange={(e) =>
+                  choose(option, e.currentTarget.closest("label"))
+                }
                 className="sr-only"
               />
               <Icon className="h-5 w-5" aria-hidden />

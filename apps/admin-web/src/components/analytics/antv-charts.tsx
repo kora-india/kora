@@ -4,26 +4,27 @@ import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { formatCurrency } from "@schoolos/utils";
 import { Spin } from "antd";
+import { useBrandHex } from "@/components/layout/brand";
 
 // Dynamically import AntV Charts with ssr: false for Next.js
 const Area = dynamic(
   () => import("@ant-design/plots").then((mod) => mod.Area),
-  { ssr: false, loading: () => <ChartLoader /> }
+  { ssr: false, loading: () => <ChartLoader /> },
 );
 
 const Line = dynamic(
   () => import("@ant-design/plots").then((mod) => mod.Line),
-  { ssr: false, loading: () => <ChartLoader /> }
+  { ssr: false, loading: () => <ChartLoader /> },
 );
 
-const Pie = dynamic(
-  () => import("@ant-design/plots").then((mod) => mod.Pie),
-  { ssr: false, loading: () => <ChartLoader /> }
-);
+const Pie = dynamic(() => import("@ant-design/plots").then((mod) => mod.Pie), {
+  ssr: false,
+  loading: () => <ChartLoader />,
+});
 
 const Column = dynamic(
   () => import("@ant-design/plots").then((mod) => mod.Column),
-  { ssr: false, loading: () => <ChartLoader /> }
+  { ssr: false, loading: () => <ChartLoader /> },
 );
 
 function ChartLoader() {
@@ -40,7 +41,12 @@ interface RevenueAreaProps {
   height?: number;
 }
 
-export function AntvRevenueAreaChart({ data, height = 260 }: Readonly<RevenueAreaProps>) {
+export function AntvRevenueAreaChart({
+  data,
+  height = 260,
+}: Readonly<RevenueAreaProps>) {
+  // Collected uses the school's color, like the legends beside this chart.
+  const collected = useBrandHex();
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -56,7 +62,7 @@ export function AntvRevenueAreaChart({ data, height = 260 }: Readonly<RevenueAre
     shapeField: "smooth",
     scale: {
       color: {
-        range: ["#7c3aed", "#ef4444", "#f59e0b", "#3b82f6"],
+        range: [collected, "#ef4444", "#f59e0b", "#3b82f6"],
       },
     },
     axis: {
@@ -65,8 +71,8 @@ export function AntvRevenueAreaChart({ data, height = 260 }: Readonly<RevenueAre
           v >= 100000
             ? `₹${(v / 100000).toFixed(1)}L`
             : v >= 1000
-            ? `₹${(v / 1000).toFixed(0)}k`
-            : `₹${v}`,
+              ? `₹${(v / 1000).toFixed(0)}k`
+              : `₹${v}`,
         gridLineDash: [3, 3],
       },
       x: {
@@ -99,7 +105,9 @@ interface AttendanceLineProps {
   data: { month: string; rate: number }[];
 }
 
-export function AntvAttendanceLineChart({ data }: Readonly<AttendanceLineProps>) {
+export function AntvAttendanceLineChart({
+  data,
+}: Readonly<AttendanceLineProps>) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -208,7 +216,9 @@ interface PaymentMethodsBarProps {
   data: { method: string; amount: number }[];
 }
 
-export function AntvPaymentMethodsBarChart({ data }: Readonly<PaymentMethodsBarProps>) {
+export function AntvPaymentMethodsBarChart({
+  data,
+}: Readonly<PaymentMethodsBarProps>) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -223,7 +233,14 @@ export function AntvPaymentMethodsBarChart({ data }: Readonly<PaymentMethodsBarP
     colorField: "method",
     scale: {
       color: {
-        range: ["#7c3aed", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"],
+        range: [
+          "#7c3aed",
+          "#3b82f6",
+          "#10b981",
+          "#f59e0b",
+          "#ec4899",
+          "#8b5cf6",
+        ],
       },
     },
     axis: {
@@ -232,8 +249,8 @@ export function AntvPaymentMethodsBarChart({ data }: Readonly<PaymentMethodsBarP
           v >= 100000
             ? `₹${(v / 100000).toFixed(1)}L`
             : v >= 1000
-            ? `₹${(v / 1000).toFixed(0)}k`
-            : `₹${v}`,
+              ? `₹${(v / 1000).toFixed(0)}k`
+              : `₹${v}`,
       },
     },
     label: {
@@ -266,7 +283,10 @@ interface PlanDonutProps {
   height?: number;
 }
 
-export function AntvPlanDonutChart({ data, height = 240 }: Readonly<PlanDonutProps>) {
+export function AntvPlanDonutChart({
+  data,
+  height = 240,
+}: Readonly<PlanDonutProps>) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -322,7 +342,10 @@ interface SchoolGrowthColumnProps {
   height?: number;
 }
 
-export function AntvSchoolGrowthColumnChart({ data, height = 240 }: Readonly<SchoolGrowthColumnProps>) {
+export function AntvSchoolGrowthColumnChart({
+  data,
+  height = 240,
+}: Readonly<SchoolGrowthColumnProps>) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -371,4 +394,3 @@ export function AntvSchoolGrowthColumnChart({ data, height = 240 }: Readonly<Sch
 
   return <Column {...config} />;
 }
-

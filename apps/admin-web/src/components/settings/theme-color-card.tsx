@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import {
 } from "@schoolos/types";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { updateSchoolThemeColor } from "@/lib/actions/settings";
+import { revealChange } from "@/lib/theme-reveal";
 
 /**
  * Shows `color` on this page at once, ahead of the layout's style sheet;
@@ -37,12 +39,15 @@ export function ThemeColorCard({ current }: Readonly<{ current: ThemeColor }>) {
 
   useEffect(() => () => previewThemeColor(null), []);
 
-  const choose = async (color: ThemeColor) => {
+  const choose = async (color: ThemeColor, swatch: Element | null) => {
     if (color === selected || saving) return;
     const previous = selected;
-    setSelected(color);
     setSaving(color);
-    previewThemeColor(color);
+    revealChange(swatch, () => {
+      // Rendered now, so the new look already shows this swatch picked.
+      flushSync(() => setSelected(color));
+      previewThemeColor(color);
+    });
 
     const result = await updateSchoolThemeColor(color);
     setSaving(null);
@@ -82,15 +87,23 @@ export function ThemeColorCard({ current }: Readonly<{ current: ThemeColor }>) {
                 name="theme-color"
                 value={color}
                 checked={isSelected}
-                onChange={() => choose(color)}
+                onChange={(e) =>
+                  choose(
+                    color,
+                    e.currentTarget
+                      .closest("label")
+                      ?.querySelector("[data-swatch]") ?? null,
+                  )
+                }
                 disabled={saving !== null}
                 className="sr-only"
               />
               <span
                 aria-hidden
+                data-swatch
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-background transition-shadow",
-                  isSelected && "ring-2",
+                  "flex h-9 w-9 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-background transition-[box-shadow,transform] duration-300",
+                  isSelected && "scale-110 ring-2",
                 )}
                 style={
                   {

@@ -164,7 +164,12 @@ export function Topbar({
         {/* Theme Toggle Button */}
         <button
           id="tour-topbar-theme-btn"
-          onClick={() => colorMode.choose(colorMode.isDark ? "light" : "dark")}
+          onClick={(e) =>
+            colorMode.choose(
+              colorMode.isDark ? "light" : "dark",
+              e.currentTarget,
+            )
+          }
           className="h-8 w-8 flex items-center justify-center rounded-lg border hover:bg-muted transition-colors"
           title={`Switch to ${colorMode.isDark ? "light" : "dark"} mode`}
         >
