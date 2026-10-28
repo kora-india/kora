@@ -15,7 +15,6 @@ import {
 import {
   GRADING_OPTIONS,
   SHIFTS,
-  SUBDOMAIN_SUFFIX,
   academicSessionOptions,
   describeClasses,
   describeWorkingDays,
@@ -91,7 +90,7 @@ export function SchoolSummary({
           onEdit={onEdit}
           items={[
             ["Name", v.name],
-            ["Web address", v.subdomain && `${v.subdomain}${SUBDOMAIN_SUFFIX}`],
+            ["School ID", v.subdomain],
             ["Type", v.schoolType],
             [
               "Size",

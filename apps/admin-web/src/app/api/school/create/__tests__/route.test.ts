@@ -203,7 +203,7 @@ describe("POST /api/school/create", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects a duplicate subdomain", async () => {
+  it("rejects a duplicate school ID", async () => {
     const first = await signedPayload({ subdomain: "dup-" + runId });
     expect((await POST(makeRequest(first))).status).toBe(200);
 
@@ -215,7 +215,7 @@ describe("POST /api/school/create", () => {
     const body = await res.json();
 
     expect(res.status).toBe(409);
-    expect(body.error).toMatch(/already taken/i);
+    expect(body.error).toMatch(/school ID is taken/i);
     // U3: the second admin's payment is recorded, not lost.
     expect(body.paymentSaved).toBe(true);
 

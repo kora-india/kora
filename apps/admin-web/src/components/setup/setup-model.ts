@@ -206,8 +206,6 @@ const DAY_NAMES: Record<string, string> = {
 
 export const dayName = (day: string) => DAY_NAMES[day] ?? day;
 
-export const SUBDOMAIN_SUFFIX = ".schoolos.com";
-
 // U6: the class catalogue's names ("Grade 1", not "Class 1"), so classes
 // added later from the Classes page are recognised as the same ones.
 export const CLASSES = STANDARD_CLASSES.map((c) => c.name);
@@ -292,7 +290,7 @@ export function slugify(name: string) {
     .replace(/-$/, "");
 }
 
-/** Keeps what can be typed into a subdomain; spaces become hyphens. */
+/** Keeps what can be typed into a school ID; spaces become hyphens. */
 export function normalizeSubdomainInput(raw: string) {
   return raw
     .toLowerCase()

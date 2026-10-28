@@ -162,7 +162,7 @@ export const secondaryButtonCls =
 export const inputCls =
   "w-full h-10 px-3 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent disabled:opacity-50 aria-[invalid=true]:border-destructive aria-[invalid=true]:focus:ring-destructive/30";
 
-/** An input with a fixed prefix or suffix ("+91", ".schoolos.com"). */
+/** An input with a fixed prefix or suffix ("+91", "km"). */
 export const InputGroup = forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement> & {

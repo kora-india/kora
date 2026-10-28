@@ -41,7 +41,7 @@ describe("PlanStep", () => {
     const summary = screen.getByRole("region", { name: "Your school" });
     for (const text of [
       "Delhi Public School",
-      "dps-ranchi.schoolos.com",
+      "dps-ranchi",
       "1,500 students · 80 staff",
       "01, Near Railway Station, Main Road, Ranchi, Jharkhand 834001",
       "+91 9876543210 · office@dps.in",

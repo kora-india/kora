@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     if (!rateLimitResult.success) {
       return createRateLimitResponse(
         rateLimitResult,
-        "Too many subdomain checks. Please wait a minute before checking again.",
+        "Too many school ID checks. Please wait a minute before checking again.",
       );
     }
 

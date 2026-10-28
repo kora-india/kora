@@ -70,7 +70,7 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
     <div className="space-y-6">
       <SettingsCard
         title="School Profile"
-        description={`${school.subdomain}.kora · ${school.plan} plan`}
+        description={`School ID ${school.subdomain} · ${school.plan} plan`}
         action={
           canEdit && !editing ? (
             <button

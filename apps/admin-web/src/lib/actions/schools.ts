@@ -13,8 +13,8 @@ const CreateSchoolSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
   subdomain: z
     .string()
-    .min(3, "Subdomain must be at least 3 characters")
-    .max(40, "Subdomain too long")
+    .min(3, "School ID must be at least 3 characters")
+    .max(40, "School ID is too long")
     .regex(
       /^[a-z0-9-]+$/,
       "Only lowercase letters, numbers and hyphens allowed",
@@ -60,7 +60,7 @@ export async function createSchool(data: unknown) {
 
   // Check subdomain uniqueness before transaction
   const existing = await prisma.school.findUnique({ where: { subdomain } });
-  if (existing) return { error: `Subdomain "${subdomain}" is already taken` };
+  if (existing) return { error: `School ID "${subdomain}" is already taken` };
 
   // Check admin email uniqueness
   const existingUser = await prisma.user.findUnique({
@@ -142,7 +142,7 @@ export async function createSchool(data: unknown) {
   } catch (e: any) {
     logger.error("School creation failed", { error: e.message, subdomain });
     if (e.code === "P2002")
-      return { error: "A school with this subdomain or email already exists" };
+      return { error: "A school with this ID or email already exists" };
     return { error: "Failed to create school. Please try again." };
   }
 }

@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       !(await isSubdomainAvailable(subdomain, user.id))
     ) {
       return NextResponse.json(
-        { error: "This subdomain was just taken. Choose another one." },
+        { error: "This school ID was just taken. Choose another one." },
         { status: 409 },
       );
     }

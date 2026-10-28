@@ -141,7 +141,7 @@ describe("SetupWizard", () => {
     await user.type(screen.getByLabelText("Number of students"), "1500");
     await user.type(screen.getByLabelText("Number of staff"), "80");
     expect(
-      await screen.findByText("delhi-public-school.schoolos.com is available"),
+      await screen.findByText("delhi-public-school is available"),
     ).toBeInTheDocument();
     await user.click(continueButton());
 
@@ -231,7 +231,7 @@ describe("SetupWizard", () => {
         "Greenfield Academy",
       ),
     );
-    expect(screen.getByLabelText("Web address")).toHaveValue(
+    expect(screen.getByLabelText("School ID")).toHaveValue(
       "greenfield-academy",
     );
   });
@@ -303,7 +303,7 @@ describe("SetupWizard", () => {
     await user.type(screen.getByLabelText("Number of students"), "1500");
     await user.type(screen.getByLabelText("Number of staff"), "80");
 
-    const address = screen.getByLabelText("Web address");
+    const address = screen.getByLabelText("School ID");
     await waitFor(() =>
       expect(address).toHaveAccessibleDescription(SUBDOMAIN_TAKEN_MESSAGE),
     );
@@ -313,13 +313,13 @@ describe("SetupWizard", () => {
     expect(address).toHaveFocus();
   });
 
-  it("goes back to the web address when the server says it was taken", async () => {
+  it("goes back to the school ID when the server says it was taken", async () => {
     const fetchMock = mockFetch({
       "/api/school/create": () =>
         jsonResponse(
           {
             code: "SUBDOMAIN_TAKEN",
-            error: "This subdomain is already taken.",
+            error: "That school ID is taken",
           },
           { status: 409 },
         ),
@@ -338,10 +338,8 @@ describe("SetupWizard", () => {
     await waitFor(() =>
       expect(heading()).toHaveTextContent("Tell us about your school"),
     );
-    expect(mocks.toast.error).toHaveBeenCalledWith(
-      "This subdomain is already taken.",
-    );
-    const address = screen.getByLabelText("Web address");
+    expect(mocks.toast.error).toHaveBeenCalledWith("That school ID is taken");
+    const address = screen.getByLabelText("School ID");
     expect(address).toHaveAccessibleDescription(SUBDOMAIN_TAKEN_MESSAGE);
     expect(address).toHaveFocus();
     expect(mocks.openDashboard).not.toHaveBeenCalled();

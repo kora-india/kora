@@ -298,8 +298,8 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: paymentSaved
-            ? "Subdomain is already taken. Choose another one to finish setup; your payment is saved."
-            : "Subdomain is already taken",
+            ? "That school ID is taken. Choose another one to finish setup; your payment is saved."
+            : "That school ID is taken",
           code: "SUBDOMAIN_TAKEN",
           paymentSaved,
         },
@@ -471,7 +471,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "Subdomain is already taken. Choose another one to finish setup.",
+              "That school ID is taken. Choose another one to finish setup.",
             code: "SUBDOMAIN_TAKEN",
             paymentSaved,
           },

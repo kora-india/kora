@@ -133,7 +133,7 @@ export async function fillSchoolDetails(page: Page, schoolName: string) {
   await page.getByLabel("School name", { exact: true }).fill(schoolName);
   await page.getByLabel("Number of students", { exact: true }).fill("400");
   await page.getByLabel("Number of staff", { exact: true }).fill("25");
-  await expect(page.getByText(/\.schoolos\.com is available/)).toBeVisible();
+  await expect(page.getByText(/ is available$/)).toBeVisible();
   await next.click();
 
   await expect(heading).toHaveText("Where is your school?");

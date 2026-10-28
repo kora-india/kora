@@ -4,7 +4,6 @@ import { useFormContext } from "react-hook-form";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import {
   SCHOOL_TYPES,
-  SUBDOMAIN_SUFFIX,
   normalizeSubdomainInput,
   slugify,
   type SetupInput,
@@ -13,7 +12,6 @@ import {
   ChoiceCard,
   ChoiceGroup,
   Field,
-  InputGroup,
   SetupSection,
   fieldProps,
   inputCls,
@@ -22,7 +20,7 @@ import { LogoUploader } from "../logo-uploader";
 import type { SubdomainStatus } from "../use-subdomain-check";
 
 export const SUBDOMAIN_TAKEN_MESSAGE =
-  "That address is taken. Try adding your city or area.";
+  "That ID is taken. Try adding your city or area.";
 
 function SubdomainHint({
   status,
@@ -40,15 +38,14 @@ function SubdomainHint({
     return (
       <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-        {subdomain}
-        {SUBDOMAIN_SUFFIX} is available
+        {subdomain} is available
       </span>
     );
   }
   if (status === "error") {
     return "We couldn't check this right now. We'll check again when you create the school.";
   }
-  return "Lowercase letters, numbers and hyphens. We suggest one from your school's name.";
+  return "Your school's unique ID in Kora. Lowercase letters, numbers and hyphens; we suggest one from your school's name.";
 }
 
 export function ProfileStep({
@@ -84,7 +81,7 @@ export function ProfileStep({
             {...nameField}
             {...fieldProps("name", errors.name?.message)}
             onChange={(e) => {
-              // The suggested subdomain follows the name until it is edited.
+              // The suggested ID follows the name until it is edited.
               const suggested = slugify(getValues("name") ?? "");
               nameField.onChange(e);
               const current = getValues("subdomain");
@@ -101,24 +98,24 @@ export function ProfileStep({
         </Field>
         <Field
           id="subdomain"
-          label="Web address"
+          label="School ID"
           error={subdomainError}
           hint={
             <SubdomainHint status={subdomainStatus} subdomain={subdomain} />
           }
         >
-          <InputGroup
+          <input
             {...subdomainField}
             {...fieldProps("subdomain", subdomainError, true)}
             onChange={(e) => {
               e.target.value = normalizeSubdomainInput(e.target.value);
               subdomainField.onChange(e);
             }}
-            suffix={SUBDOMAIN_SUFFIX}
             placeholder="e.g. dps-ranchi"
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
+            className={inputCls}
           />
         </Field>
       </SetupSection>

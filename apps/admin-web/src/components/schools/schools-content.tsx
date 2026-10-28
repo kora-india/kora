@@ -52,7 +52,7 @@ const CreateSchoolFormSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
   subdomain: z
     .string()
-    .min(3, "Subdomain must be at least 3 characters")
+    .min(3, "School ID must be at least 3 characters")
     .regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, hyphens"),
   email: z.string().email("Valid email required").or(z.literal("")),
   phone: z.string().optional(),
@@ -181,7 +181,7 @@ export function SchoolsContent({ schools, planNames }: SchoolsContentProps) {
         <div className="relative max-w-sm w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
-            placeholder="Search by name, subdomain, email..."
+            placeholder="Search by name, school ID, email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -241,7 +241,7 @@ export function SchoolsContent({ schools, planNames }: SchoolsContentProps) {
                 School
               </th>
               <th className="h-10 px-4 text-left text-xs font-medium text-muted-foreground uppercase">
-                Subdomain
+                School ID
               </th>
               <th className="h-10 px-4 text-left text-xs font-medium text-muted-foreground uppercase">
                 Plan
@@ -450,7 +450,7 @@ export function SchoolsContent({ schools, planNames }: SchoolsContentProps) {
             </FormField>
 
             <FormField
-              label="Subdomain"
+              label="School ID"
               error={form.formState.errors.subdomain?.message}
               required
             >

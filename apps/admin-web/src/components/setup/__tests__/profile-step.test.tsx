@@ -16,11 +16,11 @@ const renderStep = (
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ProfileStep", () => {
-  it("suggests a web address from the name until the address is edited", async () => {
+  it("suggests a school ID from the name until the ID is edited", async () => {
     const user = userEvent.setup();
     const { form } = renderStep();
     const name = screen.getByLabelText("School name");
-    const address = screen.getByLabelText("Web address");
+    const address = screen.getByLabelText("School ID");
 
     await user.type(name, "Delhi Public School");
     expect(address).toHaveValue("delhi-public-school");
@@ -36,27 +36,27 @@ describe("ProfileStep", () => {
 
   it.each([
     ["checking", "Checking availability…"],
-    ["available", "dps-ranchi.schoolos.com is available"],
+    ["available", "dps-ranchi is available"],
     [
       "error",
       "We couldn't check this right now. We'll check again when you create the school.",
     ],
   ] as [SubdomainStatus, string][])(
-    "describes the address while it is %s",
+    "describes the ID while it is %s",
     (status, text) => {
       renderStep(status, {
         ...setupDefaults("", NOW),
         subdomain: "dps-ranchi",
       });
-      const address = screen.getByLabelText("Web address");
+      const address = screen.getByLabelText("School ID");
       expect(address).toHaveAccessibleDescription(text);
       expect(address).not.toHaveAttribute("aria-invalid");
     },
   );
 
-  it("marks a taken address as an error", () => {
+  it("marks a taken ID as an error", () => {
     renderStep("taken", { ...setupDefaults("", NOW), subdomain: "dps" });
-    const address = screen.getByLabelText("Web address");
+    const address = screen.getByLabelText("School ID");
     expect(address).toHaveAttribute("aria-invalid", "true");
     expect(address).toHaveAccessibleDescription(SUBDOMAIN_TAKEN_MESSAGE);
   });

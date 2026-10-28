@@ -7,7 +7,7 @@ const logger = createLogger("actions");
 const FIELD_LABELS: Record<string, string> = {
   email: "email address",
   phone: "phone number",
-  subdomain: "subdomain",
+  subdomain: "school ID",
   receiptNo: "receipt number",
   admissionNumber: "admission number",
   rollNumber: "roll number",

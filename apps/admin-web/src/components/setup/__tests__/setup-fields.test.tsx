@@ -53,12 +53,12 @@ describe("Field", () => {
 describe("InputGroup", () => {
   it("shows a fixed suffix next to the input", () => {
     render(
-      <Field id="subdomain" label="Web address">
-        <InputGroup id="subdomain" suffix=".schoolos.com" defaultValue="dps" />
+      <Field id="distance" label="Distance">
+        <InputGroup id="distance" suffix="km" defaultValue="12" />
       </Field>,
     );
-    expect(screen.getByLabelText("Web address")).toHaveValue("dps");
-    expect(screen.getByText(".schoolos.com")).toBeInTheDocument();
+    expect(screen.getByLabelText("Distance")).toHaveValue("12");
+    expect(screen.getByText("km")).toBeInTheDocument();
   });
 });
 

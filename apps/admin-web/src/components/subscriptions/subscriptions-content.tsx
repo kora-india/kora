@@ -291,7 +291,7 @@ export function SubscriptionsContent({
             <thead>
               <tr className="border-b bg-muted/30 text-muted-foreground uppercase text-[10px]">
                 <th className="h-9 px-4 text-left font-medium">School</th>
-                <th className="h-9 px-3 text-left font-medium">Subdomain</th>
+                <th className="h-9 px-3 text-left font-medium">School ID</th>
                 <th className="h-9 px-3 text-left font-medium">Current Plan</th>
                 <th className="h-9 px-3 text-left font-medium">
                   Student Usage
