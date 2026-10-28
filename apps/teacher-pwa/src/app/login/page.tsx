@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { GraduationCap, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,9 +39,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-gray-950 dark:to-gray-900 px-5">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 bg-violet-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-violet-200">
-            <GraduationCap className="w-8 h-8 text-white" />
-          </div>
+          <Image
+            src="/icon-192.png"
+            alt="Kora"
+            width={64}
+            height={64}
+            priority
+            className="h-16 w-16 object-contain mb-4"
+          />
           <h1 className="text-2xl font-bold">Kora Teacher</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Sign in to your teacher account

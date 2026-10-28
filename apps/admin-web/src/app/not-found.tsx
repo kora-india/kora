@@ -1,17 +1,23 @@
 import Link from "next/link";
-import { GraduationCap, Home, ArrowLeft } from "lucide-react";
+import Image from "next/image";
+import { Home, ArrowLeft } from "lucide-react";
 
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
-      <div className="w-12 h-12 bg-violet-600 rounded-xl flex items-center justify-center mb-6">
-        <GraduationCap className="w-6 h-6 text-white" />
-      </div>
+      <Image
+        src="/kora-icon.png"
+        alt="Kora"
+        width={48}
+        height={48}
+        className="h-12 w-12 object-contain mb-6"
+      />
 
       <h1 className="text-7xl font-bold text-muted-foreground/20 mb-2">404</h1>
       <h2 className="text-xl font-semibold mb-2">Page not found</h2>
       <p className="text-sm text-muted-foreground mb-8 max-w-sm">
-        The page you&apos;re looking for doesn&apos;t exist or you may not have permission to view it.
+        The page you&apos;re looking for doesn&apos;t exist or you may not have
+        permission to view it.
       </p>
 
       <div className="flex items-center gap-3">

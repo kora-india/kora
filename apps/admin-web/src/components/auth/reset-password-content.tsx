@@ -7,7 +7,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, GraduationCap, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { resetPassword } from "@/lib/actions/password-reset";
 
 const ResetPasswordSchema = z
@@ -48,9 +49,13 @@ export function ResetPasswordContent({ token }: Readonly<{ token: string }>) {
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center">
-            <GraduationCap className="w-4 h-4 text-white" />
-          </div>
+          <Image
+            src="/kora-icon.png"
+            alt="Kora"
+            width={32}
+            height={32}
+            className="h-8 w-8 object-contain"
+          />
           <span className="font-bold text-lg">Kora</span>
         </div>
 
