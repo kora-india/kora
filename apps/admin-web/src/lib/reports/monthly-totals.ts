@@ -69,6 +69,24 @@ export async function monthlyCollections(
   return toMap(rows);
 }
 
+/** Successful collections since the first month, by payment method. */
+export async function collectionsByMethod(
+  schoolId: string,
+  months: MonthBucket[],
+  timeZone?: string | null,
+): Promise<{ method: string; amount: number }[]> {
+  const tz = resolveTimeZone(timeZone);
+  const rows = await prisma.$queryRaw<{ method: string; total: number }[]>`
+    SELECT pt."method"::text AS method, COALESCE(SUM(pt."amount"), 0)::float8 AS total
+    FROM "payment_transactions" pt
+    WHERE pt."status" = 'SUCCESS'
+      AND pt."schoolId" = ${schoolId}
+      AND pt."date" >= ${monthStart(months, tz)}
+    GROUP BY 1
+    ORDER BY 2 DESC`;
+  return rows.map((r) => ({ method: r.method, amount: Number(r.total) || 0 }));
+}
+
 /** Expenses per month. */
 export async function monthlyExpenses(
   schoolId: string,

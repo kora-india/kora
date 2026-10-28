@@ -52,10 +52,22 @@ export function getReceiptFileName(receiptData: FeeReceiptData): string {
   return `${cleanName}_Fee_Receipt_${month}_${year}`;
 }
 
+/** Text from the database, made safe to place in the printed HTML. */
+const esc = (value: unknown) =>
+  String(value ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+
 /**
- * Triggers an isolated print using a dedicated hidden iframe.
+ * The printed receipt as a complete HTML document. Names, titles and fee heads
+ * come from what staff typed, so every one of them is escaped: printing must
+ * never run markup someone saved as a student's name.
  */
-export function printReceipt(receiptData: FeeReceiptData) {
+export function receiptPrintHtml(receiptData: FeeReceiptData): string {
   const isPaidInFull =
     receiptData.paymentStatus === "PAID_IN_FULL" ||
     (receiptData.remainingOutstanding ?? receiptData.monthRemainingDue ?? 0) <=
@@ -70,27 +82,6 @@ export function printReceipt(receiptData: FeeReceiptData) {
   const amountPaid = Number(receiptData.amountPaid);
 
   const fileName = getReceiptFileName(receiptData);
-  const prevTitle = document.title;
-  document.title = fileName;
-
-  // Clean up any existing print iframe
-  const oldIframe = document.getElementById("kora-receipt-print-frame");
-  if (oldIframe) {
-    oldIframe.remove();
-  }
-
-  const iframe = document.createElement("iframe");
-  iframe.id = "kora-receipt-print-frame";
-  iframe.title = fileName;
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "none";
-  iframe.style.zIndex = "-99999";
-  iframe.style.opacity = "0";
-  document.body.appendChild(iframe);
 
   // Month Allocations Table Rows
   const monthAllocRows = (receiptData.monthAllocations || [])
@@ -102,7 +93,7 @@ export function printReceipt(receiptData: FeeReceiptData) {
 
       return `
       <tr>
-        <td class="col-text font-bold">${m.month}</td>
+        <td class="col-text font-bold">${esc(m.month)}</td>
         <td class="col-num font-mono">₹${m.feeDue.toFixed(2)}</td>
         <td class="col-num font-mono text-muted">₹${m.previouslyPaid.toFixed(2)}</td>
         <td class="col-num font-mono font-bold text-paid">₹${m.paidNow.toFixed(2)}</td>
@@ -118,19 +109,19 @@ export function printReceipt(receiptData: FeeReceiptData) {
     .map(
       (item) => `
       <tr>
-        <td class="col-text">${item.head}</td>
+        <td class="col-text">${esc(item.head)}</td>
         <td class="col-num font-mono">₹${Number(item.amount).toFixed(2)}</td>
       </tr>
     `,
     )
     .join("");
 
-  const printDocumentHtml = `
+  return `
     <!DOCTYPE html>
     <html lang="en">
       <head>
         <meta charset="utf-8" />
-        <title>${fileName}</title>
+        <title>${esc(fileName)}</title>
         <style>
           @page {
             size: portrait;
@@ -422,9 +413,9 @@ export function printReceipt(receiptData: FeeReceiptData) {
         <div class="receipt-container">
           <!-- School & Document Header -->
           <div class="header">
-            <div class="school-name">${receiptData.schoolName || "Horizon Private School"}</div>
-            ${receiptData.schoolAddress ? `<div class="school-sub">${receiptData.schoolAddress}</div>` : ""}
-            ${receiptData.schoolContact ? `<div class="school-sub">${receiptData.schoolContact}</div>` : ""}
+            <div class="school-name">${esc(receiptData.schoolName || "School")}</div>
+            ${receiptData.schoolAddress ? `<div class="school-sub">${esc(receiptData.schoolAddress)}</div>` : ""}
+            ${receiptData.schoolContact ? `<div class="school-sub">${esc(receiptData.schoolContact)}</div>` : ""}
             <div class="doc-title-row">
               <span class="receipt-title">FEE PAYMENT RECEIPT</span>
               <span class="status-banner ${isPaidInFull ? "banner-paid" : "banner-partial"}">
@@ -437,27 +428,27 @@ export function printReceipt(receiptData: FeeReceiptData) {
           <div class="meta-grid">
             <div class="meta-item">
               <span class="meta-label">Receipt No:</span>
-              <span class="meta-val font-mono">${receiptData.receiptNo}</span>
+              <span class="meta-val font-mono">${esc(receiptData.receiptNo)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Date & Time:</span>
-              <span class="meta-val">${receiptData.timestamp}</span>
+              <span class="meta-val">${esc(receiptData.timestamp)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Student Name:</span>
-              <span class="meta-val">${receiptData.studentName}</span>
+              <span class="meta-val">${esc(receiptData.studentName)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Admission / Reg No:</span>
-              <span class="meta-val font-mono">${receiptData.regNo}</span>
+              <span class="meta-val font-mono">${esc(receiptData.regNo)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Class & Section:</span>
-              <span class="meta-val">${receiptData.className}</span>
+              <span class="meta-val">${esc(receiptData.className)}</span>
             </div>
             <div class="meta-item">
               <span class="meta-label">Roll Number:</span>
-              <span class="meta-val font-mono">${receiptData.rollNumber || "-"}</span>
+              <span class="meta-val font-mono">${esc(receiptData.rollNumber || "-")}</span>
             </div>
           </div>
 
@@ -542,11 +533,11 @@ export function printReceipt(receiptData: FeeReceiptData) {
             <div class="footer-flex">
               <div>
                 <span style="color: #6b7280; font-weight: 600;">Payment Mode:</span>
-                <span class="mode-badge">${receiptData.paymentType}</span>
+                <span class="mode-badge">${esc(receiptData.paymentType)}</span>
               </div>
               <div>
                 <span style="color: #6b7280; font-weight: 600;">Issued By:</span>
-                <strong>${receiptData.generatedBy}</strong>
+                <strong>${esc(receiptData.generatedBy)}</strong>
               </div>
             </div>
 
@@ -574,6 +565,35 @@ export function printReceipt(receiptData: FeeReceiptData) {
       </body>
     </html>
   `;
+}
+
+/**
+ * Triggers an isolated print using a dedicated hidden iframe.
+ */
+export function printReceipt(receiptData: FeeReceiptData) {
+  const fileName = getReceiptFileName(receiptData);
+  const printDocumentHtml = receiptPrintHtml(receiptData);
+  const prevTitle = document.title;
+  document.title = fileName;
+
+  // Clean up any existing print iframe
+  const oldIframe = document.getElementById("kora-receipt-print-frame");
+  if (oldIframe) {
+    oldIframe.remove();
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "kora-receipt-print-frame";
+  iframe.title = fileName;
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "none";
+  iframe.style.zIndex = "-99999";
+  iframe.style.opacity = "0";
+  document.body.appendChild(iframe);
 
   const doc = iframe.contentWindow?.document;
   if (!doc) {

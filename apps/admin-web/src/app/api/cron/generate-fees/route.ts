@@ -133,14 +133,23 @@ export async function GET(request: Request) {
       const title = formatPeriodLabel(periodKey);
       const dueDate = new Date(Date.UTC(year, month - 1, 10));
 
-      // Find the current active session for the school
+      // The session the month falls in. Usually the current one, but next
+      // year's session is often set up, and marked current, before it starts.
       const currentSession = await prisma.academicSession.findFirst({
-        where: { schoolId: school.id, isCurrent: true },
+        where: {
+          schoolId: school.id,
+          startDate: { lte: new Date(Date.UTC(year, month, 0)) },
+          endDate: { gte: new Date(Date.UTC(year, month - 1, 1)) },
+        },
+        orderBy: [{ isCurrent: "desc" }, { startDate: "desc" }],
       });
 
       if (!currentSession) {
         // Not marked done: a session added later this week still gets billed.
-        results.push({ school: school.name, error: "No active session found" });
+        results.push({
+          school: school.name,
+          error: `No session covers ${title}`,
+        });
         resumeAfter = school.id;
         continue;
       }

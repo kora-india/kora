@@ -106,11 +106,11 @@ export async function processClassFeeGeneration(
       async (tx) => {
         // B2: a charge for this month already exists if it carries the period
         // key, or (for charges created before period keys) its due date falls
-        // in the month.
+        // in the month. In any session: two sessions that overlap must not
+        // bill the same month twice.
         const existingCharges = await tx.feeCharge.findMany({
           where: {
             studentId: { in: studentIds },
-            sessionId,
             OR: [
               { periodKey },
               {

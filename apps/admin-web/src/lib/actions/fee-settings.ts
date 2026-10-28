@@ -6,6 +6,7 @@ import { prisma, FeeFrequency } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateCache, invalidateFeesCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { carryTransportForward } from "@/lib/fees/transport-carry-over";
 
 async function getFinanceSession() {
   const access = await requirePermission("fees", "manage");
@@ -55,6 +56,11 @@ export async function createAcademicSession(data: {
 
   try {
     await prisma.$transaction(async (tx) => {
+      const previous = parsed.data.isCurrent
+        ? await tx.academicSession.findFirst({
+            where: { schoolId: user.schoolId, isCurrent: true },
+          })
+        : null;
       if (parsed.data.isCurrent) {
         // Unset current session if this one is true
         await tx.academicSession.updateMany({
@@ -63,7 +69,7 @@ export async function createAcademicSession(data: {
         });
       }
 
-      await tx.academicSession.create({
+      const created = await tx.academicSession.create({
         data: {
           schoolId: user.schoolId,
           name: parsed.data.name,
@@ -72,9 +78,11 @@ export async function createAcademicSession(data: {
           isCurrent: parsed.data.isCurrent,
         },
       });
+      await carryTransportForward(tx, user.schoolId, previous, created);
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
+    await invalidateCache(`cache:${user.schoolId}:transport:*`);
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/fees");
     revalidatePath("/dashboard");
@@ -310,9 +318,18 @@ export async function updateAcademicSession(
       }
 
       if (parsed.data.isCurrent) {
+        const previous = existing.isCurrent
+          ? null
+          : await tx.academicSession.findFirst({
+              where: { schoolId: user.schoolId, isCurrent: true },
+            });
         await tx.academicSession.updateMany({
           where: { schoolId: user.schoolId, id: { not: id } },
           data: { isCurrent: false },
+        });
+        await carryTransportForward(tx, user.schoolId, previous, {
+          id,
+          startDate: new Date(parsed.data.startDate),
         });
       } else if (existing.isCurrent) {
         // B15: Preserving a current session: if unsetting current session, make another session current if one exists
@@ -340,9 +357,11 @@ export async function updateAcademicSession(
     });
 
     await invalidateCache(`cache:${user.schoolId}:academicSessions:*`);
+    await invalidateCache(`cache:${user.schoolId}:transport:*`);
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    revalidatePath("/transport");
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

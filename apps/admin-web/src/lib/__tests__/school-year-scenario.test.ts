@@ -44,6 +44,7 @@ import { createTeacher } from "../actions/teachers";
 import { generateSalarySlip, processPayout } from "../actions/payroll";
 import { GET as applyLateFees } from "@/app/api/cron/apply-late-fees/route";
 import { getLedgerData } from "../reports/ledger";
+import { getAnalyticsData } from "../reports/analytics";
 import { DEFAULT_LEDGER_QUERY } from "../reports/ledger-query";
 import {
   monthlyCollections,
@@ -1349,6 +1350,55 @@ describe(`a school year of fees, expenses and pay (seed ${SEED})`, () => {
         "dashboard: pending dues of current students",
       )
       .toBe(activeOpen);
+
+    // The analytics page: the same money as the dashboard, over six months.
+    const analytics = await getAnalyticsData(schoolId, TZ);
+    const sixMonths = recentMonths(6, TZ);
+    const collectedSix = await monthlyCollections(schoolId, sixMonths, TZ);
+    const pendingSix = await monthlyPendingDues(schoolId, sixMonths);
+    expect
+      .soft(
+        analytics.revenueData.map((r) => r.collected),
+        "analytics: collected by month",
+      )
+      .toEqual(sixMonths.map((mo) => collectedSix.get(mo.key) ?? 0));
+    expect
+      .soft(
+        analytics.revenueData.map((r) => r.pending),
+        "analytics: pending by month",
+      )
+      .toEqual(sixMonths.map((mo) => pendingSix.get(mo.key) ?? 0));
+    // Every payment in this scenario was taken this month.
+    expect
+      .soft(
+        r2(analytics.metrics.totalRevenue),
+        "analytics: this month's revenue",
+      )
+      .toBe(totalCollected);
+    expect
+      .soft(
+        sum(analytics.paymentMethods, (p) => p.amount),
+        "analytics: split by method",
+      )
+      .toBe(totalCollected);
+    const windowStart = new Date(`${sixMonths[0].key}-01T00:00:00Z`);
+    const windowItems = live.filter(
+      (i) => i.charge.student.isActive && i.charge.dueDate >= windowStart,
+    );
+    const windowBilled = sum(windowItems, (i) => num(i.amount));
+    const windowPaid = sum(windowItems, (i) => num(i.paidAmount));
+    expect
+      .soft(
+        analytics.metrics.feeCollectionRate,
+        "analytics: collection rate, waived fees left out",
+      )
+      .toBe(Math.round((windowPaid / windowBilled) * 1000) / 10);
+    expect
+      .soft(
+        sum(analytics.feeDistribution, (c) => c.value),
+        "analytics: split by fee type = billed",
+      )
+      .toBe(windowBilled);
 
     const withdrawnOwed = sum(
       live.filter((i) => !i.charge.student.isActive),
