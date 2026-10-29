@@ -14,95 +14,16 @@ import {
 import { read, utils } from "xlsx";
 import { toast } from "sonner";
 import { bulkImportStudents } from "@/lib/actions/student-import";
+import {
+  classMatchKey,
+  importFieldForHeader,
+  missingImportColumns,
+  normalizeImportRow,
+  type ImportRowValues,
+} from "@/lib/student-import-helpers";
 
-// Header normalization rules from the user
-const HEADER_MAPPING: Record<string, string> = {
-  "first name": "firstName",
-  first_name: "firstName",
-  "last name": "lastName",
-  last_name: "lastName",
-  "student name": "name",
-  name: "name",
-  class: "class",
-  "class name": "class",
-  section: "section",
-  "roll number": "rollNumber",
-  "roll no": "rollNumber",
-  roll_number: "rollNumber",
-  "admission number": "admissionNumber",
-  "admission no": "admissionNumber",
-  admission_number: "admissionNumber",
-  dob: "dateOfBirth",
-  "date of birth": "dateOfBirth",
-  date_of_birth: "dateOfBirth",
-  "parent name": "parentName",
-  parent: "parentName",
-  "father name": "fatherName",
-  father_name: "fatherName",
-  "mother name": "motherName",
-  mother_name: "motherName",
-  "guardian name": "guardianName",
-  guardian_name: "guardianName",
-  "parent phone": "parentPhone",
-  phone: "parentPhone",
-  parent_phone: "parentPhone",
-  "student phone": "studentPhone",
-  student_phone: "studentPhone",
-  "parent email": "parentEmail",
-  parent_email: "parentEmail",
-  "student email": "studentEmail",
-  student_email: "studentEmail",
-  gender: "gender",
-  address: "address",
-  city: "city",
-  state: "state",
-  pincode: "pincode",
-};
-
-function normalizeHeaders(data: any[]) {
-  return data.map((row) => {
-    const newRow: any = {};
-    for (const key in row) {
-      const normalizedKey = key.trim().toLowerCase();
-      const mappedKey = HEADER_MAPPING[normalizedKey] || normalizedKey;
-      newRow[mappedKey] = row[key];
-    }
-    // If name is missing but firstName is present, map it to name
-    if (!newRow.name && newRow.firstName) {
-      newRow.name =
-        newRow.firstName + (newRow.lastName ? ` ${newRow.lastName}` : "");
-    }
-
-    // Construct parentName if missing
-    if (!newRow.parentName) {
-      newRow.parentName =
-        newRow.fatherName || newRow.motherName || newRow.guardianName || "";
-    }
-
-    // Construct parentPhone if missing
-    if (!newRow.parentPhone) {
-      newRow.parentPhone = newRow.studentPhone || "";
-    }
-
-    // Construct parentEmail if missing
-    if (!newRow.parentEmail) {
-      newRow.parentEmail = newRow.studentEmail || "";
-    }
-
-    // Construct full address
-    if (newRow.address || newRow.city || newRow.state || newRow.pincode) {
-      const addressParts = [
-        newRow.address,
-        newRow.city,
-        newRow.state,
-        newRow.pincode,
-      ].filter(Boolean);
-      newRow.address = addressParts.join(", ");
-    }
-
-    return newRow;
-  });
-}
+/** A parsed row: the student fields, and its line in the spreadsheet. */
+type ParsedRow = ImportRowValues & { sheetRow: number };
 
 interface Props {
   open: boolean;
@@ -120,7 +41,10 @@ export function ImportStudentsDialog({
   classes,
 }: Readonly<Props>) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [parsedData, setParsedData] = useState<any[]>([]);
+  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
+  // Required columns the file lacks, and columns it has that aren't used.
+  const [missingColumns, setMissingColumns] = useState<string[]>([]);
+  const [unusedColumns, setUnusedColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [globalClassId, setGlobalClassId] = useState("");
   const [globalSectionId, setGlobalSectionId] = useState("");
@@ -150,15 +74,31 @@ export function ImportStudentsDialog({
         const workbook = read(bstr, { type: "binary", raw: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const rawData = utils.sheet_to_json(worksheet, { defval: "" });
-
-        const normalized = normalizeHeaders(rawData);
-        // Filter out completely empty rows
-        const cleaned = normalized.filter((row) =>
-          Object.values(row).some((v) => v !== ""),
+        const rawData = utils.sheet_to_json<Record<string, unknown>>(
+          worksheet,
+          { defval: "" },
         );
+        const headers = (
+          (utils.sheet_to_json(worksheet, { header: 1 })[0] as unknown[]) ?? []
+        )
+          .map((h) => String(h ?? "").trim())
+          .filter(Boolean);
 
-        setParsedData(cleaned);
+        const rows = rawData
+          .map((raw, index) => ({
+            ...normalizeImportRow(raw),
+            // SheetJS keeps each row's 0-based line; the header is line 1.
+            sheetRow:
+              typeof (raw as { __rowNum__?: unknown }).__rowNum__ === "number"
+                ? (raw as { __rowNum__: number }).__rowNum__ + 1
+                : index + 2,
+          }))
+          // Leave out rows with nothing in them.
+          .filter((row) => Object.keys(row).length > 1);
+
+        setMissingColumns(missingImportColumns(headers));
+        setUnusedColumns(headers.filter((h) => !importFieldForHeader(h)));
+        setParsedData(rows);
         setStep(2);
       } catch (err) {
         toast.error("Failed to parse file. Please check the format.");
@@ -173,55 +113,31 @@ export function ImportStudentsDialog({
   const handleImport = async () => {
     setLoading(true);
     // Apply global class/section if rows are missing it
-    const finalData = parsedData.map((row) => {
-      let classId = globalClassId;
-      if (row.class) {
-        const rowClassLower = String(row.class).toLowerCase().trim();
-        let matched = classes.find(
-          (c) => c.name.toLowerCase() === rowClassLower,
-        );
-        if (!matched)
-          matched = classes.find(
-            (c) => c.name.toLowerCase() === `class ${rowClassLower}`,
+    // Rows without a class or section take the ones picked for the file.
+    // A class the school doesn't have yet goes by name; the server adds it.
+    const finalData = parsedData.map(
+      ({ class: className, section, ...row }) => {
+        let classId = globalClassId;
+        if (className) {
+          const matched = classes.find(
+            (c) => classMatchKey(c.name) === classMatchKey(className),
           );
-        if (!matched)
-          matched = classes.find(
-            (c) => c.name.toLowerCase() === `grade ${rowClassLower}`,
-          );
-        classId = matched ? matched.id : String(row.class).trim();
-      }
+          classId = matched ? matched.id : className;
+        }
 
-      let sectionId = globalSectionId;
-      const classObj = classes.find((c) => c.id === classId);
-      if (row.section) {
-        const rowSecLower = String(row.section).toLowerCase().trim();
-        const matched = classObj?.sections.find(
-          (s) => s.name.toLowerCase() === rowSecLower,
-        );
-        sectionId = matched ? matched.id : String(row.section).trim();
-      }
+        let sectionId = globalSectionId;
+        if (section) {
+          const matched = classes
+            .find((c) => c.id === classId)
+            ?.sections.find(
+              (s) => s.name.toLowerCase() === section.toLowerCase(),
+            );
+          sectionId = matched ? matched.id : section;
+        }
 
-      return {
-        ...row,
-        classId: classId ? String(classId).trim() : undefined,
-        sectionId: sectionId ? String(sectionId).trim() : undefined,
-        name: row.name ? String(row.name).trim() : undefined,
-        parentName: row.parentName ? String(row.parentName).trim() : undefined,
-        parentPhone: row.parentPhone
-          ? String(row.parentPhone).trim()
-          : undefined,
-        admissionNumber: row.admissionNumber
-          ? String(row.admissionNumber).trim()
-          : undefined,
-        rollNumber: row.rollNumber ? String(row.rollNumber).trim() : undefined,
-        dateOfBirth: row.dateOfBirth
-          ? String(row.dateOfBirth).trim()
-          : undefined,
-        gender: row.gender
-          ? String(row.gender).toUpperCase().trim()
-          : undefined,
-      };
-    });
+        return { ...row, classId, sectionId };
+      },
+    );
 
     try {
       const res = await bulkImportStudents(finalData);
@@ -319,6 +235,30 @@ export function ImportStudentsDialog({
                 exit={{ opacity: 0, x: 20 }}
                 className="space-y-6"
               >
+                {missingColumns.length > 0 && (
+                  <div
+                    role="alert"
+                    className="p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-xl flex items-start gap-3"
+                  >
+                    <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold text-red-800 dark:text-red-400">
+                        Couldn&apos;t find a column for{" "}
+                        {missingColumns.join(", ").toLowerCase()}
+                      </h4>
+                      <p className="text-xs text-red-700 dark:text-red-500 mt-1">
+                        Every student needs a name, a parent&apos;s name and a
+                        parent&apos;s phone. Give those columns headers such as
+                        &ldquo;Student Name&rdquo;, &ldquo;Parent Name&rdquo;
+                        and &ldquo;Parent Phone&rdquo;, then upload the file
+                        again.
+                        {unusedColumns.length > 0 &&
+                          ` Columns in your file that weren't recognised: ${unusedColumns.join(", ")}.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {hasMissingClassData && (
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl flex items-start gap-3">
                     <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
@@ -368,6 +308,11 @@ export function ImportStudentsDialog({
                   <h3 className="font-semibold mb-2">
                     Preview Data ({parsedData.length} records)
                   </h3>
+                  {missingColumns.length === 0 && unusedColumns.length > 0 && (
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Not imported: {unusedColumns.join(", ")}
+                    </p>
+                  )}
                   <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 border-b">
@@ -527,6 +472,7 @@ export function ImportStudentsDialog({
                 onClick={handleImport}
                 disabled={
                   loading ||
+                  missingColumns.length > 0 ||
                   (hasMissingClassData && (!globalClassId || !globalSectionId))
                 }
                 className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"

@@ -16,20 +16,50 @@ import {
   classMatchKey,
   displayOrderForClassName,
   parseImportDate,
+  rollNumberKey,
 } from "@/lib/student-import-helpers";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { logActivity } from "@/lib/activity";
 
+/** Spreadsheets give numbers for phones and pincodes; read them as text. */
+const cell = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (typeof v === "number" ? String(v) : v), schema);
+/** A required text cell, with one message whether it's absent or blank. */
+const required = (missing: string) =>
+  cell(
+    z
+      .string({ required_error: missing, invalid_type_error: missing })
+      .trim()
+      .min(1, missing),
+  );
+const optional = cell(z.string().trim().max(200).nullish());
+
 const importStudentSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  classId: z.string().min(1, "Class is required"),
-  sectionId: z.string().min(1, "Section is required"),
-  parentName: z.string().min(1, "Parent Name is required"),
-  parentPhone: z.string().min(1, "Parent Phone is required"),
+  name: required("Student name is missing"),
+  classId: required("Class is missing"),
+  sectionId: required("Section is missing"),
+  parentName: required("Parent name is missing"),
+  parentPhone: required("Parent phone is missing"),
   admissionNumber: z.string().nullish(),
   rollNumber: z.string().nullish(),
   dateOfBirth: z.union([z.string(), z.number()]).nullish(),
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullish().default("MALE"),
+  gender: z
+    .enum(["MALE", "FEMALE", "OTHER"], {
+      errorMap: () => ({ message: "Gender must be Male, Female or Other" }),
+    })
+    .nullish()
+    .default("MALE"),
+  parentEmail: z
+    .string()
+    .trim()
+    .email("Parent email isn't a valid email address")
+    .nullish()
+    .or(z.literal("")),
+  bloodGroup: optional,
+  address: optional,
+  city: optional,
+  state: optional,
+  pincode: optional,
 });
 
 type ImportRow = z.infer<typeof importStudentSchema> & { rowNumber: number };
@@ -67,19 +97,18 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
   const errors: string[] = [];
   let failed = 0;
   data.forEach((row, index) => {
+    // The spreadsheet's own line number when the file sent it.
+    const rowNumber =
+      typeof row?.sheetRow === "number" ? row.sheetRow : index + 1;
     const parsed = importStudentSchema.safeParse(row);
     if (parsed.success) {
-      rows.push({ ...parsed.data, rowNumber: index + 1 });
+      rows.push({ ...parsed.data, rowNumber });
     } else {
       failed++;
       errors.push(
-        `Row ${index + 1}: ${parsed.error.errors
-          .map((err) =>
-            err.path.length > 0
-              ? `${err.path.join(".")}: ${err.message}`
-              : err.message,
-          )
-          .join(" | ")}`,
+        `Row ${rowNumber}: ${[
+          ...new Set(parsed.error.errors.map((err) => err.message)),
+        ].join("; ")}`,
       );
     }
   });
@@ -203,7 +232,7 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
         const rollHolders = new Map<string, string>(); // section|roll -> name
         const maxRoll = new Map<string, number>();
         const trackRoll = (sectionId: string, roll: string, name: string) => {
-          rollHolders.set(`${sectionId}|${roll.toLowerCase()}`, name);
+          rollHolders.set(`${sectionId}|${rollNumberKey(roll)}`, name);
           const n = Number.parseInt(roll, 10);
           if (!Number.isNaN(n) && n > (maxRoll.get(sectionId) ?? 0)) {
             maxRoll.set(sectionId, n);
@@ -247,7 +276,7 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
           let rollNumber = row.rollNumber?.trim();
           if (rollNumber) {
             const holder = rollHolders.get(
-              `${row.sectionId}|${rollNumber.toLowerCase()}`,
+              `${row.sectionId}|${rollNumberKey(rollNumber)}`,
             );
             if (holder) {
               skipped++;
@@ -293,6 +322,12 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
             rollNumber,
             dateOfBirth: dob.date,
             gender: row.gender,
+            parentEmail: row.parentEmail || null,
+            bloodGroup: row.bloodGroup || null,
+            address: row.address || null,
+            city: row.city || null,
+            state: row.state || null,
+            pincode: row.pincode || null,
             isActive: true,
           });
         }

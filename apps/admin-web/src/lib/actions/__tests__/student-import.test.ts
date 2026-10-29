@@ -248,4 +248,71 @@ describe("Bulk Student Import", () => {
     expect(student.classId).toBe(classId);
     expect(await prisma.class.count({ where: { schoolId } })).toBe(1);
   });
+
+  it("says plainly what a row is missing, by the sheet's own row number", async () => {
+    const result = await bulkImportStudents([
+      { classId, sectionId, parentPhone: "9000000000", sheetRow: 5 },
+      {
+        name: "  ",
+        classId,
+        sectionId,
+        parentName: "P",
+        parentPhone: 9000000000,
+      },
+    ]);
+    expect(result.failed).toBe(2);
+    expect(result.errors).toContain(
+      "Row 5: Student name is missing; Parent name is missing",
+    );
+    expect(result.errors).toContain("Row 2: Student name is missing");
+  });
+
+  it("keeps the email, blood group and address the sheet gives", async () => {
+    const result = await bulkImportStudents([
+      {
+        name: "Full Record",
+        classId,
+        sectionId,
+        parentName: "Parent",
+        parentPhone: 9416940224,
+        parentEmail: "parent@example.com",
+        bloodGroup: "A-",
+        address: "House No. 1, Main Road",
+        city: "Chandil",
+        state: "Jharkhand",
+        pincode: 832401,
+      },
+    ]);
+    expect(result.imported).toBe(1);
+    const student = await prisma.student.findFirstOrThrow({
+      where: { schoolId, name: "Full Record" },
+    });
+    expect(student).toMatchObject({
+      parentPhone: "9416940224",
+      parentEmail: "parent@example.com",
+      bloodGroup: "A-",
+      address: "House No. 1, Main Road",
+      city: "Chandil",
+      state: "Jharkhand",
+      pincode: "832401",
+    });
+  });
+
+  it("treats roll 04 and roll 4 in a section as the same roll", async () => {
+    const base = {
+      classId,
+      sectionId,
+      parentName: "P",
+      parentPhone: "9000000000",
+    };
+    const result = await bulkImportStudents([
+      { ...base, name: "Roll Four", rollNumber: "4" },
+      { ...base, name: "Roll Zero Four", rollNumber: "04" },
+    ]);
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(result.errors.join(" ")).toMatch(
+      /Row 2: .*roll number 04 is already used by Roll Four/,
+    );
+  });
 });

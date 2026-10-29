@@ -94,3 +94,173 @@ export function parseImportDate(raw: string | number | null | undefined): {
   }
   return { date };
 }
+
+/** The student fields a spreadsheet column can fill. */
+export type ImportField =
+  | "name"
+  | "firstName"
+  | "lastName"
+  | "class"
+  | "section"
+  | "rollNumber"
+  | "admissionNumber"
+  | "dateOfBirth"
+  | "gender"
+  | "bloodGroup"
+  | "parentName"
+  | "fatherName"
+  | "motherName"
+  | "parentPhone"
+  | "studentPhone"
+  | "parentEmail"
+  | "studentEmail"
+  | "address"
+  | "city"
+  | "state"
+  | "pincode";
+
+/**
+ * Which field a column fills, read from its header the way a person would:
+ * "Full Name", "Student's Name" and "Name of Student" are the student's name;
+ * "Parent / Guardian Name" and "Father Name" a parent's; "Mobile No." a
+ * phone. Contact columns are checked before name columns, so "Parent Phone"
+ * isn't taken for a parent's name. null for a column the import doesn't use.
+ */
+export function importFieldForHeader(header: string): ImportField | null {
+  const h = ` ${header
+    .toLowerCase()
+    .replace(/['’`]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()} `;
+  // "Father's" and "Parents" count as "father" and "parent".
+  const has = (...words: string[]) =>
+    words.some((w) => h.includes(` ${w} `) || h.includes(` ${w}s `));
+  const student = has("student", "child", "pupil");
+
+  if (has("phone", "mobile", "contact", "cell", "whatsapp", "tel", "telephone"))
+    return student ? "studentPhone" : "parentPhone";
+  if (has("email", "e mail", "mail"))
+    return student ? "studentEmail" : "parentEmail";
+  if (has("dob", "birth", "birthday")) return "dateOfBirth";
+  if (has("roll")) return "rollNumber";
+  if (
+    has(
+      "admission",
+      "adm",
+      "enrollment",
+      "enrolment",
+      "registration",
+      "reg",
+      "sr",
+    )
+  )
+    return h.includes(" date ") ? null : "admissionNumber";
+  if (has("gender", "sex")) return "gender";
+  if (has("blood")) return "bloodGroup";
+  if (has("pin", "pincode", "zip", "postal", "postcode")) return "pincode";
+  if (has("city", "town")) return "city";
+  if (has("state")) return "state";
+  if (has("address")) return "address";
+  if (has("section", "sec", "division", "div")) return "section";
+  if (has("class", "grade", "standard", "std")) return "class";
+  if (has("father", "dad")) return "fatherName";
+  if (has("mother", "mom")) return "motherName";
+  if (has("parent", "guardian")) return "parentName";
+  if (has("first", "given")) return "firstName";
+  if (has("last", "surname", "family")) return "lastName";
+  if (has("name", "student", "full name")) return "name";
+  return null;
+}
+
+/** What the import needs from every row; class and section can be picked for the whole file instead. */
+export const REQUIRED_IMPORT_COLUMNS: {
+  label: string;
+  fields: ImportField[];
+}[] = [
+  { label: "Student name", fields: ["name", "firstName"] },
+  { label: "Parent name", fields: ["parentName", "fatherName", "motherName"] },
+  { label: "Parent phone", fields: ["parentPhone", "studentPhone"] },
+];
+
+/** The required columns a file's headers don't provide, by label. */
+export function missingImportColumns(headers: string[]): string[] {
+  const found = new Set(headers.map(importFieldForHeader));
+  return REQUIRED_IMPORT_COLUMNS.filter(
+    (c) => !c.fields.some((f) => found.has(f)),
+  ).map((c) => c.label);
+}
+
+/** "M", "Boy" and "male" are MALE; anything unrecognised is left for the server to report. */
+export function importGender(raw: string): string {
+  const g = raw.trim().toLowerCase();
+  if (["m", "male", "boy"].includes(g)) return "MALE";
+  if (["f", "female", "girl"].includes(g)) return "FEMALE";
+  if (["o", "other", "others", "transgender"].includes(g)) return "OTHER";
+  return raw.trim().toUpperCase();
+}
+
+export type ImportRowValues = Partial<
+  Record<
+    | "name"
+    | "class"
+    | "section"
+    | "rollNumber"
+    | "admissionNumber"
+    | "dateOfBirth"
+    | "gender"
+    | "bloodGroup"
+    | "parentName"
+    | "parentPhone"
+    | "parentEmail"
+    | "address"
+    | "city"
+    | "state"
+    | "pincode",
+    string
+  >
+>;
+
+/**
+ * One spreadsheet row as student fields. Cells are trimmed and empty ones
+ * left out; when two columns fill one field the first filled one wins. The
+ * student's name falls back to first + last name, the parent's name to the
+ * father's, mother's or guardian's, and parent contact to the student's.
+ */
+export function normalizeImportRow(
+  row: Record<string, unknown>,
+): ImportRowValues {
+  const cells: Partial<Record<ImportField, string>> = {};
+  for (const [header, value] of Object.entries(row)) {
+    const field = importFieldForHeader(header);
+    const text =
+      value === null || value === undefined ? "" : String(value).trim();
+    if (field && text && !cells[field]) cells[field] = text;
+  }
+  const full = [cells.firstName, cells.lastName].filter(Boolean).join(" ");
+  const values: ImportRowValues = {
+    name: cells.name ?? (full || undefined),
+    class: cells.class,
+    section: cells.section,
+    rollNumber: cells.rollNumber,
+    admissionNumber: cells.admissionNumber,
+    dateOfBirth: cells.dateOfBirth,
+    gender: cells.gender ? importGender(cells.gender) : undefined,
+    bloodGroup: cells.bloodGroup,
+    parentName: cells.parentName ?? cells.fatherName ?? cells.motherName,
+    parentPhone: cells.parentPhone ?? cells.studentPhone,
+    parentEmail: cells.parentEmail ?? cells.studentEmail,
+    address: cells.address,
+    city: cells.city,
+    state: cells.state,
+    pincode: cells.pincode,
+  };
+  return Object.fromEntries(
+    Object.entries(values).filter(([, v]) => v !== undefined),
+  ) as ImportRowValues;
+}
+
+/** Roll numbers compared as a school would: "04" and "4" are the same roll. */
+export function rollNumberKey(roll: string): string {
+  const r = roll.trim().toLowerCase();
+  return /^\d+$/.test(r) ? String(Number.parseInt(r, 10)) : r;
+}
