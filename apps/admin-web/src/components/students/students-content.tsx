@@ -45,6 +45,7 @@ import {
   Modal,
   Tabs,
   ConfigProvider,
+  Pagination,
   Spin,
   Select,
   theme as antTheme,
@@ -144,7 +145,7 @@ interface Props {
   appliedFilters?: { q: string; classId: string; sectionId: string };
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZES = [10, 20, 50, 100];
 
 export function StudentsContent({
   students,
@@ -191,6 +192,7 @@ export function StudentsContent({
     return () => clearTimeout(timer);
   }, [search, selectedClass, selectedSection, appliedFilters, router]);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const [dialog, setDialog] = useState<
     "closed" | "create" | "edit" | "import" | "promote"
@@ -407,10 +409,13 @@ export function StudentsContent({
     sortBy,
   ]);
 
-  const totalPages = Math.ceil(filteredAndSorted.length / PAGE_SIZE);
+  // A shorter list (a filter, a removed student) can leave the page past
+  // its end; show the last page instead.
+  const lastPage = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
+  const currentPage = Math.min(page, lastPage);
   const paginated = filteredAndSorted.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   const hasActiveFilters = Boolean(
@@ -874,26 +879,27 @@ export function StudentsContent({
           </table>
         </motion.div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Showing {(page - 1) * PAGE_SIZE + 1}–
-              {Math.min(page * PAGE_SIZE, filteredAndSorted.length)} of{" "}
-              {filteredAndSorted.length}
-            </span>
-            <div className="flex gap-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPage(p)}
-                  className={`w-7 h-7 rounded-lg text-xs transition-colors ${p === page ? "bg-violet-600 text-white" : "hover:bg-muted"}`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+        {/* Pagination: shown while there's more than the smallest page,
+            so the page size can always be changed back. */}
+        {filteredAndSorted.length > PAGE_SIZES[0] && (
+          <div className="flex justify-end">
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={filteredAndSorted.length}
+              pageSizeOptions={PAGE_SIZES}
+              showSizeChanger
+              showLessItems
+              responsive
+              showTotal={(total, [start, end]) =>
+                `${start}–${end} of ${total} student${total === 1 ? "" : "s"}`
+              }
+              onChange={(nextPage, nextSize) => {
+                // A new page size starts again from the first page.
+                setPage(nextSize === pageSize ? nextPage : 1);
+                setPageSize(nextSize);
+              }}
+            />
           </div>
         )}
 
