@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 const StaffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -69,6 +70,13 @@ export async function createStaff(data: unknown) {
 
     revalidatePath("/teachers");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "staff.create",
+      module: "staff",
+      summary: `Added staff member ${staff.name} (${staff.occupation})`,
+      entityType: "Staff",
+      entityId: staff.id,
+    });
 
     return { success: true, id: staff.id };
   } catch (e: any) {
@@ -116,6 +124,13 @@ export async function updateStaff(id: string, data: unknown) {
 
     revalidatePath("/teachers");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "staff.update",
+      module: "staff",
+      summary: `Edited staff member ${staff.name}`,
+      entityType: "Staff",
+      entityId: staff.id,
+    });
 
     return { success: true, id: staff.id };
   } catch (e: any) {
@@ -128,7 +143,7 @@ export async function deleteStaff(id: string) {
   if (!user?.schoolId) return { error: "Unauthorized" };
 
   try {
-    await prisma.staff.update({
+    const staff = await prisma.staff.update({
       where: { id, schoolId: user.schoolId },
       data: { isActive: false },
     });
@@ -140,6 +155,13 @@ export async function deleteStaff(id: string) {
 
     revalidatePath("/teachers");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "staff.remove",
+      module: "staff",
+      summary: `Removed staff member ${staff.name}`,
+      entityType: "Staff",
+      entityId: staff.id,
+    });
 
     return { success: true };
   } catch (e: any) {

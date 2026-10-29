@@ -120,5 +120,10 @@ test("an accountant login gets the money pages and nothing else", async ({
     ["/settings/team"],
     /\/settings\/school-profile$/,
   );
+  // So is the activity log: the ledger shows them its transactions only.
+  await expectTurnedAway(accountant, ["/ledger?tab=activity"], /\/ledger$/);
+  await expect(accountant.getByRole("link", { name: "Activity" })).toHaveCount(
+    0,
+  );
   await context.close();
 });

@@ -8,6 +8,7 @@ import { ThemeColorSchema } from "@schoolos/types";
 import { invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
+import { logActivity } from "@/lib/activity";
 
 const UpdateSchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -50,6 +51,12 @@ export async function updateSchoolProfile(data: unknown) {
     revalidatePath("/settings/school-profile");
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "settings.school_profile",
+      module: "settings",
+      summary: "Updated the school profile",
+      details: parsed.data,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -73,6 +80,12 @@ export async function updateSchoolThemeColor(
     });
     // Every page's layout reads the color.
     revalidatePath("/", "layout");
+    await logActivity(user, {
+      action: "settings.theme_color",
+      module: "settings",
+      summary: "Changed the school's theme color",
+      details: { color: parsed.data },
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

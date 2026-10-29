@@ -15,6 +15,7 @@ import { actionErrorMessage } from "@/lib/action-errors";
 import { logger } from "@/lib/logger";
 import { generateTempPassword } from "@/lib/temp-password";
 import { emailLoginDetails } from "@/lib/login-details";
+import { logActivity } from "@/lib/activity";
 
 /**
  * Settings → Team & access: what each teacher and accountant may do, and
@@ -66,6 +67,14 @@ export async function updateMemberPermissions(userId: string, input: unknown) {
     userId: member.id,
     by: admin.id,
   });
+  await logActivity(admin, {
+    action: "team.permissions",
+    module: "settings",
+    summary: `Changed what ${member.name} can access`,
+    entityType: "User",
+    entityId: member.id,
+    details: { permissions: parsed.data },
+  });
   revalidatePath("/settings/team");
   return { success: true, message: `${member.name}'s access saved` };
 }
@@ -94,6 +103,13 @@ export async function resetMemberPermissions(userId: string) {
   });
   revalidatePath("/settings/team");
   const role = member.role === UserRole.TEACHER ? "teacher" : "accountant";
+  await logActivity(admin, {
+    action: "team.permissions_reset",
+    module: "settings",
+    summary: `Reset ${member.name}'s access to the ${role} defaults`,
+    entityType: "User",
+    entityId: member.id,
+  });
   return {
     success: true,
     message: `${member.name} is back to the ${role} defaults`,
@@ -164,6 +180,13 @@ export async function createAccountant(data: unknown) {
       { schoolId: admin.schoolId, userId: user.id, by: admin.id },
     );
     revalidatePath("/settings/team");
+    await logActivity(admin, {
+      action: rehire ? "team.accountant_restore" : "team.accountant_create",
+      module: "settings",
+      summary: `${rehire ? "Restored the" : "Created an"} accountant login for ${name} (${email})`,
+      entityType: "User",
+      entityId: user.id,
+    });
 
     const emailed = await emailLoginDetails({
       schoolId: admin.schoolId,
@@ -212,6 +235,13 @@ export async function removeAccountant(userId: string) {
     schoolId: admin.schoolId,
     userId: member.id,
     by: admin.id,
+  });
+  await logActivity(admin, {
+    action: "team.accountant_remove",
+    module: "settings",
+    summary: `Removed accountant ${member.name}'s login`,
+    entityType: "User",
+    entityId: member.id,
   });
   revalidatePath("/settings/team");
   return { success: true, message: `${member.name} can no longer sign in` };

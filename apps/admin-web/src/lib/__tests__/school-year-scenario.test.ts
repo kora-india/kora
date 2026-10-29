@@ -183,9 +183,7 @@ interface Collected {
 const collected: Collected[] = [];
 const rejected: { kind: string; error: string }[] = [];
 let expensesTotal = 0;
-let cashExpensesTotal = 0;
 let payoutsTotal = 0;
-let cashPayoutsTotal = 0;
 
 const signInAsAdmin = () =>
   vi.mocked(auth).mockResolvedValue({
@@ -643,13 +641,10 @@ describe(`a school year of fees, expenses and pay (seed ${SEED})`, () => {
       ) as { id: string };
       created.push(res.id);
       expensesTotal = r2(expensesTotal + e.amount);
-      if (e.method === "CASH")
-        cashExpensesTotal = r2(cashExpensesTotal + e.amount);
     }
     // One entered by mistake and removed.
     ok(await deleteExpense(created[3]), "delete expense");
     expensesTotal = r2(expensesTotal - 2340.1);
-    cashExpensesTotal = r2(cashExpensesTotal - 2340.1);
 
     for (const [i, salary] of [32000, 28500.5, 41000].entries()) {
       const res = ok(
@@ -701,9 +696,6 @@ describe(`a school year of fees, expenses and pay (seed ${SEED})`, () => {
           ) as { payout: { amount: number } };
           expect.soft(payout.payout.amount).toBe(res.slip.netSalary);
           payoutsTotal = r2(payoutsTotal + res.slip.netSalary);
-          if (method === "CASH") {
-            cashPayoutsTotal = r2(cashPayoutsTotal + res.slip.netSalary);
-          }
           // A slip is paid once.
           const twice = await processPayout({
             slipId: res.slip.id,
@@ -1265,52 +1257,13 @@ describe(`a school year of fees, expenses and pay (seed ${SEED})`, () => {
     const outstanding = sum(live, (i) =>
       Math.max(0, num(i.amount) - num(i.paidAmount)),
     );
-    const advances = await prisma.advanceLedger.aggregate({
-      where: { student: { schoolId } },
-      _sum: { amount: true },
-    });
-    const allocations = sum(
-      items.flatMap((i) => i.allocations),
-      (a) => num(a.amount),
-    );
-
-    const classes = await prisma.class.findMany({ where: { schoolId } });
-    const ledger = await getLedgerData(
-      schoolId,
-      DEFAULT_LEDGER_QUERY,
-      classes,
-      TZ,
-    );
+    const ledger = await getLedgerData(schoolId, DEFAULT_LEDGER_QUERY, TZ);
     const m = ledger.metrics;
 
     expect.soft(r2(m.totalInflow), "ledger: money in").toBe(totalCollected);
     expect.soft(m.inflowCount, "ledger: receipts").toBe(success.length);
     expect.soft(r2(m.totalBilledFees), "ledger: billed").toBe(billed);
     expect.soft(r2(m.totalReceivables), "ledger: receivable").toBe(outstanding);
-    expect
-      .soft(r2(m.totalAdvanceBalance), "ledger: advance balance")
-      .toBe(r2(num(advances._sum.amount)));
-    expect
-      .soft(
-        sum(m.componentDistribution, (c) => c.amount),
-        "ledger: split by fee head = allocations",
-      )
-      .toBe(allocations);
-    expect
-      .soft(
-        sum(m.classBreakdown, (c) => c.collectedAmount),
-        "ledger: split by class = money in",
-      )
-      .toBe(totalCollected);
-    expect
-      .soft(
-        r2(Object.values(m.methodStats).reduce((s, x) => s + x.inflow, 0)),
-        "ledger: split by method = money in",
-      )
-      .toBe(totalCollected);
-    expect
-      .soft(r2(m.methodStats.cash.outflow), "ledger: cash spent")
-      .toBe(r2(cashExpensesTotal + cashPayoutsTotal));
     // Salaries paid are money out too.
     expect
       .soft(r2(m.totalOutflow), "ledger: money out = expenses + salaries paid")

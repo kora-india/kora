@@ -3,6 +3,7 @@ import { isError, requirePermission } from "@/lib/auth-guard";
 import { prisma } from "@schoolos/db";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
+import { logActivity } from "@/lib/activity";
 
 const NoticeSchema = z.object({
   title: z.string().min(2),
@@ -35,6 +36,13 @@ export async function POST(req: NextRequest) {
   });
 
   await invalidateCache(`cache:${user.schoolId}:dashboard`);
+  await logActivity(user, {
+    action: "notice.create",
+    module: "notices",
+    summary: `Posted notice "${notice.title}"`,
+    entityType: "Notice",
+    entityId: notice.id,
+  });
 
   return NextResponse.json(notice);
 }

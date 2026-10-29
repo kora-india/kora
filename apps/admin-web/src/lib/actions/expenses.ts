@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCache, invalidateCache, invalidateLedgerCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity, money } from "@/lib/activity";
 
 const ExpenseCategorySchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -45,6 +46,13 @@ export async function createExpenseCategory(data: unknown) {
 
     await invalidateCache(`cache:${user.schoolId}:expenses:categories`);
     revalidatePath("/expenses");
+    await logActivity(user, {
+      action: "expense_category.create",
+      module: "expenses",
+      summary: `Added expense category "${category.name}"`,
+      entityType: "ExpenseCategory",
+      entityId: category.id,
+    });
 
     return { success: true, id: category.id };
   } catch (e: any) {
@@ -85,6 +93,19 @@ export async function createExpense(data: unknown) {
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    await logActivity(user, {
+      action: "expense.create",
+      module: "expenses",
+      summary: `Recorded expense of ${money(expense.amount)}: ${expense.title} (${category.name})`,
+      entityType: "Expense",
+      entityId: expense.id,
+      details: {
+        amount: Number(expense.amount),
+        category: category.name,
+        method: expense.paymentMethod,
+        date: parsed.data.date,
+      },
+    });
 
     return { success: true, id: expense.id };
   } catch (e: any) {
@@ -129,6 +150,18 @@ export async function deleteExpense(id: string) {
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    await logActivity(user, {
+      action: "expense.delete",
+      module: "expenses",
+      summary: `Deleted expense of ${money(existing.amount)}: ${existing.title}`,
+      entityType: "Expense",
+      entityId: existing.id,
+      details: {
+        amount: Number(existing.amount),
+        date: existing.date,
+        method: existing.paymentMethod,
+      },
+    });
 
     return { success: true };
   } catch (e: any) {

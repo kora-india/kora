@@ -13,6 +13,11 @@ export type LedgerPeriod =
   | "this_year"
   | "custom";
 
+/**
+ * What the list shows. "all" is money in and out; advance credits and
+ * settlements move money already counted, so they are listed only under
+ * "advance".
+ */
 export type LedgerStream = "all" | "inflow" | "outflow" | "advance";
 
 export interface LedgerQuery {
@@ -28,12 +33,13 @@ export interface LedgerQuery {
   /** "all", "comp_<feeComponentId>" or "cat_<expenseCategoryId>". */
   item: string;
   q: string;
-  /** Rows listed per stream; totals always cover every matching row. */
-  limit: number;
+  /** 1-based page of the list; the totals always cover every matching row. */
+  page: number;
 }
 
-export const LEDGER_PAGE_SIZE = 200;
-export const LEDGER_MAX_ROWS = 2000;
+export const LEDGER_PAGE_SIZE = 25;
+/** Most rows one CSV export holds. */
+export const LEDGER_EXPORT_MAX = 5000;
 
 export const DEFAULT_LEDGER_QUERY: LedgerQuery = {
   period: "all",
@@ -45,7 +51,7 @@ export const DEFAULT_LEDGER_QUERY: LedgerQuery = {
   classId: "all",
   item: "all",
   q: "",
-  limit: LEDGER_PAGE_SIZE,
+  page: 1,
 };
 
 const PERIODS: LedgerPeriod[] = [
@@ -77,7 +83,7 @@ export function parseLedgerQuery(params: Params): LedgerQuery {
   let from = first(params.from);
   let to = first(params.to);
   if (isIsoDate(from) && isIsoDate(to) && from > to) [from, to] = [to, from];
-  const limit = parseInt(first(params.limit), 10);
+  const page = parseInt(first(params.page), 10);
   const id = (v: string) => (v && v !== "all" ? v : "all");
 
   return {
@@ -90,9 +96,7 @@ export function parseLedgerQuery(params: Params): LedgerQuery {
     classId: id(first(params.class)),
     item: /^(comp|cat)_.+/.test(item) ? item : "all",
     q: first(params.q).slice(0, 100),
-    limit: Number.isFinite(limit)
-      ? Math.min(Math.max(limit, LEDGER_PAGE_SIZE), LEDGER_MAX_ROWS)
-      : LEDGER_PAGE_SIZE,
+    page: Number.isFinite(page) && page > 1 ? Math.min(page, 10_000) : 1,
   };
 }
 
@@ -111,7 +115,7 @@ export function ledgerQueryToSearch(query: LedgerQuery): string {
   if (query.classId !== d.classId) p.set("class", query.classId);
   if (query.item !== d.item) p.set("item", query.item);
   if (query.q.trim()) p.set("q", query.q.trim());
-  if (query.limit !== d.limit) p.set("limit", String(query.limit));
+  if (query.page !== d.page) p.set("page", String(query.page));
   const s = p.toString();
   return s ? `?${s}` : "";
 }

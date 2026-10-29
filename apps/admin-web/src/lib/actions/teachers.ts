@@ -30,6 +30,7 @@ import { generateTempPassword } from "@/lib/temp-password";
 import { emailLoginDetails } from "@/lib/login-details";
 import { isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 async function getAdminSession() {
   const access = await requirePermission("staff", "manage");
@@ -184,6 +185,13 @@ export async function createTeacher(data: unknown) {
       tempPassword,
       reactivated: Boolean(rehire),
     });
+    await logActivity(user, {
+      action: rehire ? "teacher.rehire" : "teacher.create",
+      module: "staff",
+      summary: `${rehire ? "Re-added" : "Added"} teacher ${rest.name} with a login for ${rest.email}`,
+      entityType: "Teacher",
+      entityId: result.id,
+    });
     return {
       success: true,
       id: result.id,
@@ -298,6 +306,13 @@ export async function updateTeacher(id: string, data: unknown) {
     revalidatePath("/teachers");
     revalidatePath(`/teachers/${id}`);
     revalidatePath("/attendance");
+    await logActivity(user, {
+      action: "teacher.update",
+      module: "staff",
+      summary: `Edited teacher ${rest.name}`,
+      entityType: "Teacher",
+      entityId: id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -350,6 +365,13 @@ export async function deleteTeacher(id: string) {
     revalidatePath("/dashboard");
     revalidatePath("/classes");
     revalidatePath("/timetable");
+    await logActivity(user, {
+      action: "teacher.remove",
+      module: "staff",
+      summary: `Removed teacher ${teacher.name} and turned off their login`,
+      entityType: "Teacher",
+      entityId: teacher.id,
+    });
     return {
       success: true,
       releasedClasses: classTeacher.count,

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma, purgeSchool } from "@schoolos/db";
-import { getLedgerData } from "../reports/ledger";
+import { getLedgerData, getLedgerExport } from "../reports/ledger";
 import {
   DEFAULT_LEDGER_QUERY,
   ledgerQueryToSearch,
@@ -19,14 +19,14 @@ const run = Math.random().toString(36).slice(2, 8);
 const schoolId = `reports-school-${run}`;
 const TZ = "Asia/Kolkata";
 
-let classes: { id: string; name: string; grade: number }[];
 let classA: string;
 let classB: string;
 let tuitionId: string;
 let transportId: string;
+let accountantId: string;
 
 const ledger = (q: Partial<LedgerQuery>) =>
-  getLedgerData(schoolId, { ...DEFAULT_LEDGER_QUERY, ...q }, classes, TZ);
+  getLedgerData(schoolId, { ...DEFAULT_LEDGER_QUERY, ...q }, TZ);
 
 describe("money reports", () => {
   beforeAll(async () => {
@@ -55,10 +55,6 @@ describe("money reports", () => {
     });
     classA = a.id;
     classB = b.id;
-    classes = [
-      { id: a.id, name: a.name, grade: 5 },
-      { id: b.id, name: b.name, grade: 6 },
-    ];
     const [secA, secB] = await Promise.all([
       prisma.section.create({ data: { schoolId, classId: classA, name: "A" } }),
       prisma.section.create({ data: { schoolId, classId: classB, name: "A" } }),
@@ -149,6 +145,17 @@ describe("money reports", () => {
     ]);
     const ashaTuition = ashaOct.items.find((i) => i.componentId === tuitionId)!;
 
+    const accountant = await prisma.user.create({
+      data: {
+        schoolId,
+        email: `reports-accountant-${run}@example.test`,
+        password: "not-used",
+        name: "Priya",
+        role: "ACCOUNTANT",
+      },
+    });
+    accountantId = accountant.id;
+
     const pay = (data: {
       studentId: string;
       amount: number;
@@ -157,6 +164,7 @@ describe("money reports", () => {
       status?: string;
       remarks?: string;
       allocate?: number;
+      collectedById?: string;
     }) =>
       prisma.paymentTransaction.create({
         data: {
@@ -167,6 +175,7 @@ describe("money reports", () => {
           method: data.method ?? "CASH",
           status: data.status ?? "SUCCESS",
           remarks: data.remarks,
+          collectedById: data.collectedById,
           receiptNo: `R-${run}-${Math.random().toString(36).slice(2, 8)}`,
           ...(data.allocate
             ? {
@@ -185,6 +194,7 @@ describe("money reports", () => {
       amount: 600,
       date: "2026-10-01T20:00:00Z",
       allocate: 600,
+      collectedById: accountantId,
     });
     // 1 Oct 01:30 in India, 30 Sep in UTC.
     await pay({
@@ -242,57 +252,77 @@ describe("money reports", () => {
 
   afterAll(async () => {
     await purgeSchool(prisma, schoolId);
+    await prisma.user.deleteMany({ where: { id: accountantId } });
   });
 
   describe("ledger", () => {
-    it("totals every matching row even when the list is cut short", async () => {
-      const data = await ledger({ limit: 2 });
+    it("totals every matching row and lists money in and out by date", async () => {
+      const data = await ledger({});
 
-      // Only the newest two payments are listed...
-      expect(data.transactions.map((t) => Number(t.amount))).toEqual([
-        200, 600,
+      // Advance credits and settlements move money already counted, so
+      // they're only listed under Advances.
+      expect(data.total).toBe(5);
+      expect(data.rows.map((r) => [r.kind, r.amount])).toEqual([
+        ["expense", 300],
+        ["collection", 600],
+        ["collection", 250],
+        ["expense", 150],
+        ["collection", 100],
       ]);
-      expect(data.totals.transactions).toBe(4);
-      // ...but the totals cover all of them, without the advance settlement.
       const m = data.metrics;
       expect(m.totalInflow).toBe(950);
       expect(m.inflowCount).toBe(3);
-      expect(m.methodStats.cash.inflow).toBe(700);
-      expect(m.methodStats.upi.inflow).toBe(250);
-      expect(m.methodStats.cash.outflow).toBe(300);
       expect(m.totalOutflow).toBe(450);
+      expect(m.outflowCount).toBe(2);
       expect(m.netPosition).toBe(500);
-      expect(m.totalAdvanceBalance).toBe(50);
-      // The component split includes where the settlement was applied.
-      expect(m.componentDistribution).toEqual([
-        expect.objectContaining({ id: tuitionId, amount: 800, count: 2 }),
-      ]);
       // Waived items are not billed; students who left still are.
       expect(m.totalBilledFees).toBe(2700);
       expect(m.totalReceivables).toBe(1900);
+      expect(m.collectionRate).toBe(29.6);
+    });
 
-      const byClass = Object.fromEntries(
-        m.classBreakdown.map((c) => [c.classId, c]),
-      );
-      expect(byClass[classA]).toMatchObject({
-        collectedAmount: 600,
-        receivables: 900,
+    it("pages the list but not the totals", async () => {
+      const second = await ledger({ page: 2 });
+      expect(second.rows).toEqual([]);
+      expect(second.total).toBe(5);
+      expect(second.metrics.totalInflow).toBe(950);
+    });
+
+    it("says who took each payment", async () => {
+      const { rows } = await ledger({ stream: "inflow" });
+      const byAmount = Object.fromEntries(rows.map((r) => [r.amount, r]));
+      expect(byAmount[600].doneBy).toEqual({
+        name: "Priya",
+        role: "ACCOUNTANT",
       });
-      expect(byClass[classB]).toMatchObject({
-        collectedAmount: 350,
-        receivables: 1000,
-      });
+      // Taken before collectors were recorded.
+      expect(byAmount[250].doneBy).toBeNull();
+      expect(byAmount[600].detail).toBe(`5 ${run}-A`);
+    });
+
+    it("lists advance credits and settlements under Advances", async () => {
+      const { rows, total, metrics } = await ledger({ stream: "advance" });
+      expect(total).toBe(2);
+      expect(rows.map((r) => [r.kind, r.amount])).toEqual([
+        ["settlement", 200],
+        ["advance", 50],
+      ]);
+      // An automatic settlement is the system's doing.
+      expect(rows[0].doneBy).toEqual({ name: "System", role: "SYSTEM" });
+      // The type only picks what's listed; the totals stay the period's.
+      expect(metrics.totalInflow).toBe(950);
     });
 
     it("uses calendar dates in the school's time zone", async () => {
-      const { metrics, transactions } = await ledger({
+      const { metrics, rows } = await ledger({
         period: "custom",
         from: "2026-10-02",
         to: "2026-10-31",
+        stream: "inflow",
       });
       // The 1 Oct (India) payment is out; the 2 Oct one, still 1 Oct in UTC, is in.
       expect(metrics.totalInflow).toBe(600);
-      expect(transactions).toHaveLength(2);
+      expect(rows).toHaveLength(1);
       expect(metrics.totalOutflow).toBe(300);
       // Fee items count by the charge's due date.
       expect(metrics.totalBilledFees).toBe(1700);
@@ -303,8 +333,7 @@ describe("money reports", () => {
       expect(classOnly.metrics.totalInflow).toBe(350);
       // Expenses are school-wide, so a class filter leaves them out.
       expect(classOnly.metrics.totalOutflow).toBe(0);
-      expect(classOnly.expenses).toHaveLength(0);
-      expect(classOnly.metrics.advanceEntriesCount).toBe(0);
+      expect(classOnly.rows.some((r) => r.kind === "expense")).toBe(false);
 
       const upi = await ledger({ method: "UPI" });
       expect(upi.metrics.totalInflow).toBe(250);
@@ -312,27 +341,40 @@ describe("money reports", () => {
 
       const name = await ledger({ q: "asha" });
       expect(name.metrics.totalInflow).toBe(600);
-      expect(name.totals.transactions).toBe(2);
-      expect(name.metrics.advanceEntriesCount).toBe(1);
-      expect(name.totals.expenses).toBe(0);
+      expect(name.total).toBe(1);
+      const nameAdvances = await ledger({ q: "asha", stream: "advance" });
+      expect(nameAdvances.total).toBe(2);
 
       const outflow = await ledger({ stream: "outflow" });
-      expect(outflow.metrics.totalInflow).toBe(0);
-      expect(outflow.metrics.advanceEntriesCount).toBe(0);
-      expect(outflow.metrics.totalOutflow).toBe(450);
+      expect(outflow.total).toBe(2);
+      expect(outflow.rows.every((r) => r.kind === "expense")).toBe(true);
 
       const transport = await ledger({ item: `comp_${transportId}` });
       expect(transport.metrics.totalInflow).toBe(0);
       expect(transport.metrics.totalBilledFees).toBe(0);
       // Advances without a component apply to any component.
-      expect(transport.metrics.advanceEntriesCount).toBe(1);
+      const transportAdvances = await ledger({
+        item: `comp_${transportId}`,
+        stream: "advance",
+      });
+      expect(transportAdvances.rows.map((r) => r.kind)).toEqual(["advance"]);
     });
 
     it("treats % and _ in a search as plain characters", async () => {
       const underscore = await ledger({ q: "_" });
-      expect(underscore.totals.transactions).toBe(1);
+      expect(underscore.total).toBe(1);
       const percent = await ledger({ q: "50%" });
       expect(percent.metrics.totalInflow).toBe(250);
+    });
+
+    it("exports every matching row", async () => {
+      const { rows, total } = await getLedgerExport(
+        schoolId,
+        { ...DEFAULT_LEDGER_QUERY, stream: "outflow" },
+        TZ,
+      );
+      expect(total).toBe(2);
+      expect(rows.map((r) => r.particulars)).toEqual(["Chalk", "Paper"]);
     });
   });
 
@@ -374,9 +416,9 @@ describe("ledger query", () => {
         stream: "sideways",
         method: "cash; drop",
         item: "x",
-        limit: "999999",
+        page: "-3",
       }),
-    ).toEqual({ ...DEFAULT_LEDGER_QUERY, limit: 2000 });
+    ).toEqual(DEFAULT_LEDGER_QUERY);
   });
 
   it("reads a custom range, putting the dates in order", () => {
@@ -401,7 +443,7 @@ describe("ledger query", () => {
       classId: "c1",
       item: "comp_x",
       q: "asha",
-      limit: 400,
+      page: 3,
     };
     const search = ledgerQueryToSearch(q);
     expect(

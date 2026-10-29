@@ -5,6 +5,7 @@ import { isError, requirePermission } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { classLabel, logActivity } from "@/lib/activity";
 
 const AssignmentSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -36,7 +37,7 @@ export async function createAssignment(data: unknown) {
   try {
     const classObj = await prisma.class.findFirst({
       where: { id: parsed.data.classId, schoolId: user.schoolId },
-      select: { id: true, classTeacherId: true },
+      select: { id: true, name: true, classTeacherId: true },
     });
     if (!classObj) return { error: "Class not found in your school" };
 
@@ -115,6 +116,14 @@ export async function createAssignment(data: unknown) {
       },
     });
     revalidatePath("/assignments");
+    await logActivity(user, {
+      action: "assignment.create",
+      module: "assignments",
+      summary: `Added assignment "${assignment.title}" for ${classLabel(classObj.name, sectionObj.name)}`,
+      entityType: "Assignment",
+      entityId: assignment.id,
+      details: { dueDate: parsed.data.dueDate },
+    });
     return { success: true, id: assignment.id };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -158,6 +167,13 @@ export async function updateAssignment(id: string, data: unknown) {
       data: { ...parsed.data, dueDate: new Date(parsed.data.dueDate) },
     });
     revalidatePath("/assignments");
+    await logActivity(user, {
+      action: "assignment.update",
+      module: "assignments",
+      summary: `Edited assignment "${parsed.data.title}" for ${classLabel(classObj.name, sectionObj.name)}`,
+      entityType: "Assignment",
+      entityId: existing.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -181,6 +197,13 @@ export async function deleteAssignment(id: string) {
 
     await prisma.assignment.delete({ where: { id: existing.id } });
     revalidatePath("/assignments");
+    await logActivity(user, {
+      action: "assignment.delete",
+      module: "assignments",
+      summary: `Deleted assignment "${existing.title}"`,
+      entityType: "Assignment",
+      entityId: existing.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

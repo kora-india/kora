@@ -73,6 +73,7 @@ model School {
   sections                    Section[]
   students                    Student[]
   studentPromotions           StudentPromotion[]
+  activityLogs                ActivityLog[]
   subscription                Subscription?
   teachers                    Teacher[]
   staff                       Staff[]
@@ -620,6 +621,10 @@ model PaymentTransaction {
   date            DateTime            @default(now())
   status          String              @default("SUCCESS")
   remarks         String?
+  /// The user who took the payment (no foreign key, like processedById, so
+  /// recording it can never fail a payment). null for automatic advance
+  /// settlements and for payments made before this was recorded.
+  collectedById   String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   allocations     PaymentAllocation[]
@@ -1193,4 +1198,35 @@ model StudentPromotion {
   @@index([schoolId, batchId])
   @@index([studentId])
   @@map("student_promotions")
+}
+
+/// Everything people do in the app, for the school admin's activity log:
+/// sign-ins and every change they save. Rows are only ever added. The actor's
+/// name and role are copied, so the log still reads right after they leave.
+model ActivityLog {
+  id         String   @id @default(cuid())
+  /// null for platform events with no school (super admin sign-ins).
+  schoolId   String?
+  /// null for automatic jobs (cron).
+  actorId    String?
+  actorName  String
+  actorRole  String
+  /// What happened, such as "payment.collect" or "auth.login".
+  action     String
+  /// The app area, such as "fees" or "students" (lib/activity.ts).
+  module     String
+  /// One readable line, such as "Collected ₹5,000 from Rahul (5A)".
+  summary    String
+  entityType String?
+  entityId   String?
+  details    Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  school     School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, createdAt])
+  @@index([schoolId, actorId, createdAt])
+  @@index([schoolId, module, createdAt])
+  @@map("activity_logs")
 }

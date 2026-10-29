@@ -20,6 +20,7 @@ import { WaiveReasonDialog } from "@/components/fees/waive-reason-dialog";
 import { newPaymentKey } from "@/lib/fees/payment-key";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Search,
   Wallet,
@@ -52,7 +53,6 @@ export function CollectionTab({
   canEdit,
   transactions,
   school,
-  onNavigate,
 }: any) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -1419,12 +1419,12 @@ export function CollectionTab({
               <Activity className="w-4 h-4 text-green-600" /> Recent Payments
               Activity
             </h3>
-            <button
-              onClick={() => onNavigate?.("logs")}
+            <Link
+              href="/ledger?stream=inflow"
               className="text-sm font-medium text-violet-600 hover:text-violet-700 flex items-center gap-1"
             >
               View All <ArrowUpRight className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

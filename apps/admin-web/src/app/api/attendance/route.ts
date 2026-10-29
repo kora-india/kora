@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { isError, requirePermission } from "@/lib/auth-guard";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
+import { classLabel, logActivity } from "@/lib/activity";
 import { z } from "zod";
 import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
 
@@ -155,6 +156,23 @@ export async function POST(req: NextRequest) {
       },
       `[Attendance Marked] ${data.records.length} student records updated`,
     );
+
+    const counts = data.records.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    await logActivity(user, {
+      action: "attendance.mark",
+      module: "attendance",
+      summary: `Marked attendance for ${classLabel(cls.name, section.name)} on ${data.date}: ${Object.entries(
+        counts,
+      )
+        .map(([status, n]) => `${n} ${status.toLowerCase()}`)
+        .join(", ")}`,
+      entityType: "Section",
+      entityId: section.id,
+      details: { date: data.date, ...counts },
+    });
 
     return NextResponse.json({ success: true, count: data.records.length });
   } catch (err) {

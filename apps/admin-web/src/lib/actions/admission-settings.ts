@@ -11,6 +11,7 @@ import {
   formatAdmissionNumber,
 } from "@/lib/admission-number";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 const AdmissionSettingsSchema = z.object({
   prefix: z
@@ -131,11 +132,19 @@ export async function saveAdmissionNumberSettings(data: unknown) {
     revalidatePath("/settings");
     revalidatePath("/settings/school-profile");
     revalidatePath("/students");
+    const sample = formatAdmissionNumber(
+      cleanFormat,
+      cleanPrefix,
+      nextSequence,
+    );
+    await logActivity(user, {
+      action: "settings.admission_number",
+      module: "settings",
+      summary: `Changed the admission number format (next: ${sample})`,
+      details: { prefix: cleanPrefix, format: cleanFormat, nextSequence },
+    });
 
-    return {
-      success: true,
-      sample: formatAdmissionNumber(cleanFormat, cleanPrefix, nextSequence),
-    };
+    return { success: true, sample };
   } catch (err: any) {
     return {
       error: actionErrorMessage(err, "Failed to save admission number format"),

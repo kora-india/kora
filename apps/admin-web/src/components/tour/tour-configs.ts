@@ -303,7 +303,7 @@ export const TOUR_CONFIGS: Record<string, PageTourConfig> = {
       {
         title: "Fee Workflow Tabs",
         description:
-          "Navigate between Fee Collection, Generate Monthly Bills, Audit Logs & Receipts, Class Assignments, and Fee Settings.",
+          "Navigate between Fee Collection, Generate Monthly Bills, Class Assignments, and Fee Settings. Every payment is listed on the Ledger.",
         target: safeTarget("tour-fees-tabs"),
         placement: "bottom",
       },
@@ -375,29 +375,29 @@ export const TOUR_CONFIGS: Record<string, PageTourConfig> = {
     pageTitle: "Financial Ledger",
     steps: [
       {
-        title: "Double-Entry Financial Ledger",
+        title: "Ledger",
         description:
-          "Audit all financial transactions in real time with an immutable credit and debit journal.",
+          "Every fee collected and every expense paid, with who recorded each one. School admins also get an Activity tab with every sign-in and change made in the app.",
         target: null,
       },
       {
-        title: "Cashflow & Balance Summary",
+        title: "Totals",
         description:
-          "View total income from fee receipts, total expenses disbursed, and the current net operating balance.",
+          "What was collected, what was spent, the difference, and the dues still outstanding for the period you pick.",
         target: safeTarget("tour-ledger-summary"),
         placement: "bottom",
       },
       {
-        title: "Transaction Journal Roster",
+        title: "Entries",
         description:
-          "Review all debit and credit entries with transaction date, reference receipt number, payment mode, and category.",
+          "Each collection and expense with its date, receipt, mode, amount and who recorded it. Open a receipt from the icon at the end of the row.",
         target: safeTarget("tour-ledger-table"),
         placement: "top",
       },
       {
-        title: "Export & Audit Reports",
+        title: "Filters",
         description:
-          "Filter by date ranges and export complete ledger statements to Excel or PDF for accounting audits.",
+          "Narrow by type, period, payment mode or a search. Session, class and fee head are under More filters. Export CSV downloads what you've filtered.",
         target: safeTarget("tour-ledger-filters"),
         placement: "bottom",
       },

@@ -8,8 +8,6 @@ import { CollectionTab } from "./tabs/collection-tab";
 import { SetupTab } from "./tabs/setup-tab";
 import { AssignmentsTab } from "./tabs/assignments-tab";
 import { GeneratorTab } from "./tabs/generator-tab";
-import { LogsTab } from "./tabs/logs-tab";
-import { Activity } from "lucide-react";
 
 interface Props {
   sessions: any[];
@@ -26,14 +24,13 @@ interface Props {
 export function FeesContent(props: Readonly<Props>) {
   const [activeTab, setActiveTab] = useQueryTab<string>({
     paramKey: "tab",
-    validTabs: ["collection", "generator", "logs", "assignments", "settings"],
+    validTabs: ["collection", "generator", "assignments", "settings"],
     defaultTab: "collection",
   });
 
   const TABS = [
     { id: "collection", label: "Fee Collection", icon: IndianRupee },
     { id: "generator", label: "Generate Fees", icon: FileText },
-    { id: "logs", label: "Logs & Activities", icon: Activity },
     { id: "assignments", label: "Class & Student Setup", icon: Users },
     { id: "settings", label: "Fee Settings", icon: Settings },
   ];
@@ -64,9 +61,7 @@ export function FeesContent(props: Readonly<Props>) {
                   ? "tour-fees-generator-tab"
                   : tab.id === "settings"
                     ? "tour-fees-settings-tab"
-                    : tab.id === "logs"
-                      ? "tour-fees-logs-tab"
-                      : undefined
+                    : undefined
               }
               onClick={() => setActiveTab(tab.id)}
               className={`relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors z-10 ${
@@ -98,13 +93,8 @@ export function FeesContent(props: Readonly<Props>) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "collection" && (
-              <CollectionTab {...props} onNavigate={setActiveTab} />
-            )}
+            {activeTab === "collection" && <CollectionTab {...props} />}
             {activeTab === "generator" && <GeneratorTab {...props} />}
-            {activeTab === "logs" && (
-              <LogsTab transactions={props.transactions} />
-            )}
             {activeTab === "assignments" && <AssignmentsTab {...props} />}
             {activeTab === "settings" && (
               <SetupTab {...props} school={props.school} />

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { applyPaidMonth, isValidRazorpaySignature } from "@/lib/billing";
 import { isPaidPlan } from "@/lib/plans";
 import { invalidateCache, invalidateSuperAdminCache } from "@/lib/redis";
+import { logActivity } from "@/lib/activity";
 
 const paymentLogger = createLogger("payment-verify");
 
@@ -110,6 +111,14 @@ export async function POST(req: Request) {
       { orderId, schoolId, plan, periodEnd: subscription.currentPeriodEnd },
       `[Subscription Renewed] ${schoolId} on ${plan}`,
     );
+    await logActivity(session.user, {
+      schoolId,
+      action: "subscription.payment",
+      module: "subscription",
+      summary: `Paid for the ${plan} plan${subscription.currentPeriodEnd ? `, now valid until ${subscription.currentPeriodEnd.toISOString().slice(0, 10)}` : ""}`,
+      entityType: "SubscriptionOrder",
+      entityId: order.id,
+    });
 
     return NextResponse.json({
       success: true,

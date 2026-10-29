@@ -422,14 +422,8 @@ describe("a new school year", () => {
     });
     expect(paid).toMatchObject({ success: true });
 
-    const classes = [school.cls];
     const ledger = (sessionId: string) =>
-      getLedgerData(
-        school.id,
-        { ...DEFAULT_LEDGER_QUERY, sessionId },
-        classes,
-        TZ,
-      );
+      getLedgerData(school.id, { ...DEFAULT_LEDGER_QUERY, sessionId }, TZ);
     const last = await ledger(lastYear.id);
     expect(r2(last.metrics.totalInflow)).toBe(due);
     const current = await ledger(thisYear.id);

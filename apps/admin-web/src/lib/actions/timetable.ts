@@ -13,11 +13,13 @@ import {
   PeriodDefinition,
   SubjectQuota,
   ExistingSlot,
+  DAY_NAMES,
 } from "../timetable-generator";
 import { generateAiScheduleDraft, AiTimetableResponse } from "../gemini";
 import { toActionResult } from "@/lib/action-errors";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { isError, requirePermission } from "@/lib/auth-guard";
+import { classLabel, logActivity } from "@/lib/activity";
 
 const slotSchema = z.object({
   id: z.string().optional(),
@@ -60,6 +62,15 @@ function checkAiRateLimit(schoolId: string): {
   }
   entry.count += 1;
   return { allowed: true };
+}
+
+/** "Grade 5-A" for a section, for the activity log. */
+async function sectionLabel(schoolId: string, sectionId: string) {
+  const section = await prisma.section.findFirst({
+    where: { id: sectionId, schoolId },
+    select: { name: true, class: { select: { name: true } } },
+  });
+  return section ? classLabel(section.class.name, section.name) : "a section";
 }
 
 async function requireTimetableAccess(level: "view" | "manage" = "view") {
@@ -326,6 +337,11 @@ export async function savePeriodSettings(
   }
 
   revalidatePath("/timetable");
+  await logActivity(user, {
+    action: "timetable.periods",
+    module: "timetable",
+    summary: `Saved the school's period timings (${parsed.data.length} periods)${affectedClasses ? `, removing ${affectedClasses} scheduled class${affectedClasses === 1 ? "" : "es"}` : ""}`,
+  });
   return { success: true, removedClasses: affectedClasses };
 }
 
@@ -528,6 +544,13 @@ export async function saveTimetableSlot(rawData: z.infer<typeof slotSchema>) {
   }
 
   revalidatePath("/timetable");
+  await logActivity(user, {
+    action: data.id ? "timetable.slot_update" : "timetable.slot_create",
+    module: "timetable",
+    summary: `${data.id ? "Changed" : "Scheduled"} ${data.subjectName} for ${classLabel(classObj.name, sectionObj.name)} on ${DAY_NAMES[data.dayOfWeek] ?? `day ${data.dayOfWeek}`} at ${data.startTime}`,
+    entityType: "TimetableSlot",
+    entityId: slot.id,
+  });
   return { success: true, slot };
 }
 
@@ -535,11 +558,30 @@ export async function deleteTimetableSlot(slotId: string) {
   const { user } = await requireTimetableAccess("manage");
   const schoolId = user.schoolId;
 
+  const slot = await prisma.timetableSlot.findFirst({
+    where: { id: slotId, schoolId },
+    select: {
+      subjectName: true,
+      dayOfWeek: true,
+      startTime: true,
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+    },
+  });
   await prisma.timetableSlot.deleteMany({
     where: { id: slotId, schoolId },
   });
 
   revalidatePath("/timetable");
+  if (slot) {
+    await logActivity(user, {
+      action: "timetable.slot_delete",
+      module: "timetable",
+      summary: `Removed ${slot.subjectName} for ${classLabel(slot.class.name, slot.section.name)} on ${DAY_NAMES[slot.dayOfWeek] ?? `day ${slot.dayOfWeek}`} at ${slot.startTime}`,
+      entityType: "TimetableSlot",
+      entityId: slotId,
+    });
+  }
   return { success: true };
 }
 
@@ -552,6 +594,15 @@ export async function clearSectionTimetable(sectionId: string) {
   });
 
   revalidatePath("/timetable");
+  if (deleted.count > 0) {
+    await logActivity(user, {
+      action: "timetable.clear",
+      module: "timetable",
+      summary: `Cleared the timetable of ${await sectionLabel(schoolId, sectionId)} (${deleted.count} classes)`,
+      entityType: "Section",
+      entityId: sectionId,
+    });
+  }
   return { success: true, count: deleted.count };
 }
 
@@ -704,6 +755,14 @@ async function generateAutomatedTimetableActionImpl(params: {
   });
 
   revalidatePath("/timetable");
+  await logActivity(user, {
+    action: "timetable.generate",
+    module: "timetable",
+    summary: `Generated the timetable of ${await sectionLabel(schoolId, params.sectionId)}: ${result.allocatedSlots} of ${result.totalSlots} classes placed`,
+    entityType: "Section",
+    entityId: params.sectionId,
+    details: { replaceExisting: Boolean(params.replaceExisting) },
+  });
 
   return {
     success: result.success,
@@ -956,6 +1015,14 @@ async function generateAiTimetableActionImpl(params: {
   });
 
   revalidatePath("/timetable");
+  await logActivity(user, {
+    action: "timetable.generate",
+    module: "timetable",
+    summary: `Generated the timetable of ${await sectionLabel(schoolId, params.sectionId)}: ${result.allocatedSlots} of ${result.totalSlots} classes placed`,
+    entityType: "Section",
+    entityId: params.sectionId,
+    details: { replaceExisting: Boolean(params.replaceExisting) },
+  });
 
   return {
     success: result.success,

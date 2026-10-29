@@ -10,6 +10,7 @@ import {
   isPeriodKey,
   periodKeyFromDate,
 } from "@/lib/fees/billing-period";
+import { logActivity } from "@/lib/activity";
 
 async function getFinanceSession() {
   const guard = await requirePermission("fees", "manage");
@@ -84,6 +85,20 @@ export async function generateMonthlyFees(
 
   if (errors.length > 0 && totalGenerated === 0) {
     return { error: errors.map((e) => e.error).join(", ") };
+  }
+
+  if (totalGenerated > 0) {
+    await logActivity(user, {
+      action: "fee.generate",
+      module: "fees",
+      summary: `Generated ${totalGenerated} fee bill${totalGenerated === 1 ? "" : "s"} for ${title} (${uniqueIds.length} class${uniqueIds.length === 1 ? "" : "es"})`,
+      details: {
+        periodKey,
+        sessionId,
+        classIds: uniqueIds,
+        alreadyGenerated: totalAlreadyGenerated,
+      },
+    });
   }
 
   return {

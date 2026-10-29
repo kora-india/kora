@@ -7,6 +7,7 @@ import { z } from "zod";
 import { attendanceDateError, parseAttendanceDate } from "@schoolos/utils";
 import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { classLabel, logActivity } from "@/lib/activity";
 
 const AttendanceRecordSchema = z.object({
   studentId: z.string(),
@@ -136,6 +137,22 @@ export async function markAttendance(data: unknown) {
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    const counts = records.reduce<Record<string, number>>((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    await logActivity(user, {
+      action: "attendance.mark",
+      module: "attendance",
+      summary: `Marked attendance for ${classLabel(cls.name, section.name)} on ${date}: ${Object.entries(
+        counts,
+      )
+        .map(([status, n]) => `${n} ${status.toLowerCase()}`)
+        .join(", ")}`,
+      entityType: "Section",
+      entityId: sectionId,
+      details: { date, ...counts },
+    });
     return { success: true, count: results.length };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

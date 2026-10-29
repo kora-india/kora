@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 const NoticeSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -40,6 +41,13 @@ export async function createNotice(data: unknown) {
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "notice.create",
+      module: "notices",
+      summary: `Posted notice "${notice.title}"`,
+      entityType: "Notice",
+      entityId: notice.id,
+    });
     return { success: true, id: notice.id };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -73,6 +81,13 @@ export async function updateNotice(id: string, data: unknown) {
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "notice.update",
+      module: "notices",
+      summary: `Edited notice "${parsed.data.title}"`,
+      entityType: "Notice",
+      entityId: existing.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -97,6 +112,13 @@ export async function deleteNotice(id: string) {
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "notice.delete",
+      module: "notices",
+      summary: `Deleted notice "${existing.title}"`,
+      entityType: "Notice",
+      entityId: existing.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -126,6 +148,13 @@ export async function toggleNoticePublish(id: string, isPublished: boolean) {
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/notices");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: isPublished ? "notice.publish" : "notice.unpublish",
+      module: "notices",
+      summary: `${isPublished ? "Published" : "Unpublished"} notice "${existing.title}"`,
+      entityType: "Notice",
+      entityId: existing.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { appUrl, sendPasswordResetEmail } from "@/lib/mailer";
 import { logger } from "@/lib/logger";
+import { logActivity } from "@/lib/activity";
 import { passwordResetRatelimit } from "@/lib/ratelimit";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -108,6 +109,13 @@ export async function requestPasswordReset(data: unknown) {
         "Failed to dispatch reset email. Please check SMTP settings or try again.",
     };
   }
+  await logActivity(user, {
+    action: "auth.password_reset_request",
+    module: "auth",
+    summary: "Asked for a password reset link",
+    entityType: "User",
+    entityId: user.id,
+  });
 
   return {
     success: true,
@@ -154,6 +162,13 @@ export async function resetPassword(data: unknown) {
       resetToken: null,
       resetTokenExpiry: null,
     },
+  });
+  await logActivity(user, {
+    action: "auth.password_reset",
+    module: "auth",
+    summary: "Reset their password with an emailed link",
+    entityType: "User",
+    entityId: user.id,
   });
 
   return { success: true };

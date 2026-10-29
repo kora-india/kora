@@ -16,6 +16,7 @@ import { createTenantLogger } from "@schoolos/logger";
 import { getCache, invalidateTransportCache } from "@/lib/redis";
 import { findOrCreateTransportComponent } from "@/lib/fees/transport-component";
 import { getPlanCatalog } from "@/lib/plan-catalog";
+import { logActivity, money } from "@/lib/activity";
 
 const logger = createTenantLogger("global", "transport-actions");
 
@@ -227,6 +228,13 @@ export async function createVehicle(data: z.infer<typeof VehicleSchema>) {
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "vehicle.create",
+    module: "transport",
+    summary: `Added vehicle ${vehicle.registrationNo}`,
+    entityType: "Vehicle",
+    entityId: vehicle.id,
+  });
   return { success: true, vehicle };
 }
 
@@ -249,6 +257,13 @@ export async function updateVehicle(id: string, data: unknown) {
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "vehicle.update",
+    module: "transport",
+    summary: `Edited vehicle ${vehicle.registrationNo}`,
+    entityType: "Vehicle",
+    entityId: vehicle.id,
+  });
   return { success: true, vehicle };
 }
 
@@ -267,6 +282,13 @@ export async function deleteVehicle(id: string) {
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "vehicle.delete",
+    module: "transport",
+    summary: `Deleted vehicle ${existing.registrationNo}`,
+    entityType: "Vehicle",
+    entityId: existing.id,
+  });
   return { success: true };
 }
 
@@ -333,6 +355,13 @@ export async function createRoute(data: z.infer<typeof RouteSchema>) {
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "route.create",
+    module: "transport",
+    summary: `Added route ${route.name} with ${route.stops.length} stop${route.stops.length === 1 ? "" : "s"}`,
+    entityType: "TransportRoute",
+    entityId: route.id,
+  });
   return { success: true, route };
 }
 
@@ -419,6 +448,13 @@ export async function updateRoute(
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "route.update",
+    module: "transport",
+    summary: `Edited route ${routeData.name}`,
+    entityType: "TransportRoute",
+    entityId: existingRoute.id,
+  });
   return { success: true };
 }
 
@@ -468,6 +504,15 @@ export async function deleteRoute(id: string) {
 
   revalidatePath("/transport");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "route.delete",
+    module: "transport",
+    summary: archived
+      ? `Turned off route ${existing.name} (kept for its history)`
+      : `Deleted route ${existing.name}`,
+    entityType: "TransportRoute",
+    entityId: existing.id,
+  });
   return { success: true, archived };
 }
 
@@ -601,6 +646,13 @@ export async function enrollStudentTransport(
   revalidatePath("/students");
   revalidatePath("/fees");
   await invalidateTransportCache(schoolId);
+  await logActivity(user, {
+    action: "transport.enroll",
+    module: "transport",
+    summary: `Put ${student.name} on route ${route.name} (stop ${stop.stopName}, ${money(parsed.data.monthlyFee)}/month)`,
+    entityType: "StudentTransport",
+    entityId: enrollment.id,
+  });
   return { success: true, enrollment };
 }
 
@@ -610,6 +662,10 @@ export async function cancelStudentTransport(enrollmentId: string) {
 
   const existing = await prisma.studentTransport.findFirst({
     where: { id: enrollmentId, schoolId: user.schoolId },
+    include: {
+      student: { select: { name: true } },
+      route: { select: { name: true } },
+    },
   });
   if (!existing) return { error: "Enrollment not found in your school" };
 
@@ -625,6 +681,13 @@ export async function cancelStudentTransport(enrollmentId: string) {
   revalidatePath("/students");
   revalidatePath("/fees");
   await invalidateTransportCache(user.schoolId);
+  await logActivity(user, {
+    action: "transport.cancel",
+    module: "transport",
+    summary: `Took ${existing.student.name} off route ${existing.route.name}`,
+    entityType: "StudentTransport",
+    entityId: existing.id,
+  });
   return { success: true, enrollment };
 }
 

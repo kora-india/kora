@@ -4,6 +4,7 @@ import { prisma, Prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
 import { invalidateFeesCache } from "@/lib/redis";
+import { logActivity, SYSTEM_ACTOR } from "@/lib/activity";
 import { formatPeriodLabel } from "@/lib/fees/billing-period";
 import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
 import crypto from "crypto";
@@ -192,6 +193,13 @@ export async function GET(request: Request) {
 
       if (schoolGeneratedCount > 0) {
         await invalidateFeesCache(school.id);
+        await logActivity(SYSTEM_ACTOR, {
+          schoolId: school.id,
+          action: "fee.generate",
+          module: "fees",
+          summary: `Generated ${schoolGeneratedCount} fee bill${schoolGeneratedCount === 1 ? "" : "s"} for ${title} automatically`,
+          details: { periodKey, sessionId: currentSession.id },
+        });
       }
 
       // Classes with nothing to bill (no students, no fee structure) don't

@@ -1,60 +1,58 @@
 import { prisma, Prisma } from "@schoolos/db";
-import type { LedgerMetrics } from "@/components/ledger/ledger-stat-cards";
+import { SYSTEM_ROLE } from "@/lib/activity-labels";
 import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
-import { resolveLedgerRange, type LedgerQuery } from "./ledger-query";
+import {
+  LEDGER_EXPORT_MAX,
+  LEDGER_PAGE_SIZE,
+  resolveLedgerRange,
+  type LedgerQuery,
+} from "./ledger-query";
 
 /**
- * The ledger page's data (P2). Every filter is applied in SQL, the stat cards
- * are summed over all matching rows, and only the newest `limit` rows of each
- * stream are sent to the browser. The page used to ship up to 200 rows per
- * stream and total those, so any school with more than 200 payments in the
- * period saw its collections undercounted.
+ * The ledger page's data. Every filter is applied in SQL; the totals cover
+ * every matching row, and the list is one page of payments, expenses and
+ * advance entries merged by date.
  *
  * Dates are calendar dates in the school's time zone.
  */
 
-export interface LedgerTotals {
-  /** Matching rows per stream (the table may list fewer). */
-  transactions: number;
-  expenses: number;
-  advances: number;
+/** The four totals at the top of the ledger. */
+export interface LedgerMetrics {
+  totalInflow: number;
+  inflowCount: number;
+  totalOutflow: number;
+  outflowCount: number;
+  netPosition: number;
+  /** What is still owed on bills due in the period. */
+  totalReceivables: number;
+  totalBilledFees: number;
+  /** Percent of the period's billed fees that is paid. */
+  collectionRate: number;
 }
 
-type TxGroup = {
-  collection: boolean;
-  method: string;
-  classId: string | null;
-  total: number;
-  count: number;
-};
-type ComponentGroup = {
-  id: string;
-  name: string;
-  category: string | null;
-  total: number;
-  count: number;
-};
-type ExpenseGroup = {
-  id: string;
-  name: string;
-  cash: boolean;
-  total: number;
-  count: number;
-};
-type AdvanceTotal = { total: number; count: number };
-type ReceivableGroup = {
-  classId: string | null;
-  billed: number;
-  paid: number;
-  due: number;
-};
+/**
+ * - collection: a fee payment (money in)
+ * - expense: money out
+ * - settlement: a student's advance applied to a bill (no new money)
+ * - advance: money credited to a student's advance (already counted)
+ */
+export type LedgerRowKind = "collection" | "expense" | "settlement" | "advance";
 
-export interface LedgerAggregates {
-  tx: TxGroup[];
-  components: ComponentGroup[];
-  expenses: ExpenseGroup[];
-  advances: AdvanceTotal;
-  receivables: ReceivableGroup[];
+/** One line of the ledger list, as the table and the CSV show it. */
+export interface LedgerRow {
+  key: string;
+  kind: LedgerRowKind;
+  /** ISO time. */
+  date: string;
+  amount: number;
+  receiptNo: string | null;
+  reference: string | null;
+  particulars: string;
+  detail: string | null;
+  method: string | null;
+  /** Who recorded it; null when nobody was recorded (older payments). */
+  doneBy: { name: string; role: string } | null;
+  billUrl: string | null;
 }
 
 const NONE = Prisma.sql`AND FALSE`;
@@ -96,13 +94,19 @@ export function ledgerConditions(
   const categoryId = query.item.startsWith("cat_") ? query.item.slice(4) : null;
   const has = (v: string) => v !== "all";
   const and = (on: unknown, sql: Prisma.Sql) => (on ? sql : Prisma.empty);
+  const advances = query.stream === "advance";
 
-  // Payments: pt, with the student as s.
+  // Payments: pt, with the student as s. Advance settlements (status
+  // ADJUSTMENT) are listed with the advances; everywhere else they'd count
+  // the same rupee twice.
   const tx =
-    query.stream === "outflow" || query.stream === "advance" || categoryId
+    query.stream === "outflow" || categoryId
       ? NONE
       : Prisma.join(
           [
+            advances
+              ? Prisma.sql`AND pt."status" = 'ADJUSTMENT'`
+              : Prisma.sql`AND pt."status" <> 'ADJUSTMENT'`,
             instantRange(Prisma.sql`pt."date"`),
             and(
               has(query.method),
@@ -140,10 +144,7 @@ export function ledgerConditions(
   // Expenses: e, category ec, recorder u. They are school-wide, so a class
   // filter leaves them out.
   const expense =
-    query.stream === "inflow" ||
-    query.stream === "advance" ||
-    has(query.classId) ||
-    componentId
+    query.stream === "inflow" || advances || has(query.classId) || componentId
       ? NONE
       : Prisma.join(
           [
@@ -163,10 +164,10 @@ export function ledgerConditions(
           " ",
         );
 
-  // Advance ledger: al, with the student as s. Entries without a component
-  // apply to any component.
+  // Advance ledger: al, with the student as s. Only under "advance"; entries
+  // have no payment mode, and those without a component apply to any.
   const advance =
-    query.stream === "outflow" || categoryId
+    !advances || categoryId || has(query.method)
       ? NONE
       : Prisma.join(
           [
@@ -212,347 +213,216 @@ export function ledgerConditions(
 
 type Conditions = ReturnType<typeof ledgerConditions>;
 
-export async function ledgerAggregates(
+type Sum = { total: number; count: number };
+type Receivables = { billed: number; paid: number; due: number };
+
+const pct = (part: number, whole: number) =>
+  whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0;
+
+/** The four totals. The Type filter only picks what is listed, not these. */
+export async function ledgerMetrics(
   schoolId: string,
   c: Conditions,
-): Promise<LedgerAggregates> {
-  const [tx, components, expenses, advances, receivables] = await Promise.all([
-    prisma.$queryRaw<TxGroup[]>`
-      SELECT (pt."status" <> 'ADJUSTMENT') AS collection,
-             pt."method"::text AS method,
-             s."classId" AS "classId",
-             SUM(pt."amount")::float8 AS total,
-             COUNT(*)::int AS count
+): Promise<LedgerMetrics> {
+  const [[collections], [expenses], [receivables]] = await Promise.all([
+    prisma.$queryRaw<Sum[]>`
+      SELECT COALESCE(SUM(pt."amount"), 0)::float8 AS total, COUNT(*)::int AS count
       FROM "payment_transactions" pt
       JOIN "students" s ON s."id" = pt."studentId"
-      WHERE pt."schoolId" = ${schoolId} ${c.tx}
-      GROUP BY 1, 2, 3`,
-    // Allocations of every matching payment, advance settlements included,
-    // as the component split shows where money was applied.
-    prisma.$queryRaw<ComponentGroup[]>`
-      SELECT fci."componentId" AS id, comp."name" AS name, comp."category" AS category,
-             SUM(pa."amount")::float8 AS total,
-             COUNT(*)::int AS count
-      FROM "payment_allocations" pa
-      JOIN "payment_transactions" pt ON pt."id" = pa."paymentId"
-      JOIN "students" s ON s."id" = pt."studentId"
-      JOIN "fee_charge_items" fci ON fci."id" = pa."chargeItemId"
-      JOIN "fee_components" comp ON comp."id" = fci."componentId"
-      WHERE pt."schoolId" = ${schoolId} ${c.tx}
-      GROUP BY 1, 2, 3`,
-    prisma.$queryRaw<ExpenseGroup[]>`
-      SELECT e."categoryId" AS id, ec."name" AS name,
-             (e."paymentMethod" = 'CASH') AS cash,
-             SUM(e."amount")::float8 AS total,
-             COUNT(*)::int AS count
+      WHERE pt."schoolId" = ${schoolId} ${c.tx}`,
+    prisma.$queryRaw<Sum[]>`
+      SELECT COALESCE(SUM(e."amount"), 0)::float8 AS total, COUNT(*)::int AS count
       FROM "expenses" e
       JOIN "expense_categories" ec ON ec."id" = e."categoryId"
       LEFT JOIN "users" u ON u."id" = e."recordedById"
-      WHERE e."schoolId" = ${schoolId} ${c.expense}
-      GROUP BY 1, 2, 3`,
-    prisma.$queryRaw<AdvanceTotal[]>`
-      SELECT COALESCE(SUM(al."amount"), 0)::float8 AS total, COUNT(*)::int AS count
-      FROM "advance_ledgers" al
-      JOIN "students" s ON s."id" = al."studentId"
-      WHERE s."schoolId" = ${schoolId} ${c.advance}`,
-    prisma.$queryRaw<ReceivableGroup[]>`
-      SELECT s."classId" AS "classId",
-             COALESCE(SUM(fci."amount") FILTER (WHERE fci."status" <> 'WAIVED'), 0)::float8 AS billed,
+      WHERE e."schoolId" = ${schoolId} ${c.expense}`,
+    prisma.$queryRaw<Receivables[]>`
+      SELECT COALESCE(SUM(fci."amount") FILTER (WHERE fci."status" <> 'WAIVED'), 0)::float8 AS billed,
              COALESCE(SUM(fci."paidAmount") FILTER (WHERE fci."status" <> 'WAIVED'), 0)::float8 AS paid,
              COALESCE(SUM(GREATEST(fci."amount" - fci."paidAmount", 0)) FILTER (WHERE fci."status" <> 'WAIVED'), 0)::float8 AS due
       FROM "fee_charge_items" fci
       JOIN "fee_charges" fc ON fc."id" = fci."chargeId"
       JOIN "students" s ON s."id" = fc."studentId"
-      WHERE fc."schoolId" = ${schoolId} ${c.receivable}
-      GROUP BY 1`,
+      WHERE fc."schoolId" = ${schoolId} ${c.receivable}`,
   ]);
   return {
-    tx,
-    components,
-    expenses,
-    advances: advances[0] ?? { total: 0, count: 0 },
-    receivables,
+    totalInflow: collections.total,
+    inflowCount: collections.count,
+    totalOutflow: expenses.total,
+    outflowCount: expenses.count,
+    netPosition: collections.total - expenses.total,
+    totalReceivables: receivables.due,
+    totalBilledFees: receivables.billed,
+    collectionRate: pct(receivables.paid, receivables.billed),
   };
 }
 
-const methodBucket = (method: string) => {
-  const m = (method || "OTHER").toUpperCase();
-  if (m === "CASH") return "cash";
-  if (m === "UPI") return "upi";
-  if (["BANK_TRANSFER", "NEFT", "RTGS", "IMPS"].includes(m))
-    return "bankTransfer";
-  if (m === "CHEQUE" || m === "DD") return "cheque";
-  if (["CREDIT_CARD", "DEBIT_CARD", "CARD"].includes(m)) return "card";
-  return "other";
-};
+type RowRef = { id: string; kind: "payment" | "expense" | "advance" };
 
-const PERIOD_DAYS: Partial<Record<LedgerQuery["period"], number>> = {
-  today: 1,
-  yesterday: 1,
-  this_week: 7,
-  this_month: 30,
-  last_month: 30,
-  this_year: 365,
-};
+/** Every matching entry, newest first, as one list. */
+const matchingRows = (schoolId: string, c: Conditions) => Prisma.sql`
+  SELECT pt."id", 'payment' AS kind, pt."date" AS at
+  FROM "payment_transactions" pt
+  JOIN "students" s ON s."id" = pt."studentId"
+  WHERE pt."schoolId" = ${schoolId} ${c.tx}
+  UNION ALL
+  SELECT e."id", 'expense', e."date"
+  FROM "expenses" e
+  JOIN "expense_categories" ec ON ec."id" = e."categoryId"
+  LEFT JOIN "users" u ON u."id" = e."recordedById"
+  WHERE e."schoolId" = ${schoolId} ${c.expense}
+  UNION ALL
+  SELECT al."id", 'advance', al."createdAt"
+  FROM "advance_ledgers" al
+  JOIN "students" s ON s."id" = al."studentId"
+  WHERE s."schoolId" = ${schoolId} ${c.advance}`;
 
-const pct = (part: number, whole: number) =>
-  whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0;
-
-/** Stat-card figures from the SQL groups. */
-export function buildLedgerMetrics(
-  agg: LedgerAggregates,
-  classes: { id: string; name: string; grade?: number | null }[],
-  period: LedgerQuery["period"],
-): LedgerMetrics {
-  // Advance settlements (status ADJUSTMENT) move money a student already paid
-  // onto a new charge, so they are not new collections.
-  const collections = agg.tx.filter((g) => g.collection);
-  const totalInflow = collections.reduce((s, g) => s + g.total, 0);
-  const inflowCount = collections.reduce((s, g) => s + g.count, 0);
-
-  const totalOutflow = agg.expenses.reduce((s, g) => s + g.total, 0);
-  const outflowCount = agg.expenses.reduce((s, g) => s + g.count, 0);
-
-  const totalBilledFees = agg.receivables.reduce((s, g) => s + g.billed, 0);
-  const totalPaidFromCharges = agg.receivables.reduce((s, g) => s + g.paid, 0);
-
-  const methodStats: LedgerMetrics["methodStats"] = {
-    cash: { inflow: 0, outflow: 0, net: 0, count: 0 },
-    upi: { inflow: 0, count: 0 },
-    bankTransfer: { inflow: 0, count: 0 },
-    cheque: { inflow: 0, count: 0 },
-    card: { inflow: 0, count: 0 },
-    other: { inflow: 0, count: 0 },
-  };
-  for (const g of collections) {
-    const bucket = methodStats[methodBucket(g.method)];
-    bucket.inflow += g.total;
-    bucket.count += g.count;
-  }
-  for (const g of agg.expenses) {
-    if (!g.cash) continue;
-    methodStats.cash.outflow += g.total;
-    methodStats.cash.count += g.count;
-  }
-  methodStats.cash.net = methodStats.cash.inflow - methodStats.cash.outflow;
-
-  const totalAllocated = agg.components.reduce((s, g) => s + g.total, 0);
-  const componentDistribution = agg.components
-    .map((g) => ({
-      id: g.id,
-      name: g.name,
-      category: g.category ?? undefined,
-      amount: g.total,
-      count: g.count,
-      percentage: pct(g.total, totalAllocated),
-    }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const categories = new Map<
-    string,
-    { id: string; name: string; amount: number; count: number }
-  >();
-  for (const g of agg.expenses) {
-    const c = categories.get(g.id) ?? {
-      id: g.id,
-      name: g.name || "General Operational",
-      amount: 0,
-      count: 0,
-    };
-    c.amount += g.total;
-    c.count += g.count;
-    categories.set(g.id, c);
-  }
-  const categoryDistribution = Array.from(categories.values())
-    .map((c) => ({ ...c, percentage: pct(c.amount, totalOutflow) }))
-    .sort((a, b) => b.amount - a.amount);
-
-  const byClass = new Map(
-    classes.map((c) => [
-      c.id,
-      {
-        classId: c.id,
-        className: c.name,
-        grade: c.grade ?? 0,
-        collectedAmount: 0,
-        receivables: 0,
-        transactionCount: 0,
-      },
-    ]),
-  );
-  for (const g of collections) {
-    const row = g.classId ? byClass.get(g.classId) : undefined;
-    if (!row) continue;
-    row.collectedAmount += g.total;
-    row.transactionCount += g.count;
-  }
-  for (const g of agg.receivables) {
-    const row = g.classId ? byClass.get(g.classId) : undefined;
-    if (row) row.receivables += g.due;
-  }
-  const classBreakdown = Array.from(byClass.values())
-    .map((row) => {
-      const billed = row.collectedAmount + row.receivables;
-      return {
-        ...row,
-        recoveryRate:
-          billed > 0 ? Math.round((row.collectedAmount / billed) * 100) : 0,
-      };
-    })
-    .sort((a, b) => {
-      const activeA = a.collectedAmount > 0 || a.receivables > 0 ? 1 : 0;
-      const activeB = b.collectedAmount > 0 || b.receivables > 0 ? 1 : 0;
-      if (activeA !== activeB) return activeB - activeA;
-      if (b.collectedAmount !== a.collectedAmount) {
-        return b.collectedAmount - a.collectedAmount;
-      }
-      return b.receivables - a.receivables;
-    });
-
-  return {
-    totalInflow,
-    inflowCount,
-    avgInflow: inflowCount > 0 ? totalInflow / inflowCount : 0,
-    totalOutflow,
-    outflowCount,
-    avgOutflow: outflowCount > 0 ? totalOutflow / outflowCount : 0,
-    netPosition: totalInflow - totalOutflow,
-    totalAdvanceBalance: agg.advances.total,
-    advanceEntriesCount: agg.advances.count,
-    totalReceivables: Math.max(0, totalBilledFees - totalPaidFromCharges),
-    totalBilledFees,
-    collectionRate: pct(totalPaidFromCharges, totalBilledFees),
-    totalTransactionsCount: inflowCount + outflowCount + agg.advances.count,
-    activePeriodDays: PERIOD_DAYS[period] ?? 30,
-    methodStats,
-    componentDistribution,
-    categoryDistribution,
-    classBreakdown,
-  };
+async function countRows(schoolId: string, c: Conditions) {
+  const [{ total }] = await prisma.$queryRaw<{ total: number }[]>`
+    SELECT COUNT(*)::int AS total FROM (${matchingRows(schoolId, c)}) x`;
+  return total;
 }
 
-/** Rows in the given id order (`findMany` with `in` does not keep it). */
-const inOrder = <T extends { id: string }>(ids: string[], rows: T[]) => {
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  return ids.map((id) => byId.get(id)).filter((r): r is T => Boolean(r));
-};
+const SYSTEM = { name: "System", role: SYSTEM_ROLE };
+const person = { select: { name: true, role: true } } as const;
+const section = (s: {
+  class?: { name: string } | null;
+  section?: { name: string } | null;
+}) => [s.class?.name, s.section?.name].filter(Boolean).join("-") || null;
 
-type IdRow = { id: string };
-
-/** The newest `limit` matching rows of each stream, with what the table shows. */
+/** `limit` matching rows from `offset`, ready to show. */
 export async function ledgerRows(
   schoolId: string,
   c: Conditions,
-  limit: number,
-) {
-  const [txIds, expenseIds, advanceIds] = await Promise.all([
-    prisma.$queryRaw<IdRow[]>`
-      SELECT pt."id" FROM "payment_transactions" pt
-      JOIN "students" s ON s."id" = pt."studentId"
-      WHERE pt."schoolId" = ${schoolId} ${c.tx}
-      ORDER BY pt."date" DESC, pt."id" DESC
-      LIMIT ${limit}`,
-    prisma.$queryRaw<IdRow[]>`
-      SELECT e."id" FROM "expenses" e
-      JOIN "expense_categories" ec ON ec."id" = e."categoryId"
-      LEFT JOIN "users" u ON u."id" = e."recordedById"
-      WHERE e."schoolId" = ${schoolId} ${c.expense}
-      ORDER BY e."date" DESC, e."id" DESC
-      LIMIT ${limit}`,
-    prisma.$queryRaw<IdRow[]>`
-      SELECT al."id" FROM "advance_ledgers" al
-      JOIN "students" s ON s."id" = al."studentId"
-      WHERE s."schoolId" = ${schoolId} ${c.advance}
-      ORDER BY al."createdAt" DESC, al."id" DESC
-      LIMIT ${limit}`,
+  { limit, offset }: { limit: number; offset: number },
+): Promise<LedgerRow[]> {
+  const refs = await prisma.$queryRaw<RowRef[]>`
+    SELECT id, kind FROM (${matchingRows(schoolId, c)}) x
+    ORDER BY at DESC, id DESC
+    LIMIT ${limit} OFFSET ${offset}`;
+  const ids = (kind: RowRef["kind"]) =>
+    refs.filter((r) => r.kind === kind).map((r) => r.id);
+  const student = {
+    select: {
+      name: true,
+      class: { select: { name: true } },
+      section: { select: { name: true } },
+    },
+  } as const;
+
+  const [payments, expenses, advances] = await Promise.all([
+    prisma.paymentTransaction.findMany({
+      where: { id: { in: ids("payment") } },
+      include: { student },
+    }),
+    prisma.expense.findMany({
+      where: { id: { in: ids("expense") } },
+      include: { category: { select: { name: true } }, recordedBy: person },
+    }),
+    prisma.advanceLedger.findMany({
+      where: { id: { in: ids("advance") } },
+      include: { student, component: { select: { name: true } } },
+    }),
   ]);
 
-  const ids = (rows: IdRow[]) => rows.map((r) => r.id);
-  const [transactions, expenses, advances] = await Promise.all([
-    txIds.length
-      ? prisma.paymentTransaction.findMany({
-          where: { id: { in: ids(txIds) } },
-          include: {
-            student: {
-              select: {
-                id: true,
-                name: true,
-                rollNumber: true,
-                classId: true,
-                class: { select: { id: true, name: true, grade: true } },
-              },
-            },
-            allocations: {
-              select: {
-                id: true,
-                amount: true,
-                chargeItem: {
-                  select: {
-                    id: true,
-                    componentId: true,
-                    component: { select: { id: true, name: true } },
-                  },
-                },
-              },
-            },
-          },
+  const collectorIds = [
+    ...new Set(payments.map((p) => p.collectedById).filter(Boolean)),
+  ] as string[];
+  const collectors = new Map(
+    (collectorIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: collectorIds } },
+          select: { id: true, name: true, role: true },
         })
-      : [],
-    expenseIds.length
-      ? prisma.expense.findMany({
-          where: { id: { in: ids(expenseIds) } },
-          include: {
-            category: { select: { id: true, name: true } },
-            recordedBy: { select: { name: true } },
-          },
-        })
-      : [],
-    advanceIds.length
-      ? prisma.advanceLedger.findMany({
-          where: { id: { in: ids(advanceIds) } },
-          include: {
-            student: {
-              select: {
-                id: true,
-                name: true,
-                rollNumber: true,
-                classId: true,
-                class: { select: { id: true, name: true } },
-              },
-            },
-            component: { select: { id: true, name: true } },
-          },
-        })
-      : [],
-  ]);
+      : []
+    ).map((u) => [u.id, { name: u.name, role: u.role as string }]),
+  );
 
-  return {
-    transactions: inOrder(ids(txIds), transactions),
-    expenses: inOrder(ids(expenseIds), expenses),
-    advances: inOrder(ids(advanceIds), advances),
-  };
+  const rows = new Map<string, LedgerRow>();
+  for (const p of payments) {
+    const settlement = p.status === "ADJUSTMENT";
+    rows.set(p.id, {
+      key: `payment:${p.id}`,
+      kind: settlement ? "settlement" : "collection",
+      date: p.date.toISOString(),
+      amount: Number(p.amount),
+      receiptNo: p.receiptNo,
+      reference: p.reference,
+      particulars: p.student.name,
+      detail: settlement ? "Advance used for fees" : section(p.student),
+      method: p.method,
+      doneBy:
+        (p.collectedById && collectors.get(p.collectedById)) ||
+        (settlement ? SYSTEM : null),
+      billUrl: null,
+    });
+  }
+  for (const e of expenses) {
+    rows.set(e.id, {
+      key: `expense:${e.id}`,
+      kind: "expense",
+      date: e.date.toISOString(),
+      amount: Number(e.amount),
+      receiptNo: null,
+      reference: e.referenceNo,
+      particulars: e.title,
+      detail: e.category.name,
+      method: e.paymentMethod,
+      doneBy: e.recordedBy,
+      billUrl: e.receiptUrl,
+    });
+  }
+  for (const a of advances) {
+    rows.set(a.id, {
+      key: `advance:${a.id}`,
+      kind: "advance",
+      date: a.createdAt.toISOString(),
+      amount: Number(a.amount),
+      receiptNo: null,
+      reference: null,
+      particulars: a.student.name,
+      detail:
+        a.description ||
+        `Advance credit${a.component ? ` for ${a.component.name}` : ""}`,
+      method: null,
+      doneBy: null,
+      billUrl: null,
+    });
+  }
+  return refs.map((r) => rows.get(r.id)).filter((r): r is LedgerRow => !!r);
 }
 
 export async function getLedgerData(
   schoolId: string,
   query: LedgerQuery,
-  classes: { id: string; name: string; grade?: number | null }[],
+  timeZone?: string | null,
+) {
+  const listed = ledgerConditions(query, timeZone);
+  const totals =
+    query.stream === "all"
+      ? listed
+      : ledgerConditions({ ...query, stream: "all" }, timeZone);
+  const [metrics, total, rows] = await Promise.all([
+    ledgerMetrics(schoolId, totals),
+    countRows(schoolId, listed),
+    ledgerRows(schoolId, listed, {
+      limit: LEDGER_PAGE_SIZE,
+      offset: (query.page - 1) * LEDGER_PAGE_SIZE,
+    }),
+  ]);
+  return { metrics, total, rows, range: listed.range };
+}
+
+/** Every matching row for the CSV, newest first, up to `LEDGER_EXPORT_MAX`. */
+export async function getLedgerExport(
+  schoolId: string,
+  query: LedgerQuery,
   timeZone?: string | null,
 ) {
   const conditions = ledgerConditions(query, timeZone);
-  const [aggregates, rows] = await Promise.all([
-    ledgerAggregates(schoolId, conditions),
-    ledgerRows(schoolId, conditions, query.limit),
+  const [total, rows] = await Promise.all([
+    countRows(schoolId, conditions),
+    ledgerRows(schoolId, conditions, { limit: LEDGER_EXPORT_MAX, offset: 0 }),
   ]);
-  const totals: LedgerTotals = {
-    transactions: aggregates.tx.reduce((s, g) => s + g.count, 0),
-    expenses: aggregates.expenses.reduce((s, g) => s + g.count, 0),
-    advances: aggregates.advances.count,
-  };
-  return {
-    ...rows,
-    range: conditions.range,
-    totals,
-    metrics: buildLedgerMetrics(aggregates, classes, query.period),
-  };
+  return { total, rows };
 }

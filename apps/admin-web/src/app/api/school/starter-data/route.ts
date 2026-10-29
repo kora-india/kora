@@ -4,6 +4,7 @@ import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { z } from "zod";
 import { seedStarterData } from "@/lib/onboarding";
+import { logActivity } from "@/lib/activity";
 
 const logger = createLogger("school-starter-data");
 
@@ -57,6 +58,15 @@ export async function POST(req: Request) {
       classes: parsed.data.classes,
       academicSession: parsed.data.academicSession,
     });
+    await logActivity(
+      { ...session.user, role: user.role },
+      {
+        schoolId: school.id,
+        action: "school.starter_data",
+        module: "settings",
+        summary: "Added the starter classes, academic session and fee setup",
+      },
+    );
     return NextResponse.json({ success: true });
   } catch (err) {
     logger.error({ err, schoolId: school.id }, "Starter data retry failed");

@@ -21,6 +21,7 @@ import { resolveTimeZone } from "@/lib/fees/timezone";
 
 const GRADING_SYSTEMS = ["CBSE_9_POINT", "PERCENTAGE_LETTER", "MARKS_ONLY"];
 import { invalidateSuperAdminCache } from "@/lib/redis";
+import { logActivity } from "@/lib/activity";
 
 const schoolLogger = createLogger("school-create");
 
@@ -441,6 +442,17 @@ export async function POST(req: Request) {
     );
 
     await invalidateSuperAdminCache();
+    await logActivity(
+      { ...session.user, role: currentUser.role },
+      {
+        schoolId: school.id,
+        action: "school.setup",
+        module: "settings",
+        summary: `Set up ${name} on the ${plan} plan`,
+        entityType: "School",
+        entityId: school.id,
+      },
+    );
 
     return NextResponse.json({
       success: true,

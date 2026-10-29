@@ -18,8 +18,11 @@ const firstEntry = (value: string | null) =>
  * - Otherwise the last entry, which the nearest proxy added.
  */
 export function getClientIp(req: Request | NextRequest): string {
-  const headers = req.headers;
+  return clientIpFromHeaders(req.headers);
+}
 
+/** `getClientIp` for server actions, which have headers but no request. */
+export function clientIpFromHeaders(headers: Pick<Headers, "get">): string {
   const named = process.env.CLIENT_IP_HEADER?.trim().toLowerCase();
   if (named) return firstEntry(headers.get(named)) ?? "unknown";
 

@@ -7,6 +7,7 @@ import { prisma } from "@schoolos/db";
 import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { logger } from "@/lib/logger";
+import { logActivity } from "@/lib/activity";
 import {
   invalidateClassesCache,
   invalidateDashboardCache,
@@ -235,6 +236,17 @@ export async function promoteStudents(input: unknown) {
       ...summary,
     });
     await refreshAfterPromotion(admin.schoolId);
+    await logActivity(admin, {
+      action: "students.promote",
+      module: "students",
+      summary: `Ran year-end promotion: ${Object.entries(summary)
+        .filter(([, n]) => n > 0)
+        .map(([action, n]) => `${n} ${action.toLowerCase()}`)
+        .join(", ")}`,
+      entityType: "PromotionBatch",
+      entityId: batchId,
+      details: summary,
+    });
     return { success: true as const, batchId, summary };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -289,6 +301,13 @@ export async function undoPromotion(batchId: string) {
       students: records.length,
     });
     await refreshAfterPromotion(admin.schoolId);
+    await logActivity(admin, {
+      action: "students.promote_undo",
+      module: "students",
+      summary: `Undid the latest promotion and put ${records.length} student${records.length === 1 ? "" : "s"} back`,
+      entityType: "PromotionBatch",
+      entityId: batchId,
+    });
     return { success: true as const, restored: records.length };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

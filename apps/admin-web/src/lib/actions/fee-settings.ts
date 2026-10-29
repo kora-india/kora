@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { invalidateCache, invalidateFeesCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { carryTransportForward } from "@/lib/fees/transport-carry-over";
+import { classLabel, logActivity, money } from "@/lib/activity";
 
 async function getFinanceSession() {
   const access = await requirePermission("fees", "manage");
@@ -86,6 +87,11 @@ export async function createAcademicSession(data: {
     await invalidateCache(`cache:${user.schoolId}:dashboard`);
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "session.create",
+      module: "fees",
+      summary: `Added academic session ${parsed.data.name}${parsed.data.isCurrent ? " (current)" : ""}`,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -110,7 +116,7 @@ export async function createFeeComponent(data: {
   }
 
   try {
-    await prisma.feeComponent.create({
+    const component = await prisma.feeComponent.create({
       data: {
         schoolId: user.schoolId,
         name: parsed.data.name,
@@ -123,6 +129,13 @@ export async function createFeeComponent(data: {
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "fee_component.create",
+      module: "fees",
+      summary: `Added fee head ${component.name} (${money(component.amount)}, ${component.frequency.toLowerCase().replace(/_/g, " ")})`,
+      entityType: "FeeComponent",
+      entityId: component.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -153,7 +166,7 @@ export async function createFeeStructure(data: {
       return { error: "One or more fee components not found in your school" };
     }
 
-    await prisma.feeStructure.create({
+    const structure = await prisma.feeStructure.create({
       data: {
         schoolId: user.schoolId,
         sessionId: data.sessionId,
@@ -169,6 +182,14 @@ export async function createFeeStructure(data: {
 
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "fee_structure.create",
+      module: "fees",
+      summary: `Created fee structure ${structure.name} for ${session.name}`,
+      entityType: "FeeStructure",
+      entityId: structure.id,
+      details: { components: data.components.length },
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -217,6 +238,13 @@ export async function assignFeeStructureToClass(
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
     revalidatePath("/classes");
+    await logActivity(user, {
+      action: "fee_structure.assign",
+      module: "fees",
+      summary: `Assigned fee structure ${structure.name} to ${classLabel(cls.name)}`,
+      entityType: "FeeStructure",
+      entityId: structure.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -284,6 +312,20 @@ export async function setStudentFeeOverride(
     await invalidateCache(`cache:${user.schoolId}:students:*`);
     revalidatePath("/fees");
     revalidatePath(`/students/${studentId}`);
+    await logActivity(user, {
+      action: "fee_override.save",
+      module: "fees",
+      summary: data.isExempt
+        ? `Exempted ${student.name} from ${component.name} (${session.name})`
+        : `Set ${component.name} for ${student.name} (${session.name}): ${
+            data.amount !== undefined && data.amount !== null
+              ? `custom amount ${money(data.amount)}`
+              : `discount ${money(data.discountAmount)}`
+          }`,
+      entityType: "Student",
+      entityId: student.id,
+      details: { ...data, componentId, sessionId },
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -362,6 +404,13 @@ export async function updateAcademicSession(
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/transport");
+    await logActivity(user, {
+      action: "session.update",
+      module: "fees",
+      summary: `Edited academic session ${parsed.data.name}${parsed.data.isCurrent ? " (current)" : ""}`,
+      entityType: "AcademicSession",
+      entityId: id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -389,7 +438,7 @@ export async function updateFeeComponent(
   }
 
   try {
-    await prisma.feeComponent.update({
+    const component = await prisma.feeComponent.update({
       where: { id, schoolId: user.schoolId },
       data: {
         name: parsed.data.name,
@@ -402,6 +451,13 @@ export async function updateFeeComponent(
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "fee_component.update",
+      module: "fees",
+      summary: `Edited fee head ${component.name} (${money(component.amount)}, ${component.frequency.toLowerCase().replace(/_/g, " ")})`,
+      entityType: "FeeComponent",
+      entityId: component.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -458,6 +514,14 @@ export async function updateFeeStructure(
 
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "fee_structure.update",
+      module: "fees",
+      summary: `Edited fee structure ${data.name} (${session.name})`,
+      entityType: "FeeStructure",
+      entityId: id,
+      details: { components: data.components.length },
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -544,6 +608,14 @@ export async function saveLateFeeSettings(data: {
     await invalidateCache(`cache:${user.schoolId}:feeComponents:*`);
     await invalidateCache(`cache:${user.schoolId}:feeStructures:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "settings.late_fee",
+      module: "fees",
+      summary: settings.lateFeeEnabled
+        ? `Turned on late fees: ${money(settings.lateFeeAmount)} ${(settings.lateFeeFrequency || "MONTHLY").toLowerCase()}`
+        : "Turned off late fees",
+      details: settings,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -568,6 +640,11 @@ export async function saveFeeAutomationSettings(data: {
     });
     await invalidateCache(`cache:${user.schoolId}:school:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "settings.auto_fees",
+      module: "fees",
+      summary: `Turned ${data.autoFeeGeneration ? "on" : "off"} automatic monthly fee generation`,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -607,6 +684,15 @@ export async function saveFeeCollectionPolicy(data: {
 
     await invalidateCache(`cache:${user.schoolId}:school:*`);
     revalidatePath("/fees");
+    await logActivity(user, {
+      action: "settings.collection_policy",
+      module: "fees",
+      summary:
+        data.feePaymentMode === "FULL_ONLY"
+          ? "Changed fee collection to full payments only"
+          : "Changed fee collection to allow part payments",
+      details: { ...data, minPartialPaymentPercentage: minPercent },
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
@@ -786,6 +872,14 @@ export async function copyFeeStructures(data: unknown) {
     await invalidateCache(`cache:${user.schoolId}:students:*`);
     revalidatePath("/fees");
     revalidatePath("/classes");
+    const sessionName = (id: string) =>
+      sessions.find((s) => s.id === id)?.name ?? "session";
+    await logActivity(user, {
+      action: "fee_structure.copy",
+      module: "fees",
+      summary: `Copied ${result.copied.length} fee structure${result.copied.length === 1 ? "" : "s"} from ${sessionName(fromSessionId)} to ${sessionName(toSessionId)}${increasePercent ? ` with ${increasePercent}% change` : ""}`,
+      details: { ...result, increasePercent, includeConcessions },
+    });
     return { success: true as const, ...result };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

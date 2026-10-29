@@ -14,6 +14,8 @@ import {
   todayInTimeZone,
 } from "@/lib/fees/timezone";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity, money } from "@/lib/activity";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 
 const roundMoney = (n: number) => Math.round(n * 100) / 100;
 
@@ -265,6 +267,7 @@ export async function allocatePayment(rawInput: {
             idempotencyKey: data.idempotencyKey || null,
             remarks: data.remarks,
             status: "SUCCESS",
+            collectedById: user.id,
           },
         });
 
@@ -703,10 +706,26 @@ export async function allocatePayment(rawInput: {
           receiptNo,
           allocations: allocationsCreated,
           receiptData,
+          studentName: student.name,
         };
       },
       { maxWait: 10000, timeout: 30000 },
     );
+
+    await logActivity(user, {
+      action: "payment.collect",
+      module: "fees",
+      summary: `Collected ${money(totalPayment)} from ${result.studentName} by ${paymentMethodLabel(data.method)} (receipt ${result.receiptNo})`,
+      entityType: "PaymentTransaction",
+      entityId: result.paymentId,
+      details: {
+        receiptNo: result.receiptNo,
+        amount: totalPayment,
+        method: data.method,
+        reference: data.reference,
+        studentId: data.studentId,
+      },
+    });
 
     revalidatePath("/fees");
     revalidatePath(`/students/${data.studentId}`);
@@ -1138,7 +1157,7 @@ export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
           charge: { schoolId: user.schoolId },
         },
         include: {
-          charge: true,
+          charge: { include: { student: { select: { name: true } } } },
           component: true,
         },
       });
@@ -1150,7 +1169,18 @@ export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
       await waiveChargeItemInTx(tx, item, user.id, reason);
       await recomputeChargeStatus(tx, item.chargeId, today);
 
-      return { studentId: item.charge.studentId };
+      return { studentId: item.charge.studentId, item };
+    });
+
+    const { item } = result;
+    const waived = Math.max(0, Number(item.amount) - Number(item.paidAmount));
+    await logActivity(user, {
+      action: "fee.waive",
+      module: "fees",
+      summary: `Waived ${money(waived)} of ${item.component?.name || "fee"} (${item.charge.title}) for ${item.charge.student.name}: ${reason}`,
+      entityType: "FeeChargeItem",
+      entityId: item.id,
+      details: { studentId: result.studentId, amount: waived, reason },
     });
 
     revalidatePath("/fees");

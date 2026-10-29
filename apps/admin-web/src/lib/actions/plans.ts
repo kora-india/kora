@@ -5,6 +5,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { logger } from "@/lib/logger";
 import { invalidateSuperAdminCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 import { getSuperAdminSession } from "@/lib/actions/super-admin";
 import {
   PLAN_CATALOG_TAG,
@@ -58,5 +59,13 @@ export async function updatePlan(planId: string, input: unknown) {
   // Every page that shows plans, including the prerendered landing page.
   revalidatePath("/", "layout");
   await invalidateSuperAdminCache();
+  await logActivity(user, {
+    schoolId: null,
+    action: "plan.update",
+    module: "subscription",
+    summary: `Edited the ${parsed.data.name} plan`,
+    entityType: "PlanConfig",
+    entityId: planId,
+  });
   return { success: true, message: `${parsed.data.name} plan saved` };
 }

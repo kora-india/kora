@@ -5,6 +5,7 @@ import { prisma, FeeStatus } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 async function getAdminSession() {
   const session = await auth();
@@ -162,6 +163,11 @@ export async function runLegacyFeeMigration() {
     await invalidateFeesCache(user.schoolId);
     revalidatePath("/fees");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "fee.legacy_migration",
+      module: "fees",
+      summary: `Moved ${result.migratedCount} old fee record${result.migratedCount === 1 ? "" : "s"} to the new fee system`,
+    });
 
     return { success: true, migratedCount: result.migratedCount };
   } catch (e: any) {

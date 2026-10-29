@@ -18,6 +18,7 @@ import {
   parseImportDate,
 } from "@/lib/student-import-helpers";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 const importStudentSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -344,6 +345,12 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
       revalidatePath("/fees");
       revalidatePath("/dashboard");
       revalidatePath("/analytics");
+      await logActivity(guard, {
+        action: "students.import",
+        module: "students",
+        summary: `Imported ${imported} student${imported === 1 ? "" : "s"} from a spreadsheet${skipped ? ` (${skipped} skipped)` : ""}`,
+        details: { imported, skipped, failed },
+      });
     }
 
     return { imported, skipped, failed, errors };

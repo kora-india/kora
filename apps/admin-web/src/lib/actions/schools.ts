@@ -30,6 +30,7 @@ const CreateSchoolSchema = z.object({
 
 import { generateTempPassword } from "@/lib/temp-password";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity } from "@/lib/activity";
 
 async function getSuperAdminSession() {
   const session = await auth();
@@ -132,6 +133,14 @@ export async function createSchool(data: unknown) {
     });
 
     revalidatePath("/schools");
+    await logActivity(user, {
+      schoolId: result.school.id,
+      action: "school.create",
+      module: "settings",
+      summary: `Created the school with an admin login for ${adminEmail} (${plan} plan)`,
+      entityType: "School",
+      entityId: result.school.id,
+    });
     return {
       success: true,
       schoolId: result.school.id,
@@ -171,6 +180,16 @@ export async function toggleSchoolStatus(schoolId: string) {
     await invalidateSuperAdminCache();
 
     revalidatePath("/schools");
+    await logActivity(user, {
+      schoolId,
+      action: updated.isActive ? "school.reactivate" : "school.suspend",
+      module: "settings",
+      summary: updated.isActive
+        ? "Reactivated the school's account"
+        : "Suspended the school's account",
+      entityType: "School",
+      entityId: schoolId,
+    });
     return {
       success: true,
       isActive: updated.isActive,
@@ -209,6 +228,14 @@ export async function updateSchoolPlan(schoolId: string, plan: string) {
     await invalidateCache(`cache:${schoolId}:dashboard`);
     await invalidateSuperAdminCache();
     revalidatePath("/schools");
+    await logActivity(user, {
+      schoolId,
+      action: "subscription.plan_change",
+      module: "subscription",
+      summary: `Changed the school's plan to ${plan}`,
+      entityType: "School",
+      entityId: schoolId,
+    });
     return { success: true, message: `Plan updated to ${plan}` };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };

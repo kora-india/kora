@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@schoolos/db";
 import { createLogger } from "@schoolos/logger";
 import { invalidateFeesCache } from "@/lib/redis";
+import { logActivity, SYSTEM_ACTOR } from "@/lib/activity";
 import { todayInTimeZone } from "@/lib/fees/timezone";
 import crypto from "crypto";
 
@@ -114,6 +115,7 @@ export async function GET(req: Request) {
       });
 
       let schoolFeeUpdated = false;
+      const appliedBefore = appliedCount;
 
       for (const charge of overdueCharges) {
         // Calculate days overdue
@@ -194,6 +196,13 @@ export async function GET(req: Request) {
 
       if (schoolFeeUpdated) {
         await invalidateFeesCache(school.id);
+        const applied = appliedCount - appliedBefore;
+        await logActivity(SYSTEM_ACTOR, {
+          schoolId: school.id,
+          action: "fee.late_fee",
+          module: "fees",
+          summary: `Added or raised late fees on ${applied} overdue bill${applied === 1 ? "" : "s"}`,
+        });
       }
     }
 

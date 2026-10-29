@@ -25,6 +25,8 @@ import {
   type SalarySlipStatus,
 } from "@/lib/payroll";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { logActivity, money as rupees } from "@/lib/activity";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 
 async function getAdminSession() {
   const session = await auth();
@@ -102,7 +104,7 @@ export async function generateSalarySlip(data: unknown) {
   try {
     const teacher = await prisma.teacher.findFirst({
       where: { id: teacherId, schoolId: user.schoolId },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, name: true },
     });
     if (!teacher) return { error: "Teacher not found" };
     if (!teacher.isActive)
@@ -132,6 +134,13 @@ export async function generateSalarySlip(data: unknown) {
         include: { payouts: true },
       });
       revalidateTeacher(teacherId);
+      await logActivity(user, {
+        action: "salary_slip.update",
+        module: "payroll",
+        summary: `Updated ${teacher.name}'s ${formatPayrollMonth(year, month)} salary slip (net ${rupees(totals.netSalary)})`,
+        entityType: "SalarySlip",
+        entityId: updated.id,
+      });
       return { success: true, updated: true, slip: serializeSlip(updated) };
     }
 
@@ -156,6 +165,13 @@ export async function generateSalarySlip(data: unknown) {
           include: { payouts: true },
         });
         revalidateTeacher(teacherId);
+        await logActivity(user, {
+          action: "salary_slip.create",
+          module: "payroll",
+          summary: `Generated ${teacher.name}'s ${formatPayrollMonth(year, month)} salary slip ${slipNumber} (net ${rupees(totals.netSalary)})`,
+          entityType: "SalarySlip",
+          entityId: created.id,
+        });
         return { success: true, updated: false, slip: serializeSlip(created) };
       } catch (e: any) {
         const target = String(e?.meta?.target ?? "");
@@ -303,6 +319,7 @@ export async function processPayout(data: unknown) {
           payoutId: payout.id,
           slip: paid,
           teacherId: slip.teacherId,
+          summary: `Paid ${rupees(slip.netSalary)} salary to ${slip.teacher.name} for ${formatPayrollMonth(slip.year, slip.month)} by ${paymentMethodLabel(method)}`,
         };
       },
     );
@@ -317,6 +334,13 @@ export async function processPayout(data: unknown) {
     revalidatePath("/expenses");
     revalidatePath("/ledger");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "payroll.payout",
+      module: "payroll",
+      summary: result.summary,
+      entityType: "PayrollPayout",
+      entityId: result.payoutId,
+    });
     const slip = serializeSlip(result.slip);
     return {
       success: true,
@@ -401,6 +425,13 @@ export async function sendSalarySlip(slipId: string) {
       data: { sentAt: new Date() },
     });
     revalidateTeacher(slip.teacherId);
+    await logActivity(user, {
+      action: "salary_slip.send",
+      module: "payroll",
+      summary: `Emailed salary slip ${slip.slipNumber} to ${slip.teacher.name}`,
+      entityType: "SalarySlip",
+      entityId: slip.id,
+    });
     return { success: true, to: slip.teacher.email };
   } catch (e: any) {
     if (isMissingTable(e)) return { error: SETUP_ERROR };

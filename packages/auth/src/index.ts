@@ -33,6 +33,43 @@ function checkRateLimit(
   return true;
 }
 
+/**
+ * Adds a sign-in event to the school's activity log (apps/admin-web
+ * lib/activity.ts writes the rest). Never throws, so it can't block a login.
+ */
+async function recordAuthEvent(
+  user: {
+    id: string;
+    name?: string | null;
+    role: string;
+    schoolId: string | null;
+  },
+  action: string,
+  summary: string,
+  request?: { ip: string | null; userAgent: string | null },
+) {
+  try {
+    const { prisma } = await import("@schoolos/db");
+    await prisma.activityLog.create({
+      data: {
+        schoolId: user.schoolId,
+        actorId: user.id,
+        actorName: user.name || "Unknown",
+        actorRole: user.role,
+        action,
+        module: "auth",
+        summary,
+        entityType: "User",
+        entityId: user.id,
+        ip: request?.ip ?? null,
+        userAgent: request?.userAgent?.slice(0, 300) ?? null,
+      },
+    });
+  } catch (e) {
+    console.error("Activity log write failed", action, String(e));
+  }
+}
+
 export const authConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
@@ -80,14 +117,37 @@ export const authConfig: NextAuthConfig = {
           include: { school: true },
         });
 
-        if (!user || !user.isActive) return null;
-        if (user.school && !user.school.isActive) return null;
+        if (!user) return null;
 
+        const requestInfo = {
+          ip: ip === "127.0.0.1" ? null : ip,
+          userAgent: (request as any)?.headers?.get?.("user-agent") ?? null,
+        };
         const isValid = await bcrypt.compare(password, user.password);
 
-        if (!isValid) return null;
+        if (!isValid) {
+          await recordAuthEvent(
+            user,
+            "auth.login_failed",
+            "Failed sign-in: wrong password",
+            requestInfo,
+          );
+          return null;
+        }
+        if (!user.isActive || (user.school && !user.school.isActive)) {
+          await recordAuthEvent(
+            user,
+            "auth.login_blocked",
+            user.isActive
+              ? "Sign-in blocked: the school account is suspended"
+              : "Sign-in blocked: this login is deactivated",
+            requestInfo,
+          );
+          return null;
+        }
 
         loginAttempts.delete(`auth:login:email:${email}`);
+        await recordAuthEvent(user, "auth.login", "Signed in", requestInfo);
 
         return {
           id: user.id,
@@ -181,6 +241,22 @@ export const authConfig: NextAuthConfig = {
         session.user.mustChangePassword = token.mustChangePassword as boolean;
       }
       return session;
+    },
+  },
+  events: {
+    async signOut(message) {
+      const token = "token" in message ? message.token : null;
+      if (!token?.id) return;
+      await recordAuthEvent(
+        {
+          id: token.id as string,
+          name: token.name,
+          role: token.role as string,
+          schoolId: (token.schoolId as string | null) ?? null,
+        },
+        "auth.logout",
+        "Signed out",
+      );
     },
   },
   pages: {

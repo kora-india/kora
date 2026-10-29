@@ -9,7 +9,12 @@ import { getPermissions } from "@/lib/auth-guard";
 
 export const metadata = { title: "Fees Management" };
 
-export default async function FeesPage() {
+export default async function FeesPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // The old Logs & Activities tab moved to the ledger.
+  if ((await props.searchParams)?.tab === "logs") redirect("/ledger");
+
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
@@ -105,8 +110,9 @@ export default async function FeesPage() {
         take: 100,
       }),
     ),
-    // Select only needed fields for recent transactions list
-    getCache(`cache:${schoolId}:transactions:recent:compact`, () =>
+    // The five latest payments, for Recent Payments on the collection tab;
+    // the full list is on the ledger.
+    getCache(`cache:${schoolId}:transactions:recent:latest`, () =>
       prisma.paymentTransaction.findMany({
         where: { schoolId },
         select: {
@@ -115,8 +121,6 @@ export default async function FeesPage() {
           method: true,
           reference: true,
           receiptNo: true,
-          // status: the logs tab leaves advance settlements (ADJUSTMENT)
-          // out of collection totals.
           status: true,
           date: true,
           createdAt: true,
@@ -144,7 +148,7 @@ export default async function FeesPage() {
           },
         },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        take: 5,
       }),
     ),
     // Each student's advance balance, summed in SQL (the overrides table

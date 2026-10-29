@@ -60,6 +60,7 @@ const CreateSectionsSchema = z.object({
 
 import { isError, requirePermission } from "@/lib/auth-guard";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { classLabel, logActivity } from "@/lib/activity";
 
 async function getAdminSession() {
   const access = await requirePermission("classes", "manage");
@@ -154,6 +155,13 @@ export async function createClass(data: unknown) {
     revalidatePath("/students");
     revalidatePath("/teachers");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "class.create",
+      module: "classes",
+      summary: `Added class ${cls.name}`,
+      entityType: "Class",
+      entityId: cls.id,
+    });
     return { success: true, id: cls.id };
   } catch (e: any) {
     if (e.code === "P2002")
@@ -209,6 +217,16 @@ export async function updateClass(id: string, data: unknown) {
     revalidatePath("/fees");
     revalidatePath("/students");
     revalidatePath("/teachers");
+    await logActivity(user, {
+      action: "class.update",
+      module: "classes",
+      summary:
+        existingClass.name === parsed.data.name
+          ? `Edited class ${parsed.data.name}`
+          : `Renamed class ${existingClass.name} to ${parsed.data.name}`,
+      entityType: "Class",
+      entityId: existingClass.id,
+    });
     return { success: true };
   } catch (e: any) {
     if (e.code === "P2002")
@@ -266,6 +284,13 @@ export async function deleteClass(id: string) {
     revalidatePath("/fees");
     revalidatePath("/students");
     revalidatePath("/dashboard");
+    await logActivity(user, {
+      action: "class.delete",
+      module: "classes",
+      summary: `Deleted class ${existingClass.name}`,
+      entityType: "Class",
+      entityId: existingClass.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e, "Failed to delete class") };
@@ -291,6 +316,13 @@ export async function createSection(data: unknown) {
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
     revalidatePath("/students");
+    await logActivity(user, {
+      action: "section.create",
+      module: "classes",
+      summary: `Added section ${classLabel(cls.name, section.name)}`,
+      entityType: "Section",
+      entityId: section.id,
+    });
     return { success: true, id: section.id };
   } catch (e: any) {
     if (e.code === "P2002")
@@ -359,6 +391,13 @@ export async function createSections(data: unknown) {
     revalidatePath("/students");
     revalidatePath("/teachers");
     revalidatePath("/timetable");
+    await logActivity(user, {
+      action: "section.create",
+      module: "classes",
+      summary: `Added section${toCreate.length === 1 ? "" : "s"} ${toCreate.join(", ")} to ${cls.name}`,
+      entityType: "Class",
+      entityId: cls.id,
+    });
 
     return {
       success: true,
@@ -380,6 +419,7 @@ export async function deleteSection(id: string) {
   try {
     const existingSection = await prisma.section.findFirst({
       where: { id, schoolId: user.schoolId },
+      include: { class: { select: { name: true } } },
     });
     if (!existingSection) return { error: "Section not found in your school" };
 
@@ -404,6 +444,13 @@ export async function deleteSection(id: string) {
     await invalidateCache(`cache:${user.schoolId}:classes:*`);
     revalidatePath("/classes");
     revalidatePath("/students");
+    await logActivity(user, {
+      action: "section.delete",
+      module: "classes",
+      summary: `Deleted section ${classLabel(existingSection.class.name, existingSection.name)}`,
+      entityType: "Section",
+      entityId: existingSection.id,
+    });
     return { success: true };
   } catch (e: any) {
     return { error: actionErrorMessage(e, "Failed to delete section") };

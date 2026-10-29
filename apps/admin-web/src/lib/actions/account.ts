@@ -4,11 +4,22 @@ import { auth } from "@schoolos/auth";
 import { changeOwnPassword } from "@schoolos/auth/password";
 import { prisma } from "@schoolos/db";
 import { ColorModeSchema } from "@schoolos/types";
+import { logActivity } from "@/lib/activity";
 
 export async function changePassword(data: unknown) {
   const session = await auth();
   if (!session?.user) return { error: "Unauthorized" };
-  return changeOwnPassword(session.user.id, data);
+  const result = await changeOwnPassword(session.user.id, data);
+  if ("success" in result) {
+    await logActivity(session.user, {
+      action: "auth.password_change",
+      module: "auth",
+      summary: "Changed their password",
+      entityType: "User",
+      entityId: session.user.id,
+    });
+  }
+  return result;
 }
 
 /** Saves light, dark or system to the signed-in person's account. */

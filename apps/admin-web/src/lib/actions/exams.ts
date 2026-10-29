@@ -10,6 +10,7 @@ import { compareRollNumbers } from "@schoolos/types";
 import { toActionResult } from "@/lib/action-errors";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { isError, requirePermission } from "@/lib/auth-guard";
+import { logActivity } from "@/lib/activity";
 
 const examSchema = z.object({
   name: z.string().min(1, "Exam name is required"),
@@ -185,6 +186,14 @@ async function createExamImpl(data: {
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "exam.create",
+    module: "exams",
+    summary: `Created exam "${exam.name}" (${exam.academicYear})`,
+    entityType: "Exam",
+    entityId: exam.id,
+    details: { subjects: data.subjects?.length ?? 0 },
+  });
   return exam;
 }
 
@@ -222,6 +231,14 @@ async function updateExamImpl(
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "exam.update",
+    module: "exams",
+    summary: `Edited exam "${exam.name}"`,
+    entityType: "Exam",
+    entityId: exam.id,
+    details: { changed: Object.keys(updateData) },
+  });
   return exam;
 }
 
@@ -233,11 +250,18 @@ export async function deleteExam(...args: Parameters<typeof deleteExamImpl>) {
 async function deleteExamImpl(examId: string) {
   const { user } = await requireExamAccess("exams", "manage");
 
-  await prisma.exam.delete({
+  const exam = await prisma.exam.delete({
     where: { id: examId, schoolId: user.schoolId },
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "exam.delete",
+    module: "exams",
+    summary: `Deleted exam "${exam.name}" (${exam.academicYear})`,
+    entityType: "Exam",
+    entityId: exam.id,
+  });
   return { success: true };
 }
 
@@ -264,6 +288,13 @@ async function togglePublishExamImpl(examId: string) {
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: updated.isPublished ? "exam.publish" : "exam.unpublish",
+    module: "exams",
+    summary: `${updated.isPublished ? "Published" : "Unpublished"} results for "${updated.name}"`,
+    entityType: "Exam",
+    entityId: updated.id,
+  });
   return updated;
 }
 
@@ -320,6 +351,14 @@ async function addExamSubjectImpl(data: {
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "exam_subject.save",
+    module: "exams",
+    summary: `Saved subject ${subject.subjectName} for ${classObj.name} in "${exam.name}"`,
+    entityType: "ExamSubject",
+    entityId: subject.id,
+    details: { maxMarks: subject.maxMarks, passMarks: subject.passMarks },
+  });
   return subject;
 }
 
@@ -339,6 +378,10 @@ async function deleteExamSubjectImpl(examSubjectId: string) {
       id: examSubjectId,
       exam: { schoolId: user.schoolId },
     },
+    include: {
+      exam: { select: { name: true } },
+      class: { select: { name: true } },
+    },
   });
 
   if (!examSubject) throw new Error("Exam subject not found");
@@ -348,6 +391,13 @@ async function deleteExamSubjectImpl(examSubjectId: string) {
   });
 
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "exam_subject.delete",
+    module: "exams",
+    summary: `Removed subject ${examSubject.subjectName} for ${examSubject.class.name} from "${examSubject.exam.name}"`,
+    entityType: "ExamSubject",
+    entityId: examSubject.id,
+  });
   return { success: true };
 }
 
@@ -522,7 +572,8 @@ async function saveBatchMarksImpl(
       maxMarks: true,
       classId: true,
       subjectName: true,
-      exam: { select: { isPublished: true } },
+      exam: { select: { isPublished: true, name: true } },
+      class: { select: { name: true } },
     },
   });
 
@@ -686,6 +737,13 @@ async function saveBatchMarksImpl(
 
   await invalidateStudentsCache(user.schoolId);
   revalidatePath("/exams");
+  await logActivity(user, {
+    action: "marks.save",
+    module: "exams",
+    summary: `Saved ${examSubject.subjectName} marks for ${cleanEntries.length} student${cleanEntries.length === 1 ? "" : "s"} of ${examSubject.class.name} in "${examSubject.exam.name}"`,
+    entityType: "ExamSubject",
+    entityId: examSubject.id,
+  });
   return { success: true, savedCount: cleanEntries.length };
 }
 

@@ -12,3 +12,8 @@ export const PAYMENT_METHOD_OPTIONS = [
   { value: "ONLINE", label: "Online" },
   { value: "OTHER", label: "Other" },
 ] as const;
+
+/** "Bank transfer" for "BANK_TRANSFER"; unknown values read as written. */
+export const paymentMethodLabel = (value: string | null | undefined) =>
+  PAYMENT_METHOD_OPTIONS.find((m) => m.value === value)?.label ??
+  (value ? value.replace(/_/g, " ") : "");

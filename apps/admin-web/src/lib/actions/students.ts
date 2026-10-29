@@ -18,6 +18,7 @@ import {
   calculateReportCardSummary,
 } from "@/lib/grading";
 import { compareRollNumbers } from "@schoolos/types";
+import { classLabel, logActivity } from "@/lib/activity";
 
 const StudentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -244,6 +245,13 @@ export async function createStudent(data: unknown) {
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    await logActivity(user, {
+      action: "student.create",
+      module: "students",
+      summary: `Admitted ${student.name} to ${classLabel(classObj.name, sectionObj.name)} (admission no. ${student.admissionNumber})`,
+      entityType: "Student",
+      entityId: student.id,
+    });
     return { success: true, id: student.id };
   } catch (e: any) {
     const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
@@ -312,6 +320,22 @@ export async function updateStudent(id: string, data: unknown) {
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    const before = existing as Record<string, unknown>;
+    const after = student as Record<string, unknown>;
+    const changed = Object.keys(parsed.data).filter(
+      (key) => String(before[key] ?? "") !== String(after[key] ?? ""),
+    );
+    await logActivity(user, {
+      action: "student.update",
+      module: "students",
+      summary:
+        existing.sectionId !== student.sectionId
+          ? `Moved ${student.name} to ${classLabel(classObj.name, sectionObj.name)}`
+          : `Edited student ${student.name}`,
+      entityType: "Student",
+      entityId: student.id,
+      details: { changed },
+    });
     return { success: true, id: student.id };
   } catch (e: any) {
     const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
@@ -391,6 +415,13 @@ export async function deleteStudent(
     revalidatePath("/fees");
     revalidatePath("/dashboard");
     revalidatePath("/analytics");
+    await logActivity(user, {
+      action: "student.withdraw",
+      module: "students",
+      summary: `Withdrew ${existing.name}${waivedCount > 0 ? ` and waived ${waivedCount} unpaid fee item${waivedCount === 1 ? "" : "s"}` : ""}`,
+      entityType: "Student",
+      entityId: existing.id,
+    });
     return { success: true, waivedCount };
   } catch (e: any) {
     return { error: actionErrorMessage(e) };
