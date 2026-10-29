@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -10,20 +10,31 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { read, utils } from "xlsx";
 import { toast } from "sonner";
 import { bulkImportStudents } from "@/lib/actions/student-import";
+import { suggestImportMapping } from "@/lib/actions/import-mapping";
 import {
+  IMPORT_FIELD_LABELS,
+  IMPORT_FIELDS,
+  applySuggestions,
   classMatchKey,
-  importFieldForHeader,
+  describeColumn,
+  guessColumnMapping,
+  isImportField,
   missingImportColumns,
   normalizeImportRow,
-  type ImportRowValues,
+  type ColumnMapping,
 } from "@/lib/student-import-helpers";
 
-/** A parsed row: the student fields, and its line in the spreadsheet. */
-type ParsedRow = ImportRowValues & { sheetRow: number };
+/** A spreadsheet row as read, with its line in the sheet. */
+type SheetRow = { cells: Record<string, unknown>; sheetRow: number };
+
+/** SheetJS names columns without a header "__EMPTY", "__EMPTY_1", … */
+const columnLabel = (header: string) =>
+  header.startsWith("__EMPTY") ? "(no header)" : header;
 
 interface Props {
   open: boolean;
@@ -41,10 +52,23 @@ export function ImportStudentsDialog({
   classes,
 }: Readonly<Props>) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
-  // Required columns the file lacks, and columns it has that aren't used.
-  const [missingColumns, setMissingColumns] = useState<string[]>([]);
-  const [unusedColumns, setUnusedColumns] = useState<string[]>([]);
+  const [sheetRows, setSheetRows] = useState<SheetRow[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  // The field each column fills: the header rules' guess, then Gemini's
+  // suggestions for the rest, then whatever the person picks.
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [aiSuggested, setAiSuggested] = useState<Set<string>>(new Set());
+  const [aiStatus, setAiStatus] = useState<
+    "idle" | "matching" | "done" | "failed"
+  >("idle");
+  const [aiMessage, setAiMessage] = useState("");
+  // Columns the person set by hand; a late suggestion never changes them.
+  const touched = useRef(new Set<string>());
+  // Only the latest file's suggestions count.
+  const fileVersion = useRef(0);
+  // The mapping as last rendered, for suggestions that arrive later.
+  const mappingRef = useRef(mapping);
+  mappingRef.current = mapping;
   const [loading, setLoading] = useState(false);
   const [globalClassId, setGlobalClassId] = useState("");
   const [globalSectionId, setGlobalSectionId] = useState("");
@@ -63,43 +87,53 @@ export function ImportStudentsDialog({
     if (!file) return;
 
     setLoading(true);
+    // A CSV is read as UTF-8 text, so Hindi names and headers arrive as
+    // written; read as bytes they turned into "à¤à¤¾…". Excel files are
+    // read as bytes, which SheetJS decodes itself.
+    const isText =
+      /\.(csv|tsv|txt)$/i.test(file.name) || file.type.startsWith("text/");
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const bstr = event.target?.result;
+        const data = event.target?.result;
         // raw: keep CSV cells as typed, so "05/06/2010" isn't reread as a
         // US month-first date before the server parses it as DD/MM/YYYY (D5).
         // Excel date cells still arrive as serial numbers, which the server
         // converts.
-        const workbook = read(bstr, { type: "binary", raw: true });
+        const workbook = isText
+          ? read(data as string, { type: "string", raw: true })
+          : read(data, { type: "array", raw: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const rawData = utils.sheet_to_json<Record<string, unknown>>(
           worksheet,
           { defval: "" },
         );
-        const headers = (
-          (utils.sheet_to_json(worksheet, { header: 1 })[0] as unknown[]) ?? []
-        )
-          .map((h) => String(h ?? "").trim())
-          .filter(Boolean);
-
+        // Every row has every column (defval), so the first row's keys are
+        // the headers, duplicates made unique by SheetJS ("Name_1").
+        const fileHeaders = Object.keys(rawData[0] ?? {});
         const rows = rawData
-          .map((raw, index) => ({
-            ...normalizeImportRow(raw),
+          .map((cells, index) => ({
+            cells,
             // SheetJS keeps each row's 0-based line; the header is line 1.
             sheetRow:
-              typeof (raw as { __rowNum__?: unknown }).__rowNum__ === "number"
-                ? (raw as { __rowNum__: number }).__rowNum__ + 1
+              typeof (cells as { __rowNum__?: unknown }).__rowNum__ === "number"
+                ? (cells as { __rowNum__: number }).__rowNum__ + 1
                 : index + 2,
           }))
           // Leave out rows with nothing in them.
-          .filter((row) => Object.keys(row).length > 1);
+          .filter(({ cells }) =>
+            Object.values(cells).some((v) => String(v ?? "").trim() !== ""),
+          );
 
-        setMissingColumns(missingImportColumns(headers));
-        setUnusedColumns(headers.filter((h) => !importFieldForHeader(h)));
-        setParsedData(rows);
+        const guessed = guessColumnMapping(fileHeaders);
+        touched.current = new Set();
+        setHeaders(fileHeaders);
+        setSheetRows(rows);
+        setMapping(guessed);
+        setAiSuggested(new Set());
         setStep(2);
+        void suggestColumns(fileHeaders, rows, guessed);
       } catch (err) {
         toast.error("Failed to parse file. Please check the format.");
       } finally {
@@ -107,12 +141,95 @@ export function ImportStudentsDialog({
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     };
-    reader.readAsBinaryString(file);
+    if (isText) reader.readAsText(file, "utf-8");
+    else reader.readAsArrayBuffer(file);
   };
+
+  /**
+   * Asks Gemini about the columns the rules couldn't place. It's shown each
+   * header and a description of its values (describeColumn), never the
+   * values. Suggestions fill only columns still unmatched and untouched.
+   */
+  const suggestColumns = async (
+    fileHeaders: string[],
+    rows: SheetRow[],
+    guessed: ColumnMapping,
+  ) => {
+    const version = ++fileVersion.current;
+    const unmatched = fileHeaders.filter((h) => !guessed[h]);
+    if (unmatched.length === 0) {
+      setAiStatus("idle");
+      return;
+    }
+    setAiStatus("matching");
+    setAiMessage("");
+    const res = await suggestImportMapping({
+      columns: unmatched.map((header) => ({
+        header: columnLabel(header),
+        description: describeColumn(rows.map((r) => r.cells[header])),
+      })),
+      taken: Object.values(guessed).filter(isImportField),
+    }).catch(() => ({ error: "AI couldn't match the columns right now." }));
+    if (version !== fileVersion.current) return;
+
+    if ("suggestions" in res) {
+      // Gemini answers by the label it was shown; map back to the column.
+      const byHeader: ColumnMapping = {};
+      for (const header of unmatched) {
+        const field = res.suggestions[columnLabel(header)];
+        if (field) byHeader[header] = field;
+      }
+      const applied = applySuggestions(
+        mappingRef.current,
+        byHeader,
+        touched.current,
+      );
+      setMapping(applied.mapping);
+      setAiSuggested(new Set(applied.suggested));
+      setAiStatus("done");
+    } else {
+      setAiStatus("failed");
+      setAiMessage("error" in res ? res.error : "");
+    }
+  };
+
+  const setColumnField = (header: string, value: string) => {
+    touched.current.add(header);
+    setAiSuggested((s) => {
+      const next = new Set(s);
+      next.delete(header);
+      return next;
+    });
+    setMapping((m) => ({
+      ...m,
+      [header]: isImportField(value) ? value : null,
+    }));
+  };
+
+  const parsedData = useMemo(
+    () =>
+      sheetRows.map(({ cells, sheetRow }) => ({
+        ...normalizeImportRow(cells, mapping),
+        sheetRow,
+      })),
+    [sheetRows, mapping],
+  );
+  const missingColumns = missingImportColumns(mapping);
+  // The first filled cell of each column, to help pick its field. It stays
+  // in the browser.
+  const examples = useMemo(() => {
+    const found: Record<string, string> = {};
+    for (const header of headers) {
+      const row = sheetRows.find(
+        (r) => String(r.cells[header] ?? "").trim() !== "",
+      );
+      if (row) found[header] = String(row.cells[header]).trim();
+    }
+    return found;
+  }, [headers, sheetRows]);
 
   const handleImport = async () => {
     setLoading(true);
-    // Apply global class/section if rows are missing it
     // Rows without a class or section take the ones picked for the file.
     // A class the school doesn't have yet goes by name; the server adds it.
     const finalData = parsedData.map(
@@ -243,21 +360,92 @@ export function ImportStudentsDialog({
                     <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                     <div className="flex-1">
                       <h4 className="text-sm font-bold text-red-800 dark:text-red-400">
-                        Couldn&apos;t find a column for{" "}
+                        Choose a column for{" "}
                         {missingColumns.join(", ").toLowerCase()}
                       </h4>
                       <p className="text-xs text-red-700 dark:text-red-500 mt-1">
                         Every student needs a name, a parent&apos;s name and a
-                        parent&apos;s phone. Give those columns headers such as
-                        &ldquo;Student Name&rdquo;, &ldquo;Parent Name&rdquo;
-                        and &ldquo;Parent Phone&rdquo;, then upload the file
-                        again.
-                        {unusedColumns.length > 0 &&
-                          ` Columns in your file that weren't recognised: ${unusedColumns.join(", ")}.`}
+                        parent&apos;s phone. Pick the column that holds each in
+                        the list below.
                       </p>
                     </div>
                   </div>
                 )}
+
+                <section aria-labelledby="import-columns-heading">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <h3 id="import-columns-heading" className="font-semibold">
+                      Columns in your file
+                    </h3>
+                    <p
+                      aria-live="polite"
+                      className="text-xs text-muted-foreground flex items-center gap-1.5"
+                    >
+                      {aiStatus === "matching" && (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Asking AI to match the columns we didn&apos;t
+                          recognise…
+                        </>
+                      )}
+                      {aiStatus === "done" && aiSuggested.size > 0 && (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+                          AI matched {aiSuggested.size} column
+                          {aiSuggested.size === 1 ? "" : "s"}. Check them before
+                          importing.
+                        </>
+                      )}
+                      {aiStatus === "failed" && aiMessage}
+                    </p>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-2">
+                    {headers.map((header) => {
+                      const label = columnLabel(header);
+                      return (
+                        <div
+                          key={header}
+                          className="flex items-center gap-3 border rounded-lg px-3 py-2"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {label}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {examples[header] || "Empty"}
+                            </p>
+                          </div>
+                          {aiSuggested.has(header) && (
+                            <span
+                              title="Suggested by AI"
+                              className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              AI
+                            </span>
+                          )}
+                          <select
+                            aria-label={`Field for column "${label}"`}
+                            value={mapping[header] ?? ""}
+                            onChange={(e) =>
+                              setColumnField(header, e.target.value)
+                            }
+                            className={`h-9 w-40 px-2 rounded-lg border bg-background text-sm ${
+                              mapping[header] ? "" : "text-muted-foreground"
+                            }`}
+                          >
+                            <option value="">Don&apos;t import</option>
+                            {IMPORT_FIELDS.map((field) => (
+                              <option key={field} value={field}>
+                                {IMPORT_FIELD_LABELS[field]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
 
                 {hasMissingClassData && (
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl flex items-start gap-3">
@@ -308,11 +496,6 @@ export function ImportStudentsDialog({
                   <h3 className="font-semibold mb-2">
                     Preview Data ({parsedData.length} records)
                   </h3>
-                  {missingColumns.length === 0 && unusedColumns.length > 0 && (
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Not imported: {unusedColumns.join(", ")}
-                    </p>
-                  )}
                   <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 border-b">

@@ -172,6 +172,66 @@ export function importFieldForHeader(header: string): ImportField | null {
   return null;
 }
 
+/** What each field is called in the column dropdowns (and told to Gemini). */
+export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
+  name: "Student name",
+  firstName: "First name",
+  lastName: "Last name",
+  class: "Class",
+  section: "Section",
+  rollNumber: "Roll number",
+  admissionNumber: "Admission number",
+  dateOfBirth: "Date of birth",
+  gender: "Gender",
+  bloodGroup: "Blood group",
+  parentName: "Parent name",
+  fatherName: "Father's name",
+  motherName: "Mother's name",
+  parentPhone: "Parent phone",
+  studentPhone: "Student phone",
+  parentEmail: "Parent email",
+  studentEmail: "Student email",
+  address: "Address",
+  city: "City",
+  state: "State",
+  pincode: "Pincode",
+};
+
+export const IMPORT_FIELDS = Object.keys(IMPORT_FIELD_LABELS) as ImportField[];
+
+export const isImportField = (v: unknown): v is ImportField =>
+  typeof v === "string" && Object.hasOwn(IMPORT_FIELD_LABELS, v);
+
+/** The field each column fills, by header; null leaves the column out. */
+export type ColumnMapping = Record<string, ImportField | null>;
+
+/** The mapping the header rules give a file. */
+export function guessColumnMapping(headers: string[]): ColumnMapping {
+  return Object.fromEntries(headers.map((h) => [h, importFieldForHeader(h)]));
+}
+
+/**
+ * Fills in suggestions (from Gemini) for columns the rules left out. A
+ * column the rules placed, or one the person has set (`keep`), stays as it
+ * is. Returns the new mapping and the columns that took a suggestion.
+ */
+export function applySuggestions(
+  mapping: ColumnMapping,
+  suggestions: ColumnMapping,
+  keep: ReadonlySet<string> = new Set(),
+): { mapping: ColumnMapping; suggested: string[] } {
+  const next = { ...mapping };
+  const suggested: string[] = [];
+  for (const [header, field] of Object.entries(suggestions)) {
+    if (!(header in next) || next[header] || keep.has(header) || !field) {
+      continue;
+    }
+    next[header] = field;
+    suggested.push(header);
+  }
+  return { mapping: next, suggested };
+}
+
 /** What the import needs from every row; class and section can be picked for the whole file instead. */
 export const REQUIRED_IMPORT_COLUMNS: {
   label: string;
@@ -182,12 +242,63 @@ export const REQUIRED_IMPORT_COLUMNS: {
   { label: "Parent phone", fields: ["parentPhone", "studentPhone"] },
 ];
 
-/** The required columns a file's headers don't provide, by label. */
-export function missingImportColumns(headers: string[]): string[] {
-  const found = new Set(headers.map(importFieldForHeader));
+/** The required fields no column is matched to, by label. */
+export function missingImportColumns(mapping: ColumnMapping): string[] {
+  const found = new Set(Object.values(mapping));
   return REQUIRED_IMPORT_COLUMNS.filter(
     (c) => !c.fields.some((f) => found.has(f)),
   ).map((c) => c.label);
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DMY = /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/;
+const ISO = /^\d{4}-\d{1,2}-\d{1,2}$/;
+
+/**
+ * Describes a column's values without repeating any of them, so the column
+ * can be shown to Gemini without sharing a student's details: "10-digit
+ * numbers", "dates like DD/MM/YYYY", "text of about 2 words". Only a short
+ * list of values that repeat across many rows (gender, section, class) is
+ * named, since those can't point to a person.
+ */
+export function describeColumn(values: unknown[]): string {
+  const cells = values
+    .map((v) => (v === null || v === undefined ? "" : String(v).trim()))
+    .filter(Boolean);
+  if (cells.length === 0) return "always empty";
+
+  const most = (test: (v: string) => boolean) =>
+    cells.filter(test).length >= cells.length * 0.8;
+  const filled = cells.length < values.length * 0.5 ? ", often empty" : "";
+  const digits = (v: string) => v.replace(/[\s+()-]/g, "");
+
+  if (most((v) => EMAIL.test(v))) return `email addresses${filled}`;
+  if (most((v) => DMY.test(v))) return `dates like DD/MM/YYYY${filled}`;
+  if (most((v) => ISO.test(v))) return `dates like YYYY-MM-DD${filled}`;
+  if (most((v) => /^\d{10,13}$/.test(digits(v)))) {
+    return `phone-like numbers of ${digits(cells[0]).length} digits${filled}`;
+  }
+  if (most((v) => /^\d{6}$/.test(v))) return `6-digit numbers${filled}`;
+
+  const distinct = new Set(cells.map((v) => v.toLowerCase()));
+  if (
+    distinct.size <= 12 &&
+    cells.length >= distinct.size * 3 &&
+    [...distinct].every((v) => v.length <= 24)
+  ) {
+    const shown = [...new Set(cells)].slice(0, 12).join(", ");
+    return `repeating values: ${shown}${filled}`;
+  }
+  if (most((v) => /^\d{1,5}$/.test(v))) return `small whole numbers${filled}`;
+  if (most((v) => /\d/.test(v) && /^[A-Za-z0-9/._-]+$/.test(v))) {
+    // The shape of a code, not the code: "BCS-2026-0001" is "AAA-0000-0000".
+    const shape = cells[0].replace(/[A-Za-z]/g, "A").replace(/\d/g, "0");
+    return `codes shaped like ${shape}${filled}`;
+  }
+  const words = Math.round(
+    cells.reduce((n, v) => n + v.split(/\s+/).length, 0) / cells.length,
+  );
+  return `text of about ${words} word${words === 1 ? "" : "s"}${filled}`;
 }
 
 /** "M", "Boy" and "male" are MALE; anything unrecognised is left for the server to report. */
@@ -221,17 +332,22 @@ export type ImportRowValues = Partial<
 >;
 
 /**
- * One spreadsheet row as student fields. Cells are trimmed and empty ones
- * left out; when two columns fill one field the first filled one wins. The
- * student's name falls back to first + last name, the parent's name to the
- * father's, mother's or guardian's, and parent contact to the student's.
+ * One spreadsheet row as student fields, each column filling the field
+ * `mapping` gives it (the header rules when there's none). Cells are trimmed
+ * and empty ones left out; when two columns fill one field the first filled
+ * one wins. The student's name falls back to first + last name, the parent's
+ * name to the father's, mother's or guardian's, and parent contact to the
+ * student's.
  */
 export function normalizeImportRow(
   row: Record<string, unknown>,
+  mapping?: ColumnMapping,
 ): ImportRowValues {
   const cells: Partial<Record<ImportField, string>> = {};
   for (const [header, value] of Object.entries(row)) {
-    const field = importFieldForHeader(header);
+    const field = mapping
+      ? (mapping[header] ?? null)
+      : importFieldForHeader(header);
     const text =
       value === null || value === undefined ? "" : String(value).trim();
     if (field && text && !cells[field]) cells[field] = text;

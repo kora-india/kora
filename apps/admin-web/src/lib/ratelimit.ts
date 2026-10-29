@@ -81,6 +81,18 @@ export const uploadRatelimit = isRedisConfigured
   : createInMemoryLimiter(20, 600);
 
 /**
+ * Gemini calls (they cost money): 20 per 10 minutes per user.
+ */
+export const aiRatelimit = isRedisConfigured
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(20, "10 m"),
+      analytics: true,
+      prefix: "ratelimit:ai",
+    })
+  : createInMemoryLimiter(20, 600);
+
+/**
  * OTP Dispatch Rate Limiter: Max 3 requests per 10 minutes per Email
  */
 export const otpRatelimit = isRedisConfigured
