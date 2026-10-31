@@ -125,5 +125,13 @@ test("an accountant login gets the money pages and nothing else", async ({
   await expect(accountant.getByRole("link", { name: "Activity" })).toHaveCount(
     0,
   );
+  // Importing balances changes what parents owe: school admins only.
+  await accountant.goto("/fees");
+  await expect(
+    accountant.getByRole("heading", { name: "Fee Management" }),
+  ).toBeVisible();
+  await expect(
+    accountant.getByRole("button", { name: "Import Balances" }),
+  ).toHaveCount(0);
   await context.close();
 });

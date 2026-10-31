@@ -121,9 +121,27 @@ export async function processClassFeeGeneration(
           },
           select: { studentId: true },
         });
-        const existingStudentIds = new Set(
-          existingCharges.map((c) => c.studentId),
-        );
+        // An opening balance covers its student's months up to and including
+        // the balance date's month, even when nothing was owed.
+        const openingBalances = await tx.feeImportStudent.findMany({
+          where: { studentId: { in: studentIds } },
+          select: {
+            studentId: true,
+            import: {
+              select: {
+                asOfDate: true,
+                sessionId: true,
+                chargedComponentIds: true,
+              },
+            },
+          },
+        });
+        const existingStudentIds = new Set([
+          ...existingCharges.map((c) => c.studentId),
+          ...openingBalances
+            .filter((b) => b.import.asOfDate >= periodStart)
+            .map((b) => b.studentId),
+        ]);
         alreadyGenerated = existingStudentIds.size;
 
         const eligibleIds = studentIds.filter(
@@ -220,6 +238,22 @@ export async function processClassFeeGeneration(
         }
         for (const item of lifetimeOneTimeItems) {
           markBilled(item.charge.studentId, item.componentId, "ONCE");
+        }
+        // Fee heads the school said it had charged before importing balances.
+        for (const { studentId, import: opening } of openingBalances) {
+          for (const componentId of opening.chargedComponentIds) {
+            const frequency = frequencyByComp.get(componentId);
+            if (!frequency) continue;
+            if (frequency !== "ONE_TIME" && opening.sessionId !== sessionId) {
+              continue;
+            }
+            const bucket = billingBucket(
+              frequency,
+              session.startDate,
+              periodKeyFromDate(opening.asOfDate),
+            );
+            if (bucket) markBilled(studentId, componentId, bucket);
+          }
         }
         const isDue = (studentId: string, compId: string, frequency: string) =>
           isComponentDue(

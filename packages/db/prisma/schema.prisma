@@ -74,6 +74,7 @@ model School {
   students                    Student[]
   studentPromotions           StudentPromotion[]
   activityLogs                ActivityLog[]
+  feeImports                  FeeImport[]
   subscription                Subscription?
   teachers                    Teacher[]
   staff                       Staff[]
@@ -281,6 +282,7 @@ model Student {
   transports      StudentTransport[]
   examMarks       ExamMark[]
   promotions      StudentPromotion[]
+  openingBalance  FeeImportStudent?
   class           Class                  @relation(fields: [classId], references: [id])
   school          School                 @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section         Section                @relation(fields: [sectionId], references: [id])
@@ -571,6 +573,9 @@ model FeeCharge {
   periodKey String?
   dueDate   DateTime        @db.Date
   status    FeeStatus       @default(PENDING)
+  /// The FeeImport this bill came from; null for bills made in the app.
+  /// Imported bills get no late fees and no transport fee added to them.
+  importId  String?
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   items     FeeChargeItem[]
@@ -582,6 +587,7 @@ model FeeCharge {
   @@index([schoolId])
   @@index([studentId])
   @@index([sessionId])
+  @@index([importId])
   @@index([schoolId, status, dueDate])
   @@index([studentId, schoolId, status])
   @@map("fee_charges")
@@ -660,12 +666,15 @@ model AdvanceLedger {
   componentId String?
   amount      Decimal       @db.Decimal(10, 2)
   description String?
+  /// The FeeImport this credit came from; null for money taken in the app.
+  importId    String?
   createdAt   DateTime      @default(now())
   student     Student       @relation(fields: [studentId], references: [id], onDelete: NoAction)
   component   FeeComponent? @relation(fields: [componentId], references: [id], onDelete: SetNull)
 
   @@index([studentId])
   @@index([componentId])
+  @@index([importId])
   @@map("advance_ledgers")
 }
 
@@ -1229,4 +1238,48 @@ model ActivityLog {
   @@index([schoolId, actorId, createdAt])
   @@index([schoolId, module, createdAt])
   @@map("activity_logs")
+}
+
+/// One upload of fees from a school's earlier records. Its bills and credits
+/// carry its id, so the whole upload can be undone.
+model FeeImport {
+  id                  String             @id @default(cuid())
+  schoolId            String
+  /// OPENING_BALANCE: what each student owes or holds in advance on one date.
+  kind                String             @default("OPENING_BALANCE")
+  /// The session its bills belong to.
+  sessionId           String
+  /// The date the balances are for. The app bills these students from the
+  /// month after it.
+  asOfDate            DateTime           @db.Date
+  fileName            String?
+  studentCount        Int
+  totalDues           Decimal            @db.Decimal(14, 2)
+  totalAdvance        Decimal            @db.Decimal(14, 2)
+  /// Yearly and one-time fee heads the school already charged, so fee
+  /// generation doesn't charge them again.
+  chargedComponentIds String[]
+  createdById         String?
+  createdByName       String
+  undoneAt            DateTime?
+  undoneById          String?
+  createdAt           DateTime           @default(now())
+  school              School             @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students            FeeImportStudent[]
+
+  @@index([schoolId, createdAt])
+  @@map("fee_imports")
+}
+
+/// A student an opening balance covers, even one with nothing owed: their
+/// months up to the balance date count as billed. One per student, so the
+/// same balance can't be imported twice; undoing the import removes it.
+model FeeImportStudent {
+  studentId String    @id
+  importId  String
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  import    FeeImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId])
+  @@map("fee_import_students")
 }

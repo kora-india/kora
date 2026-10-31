@@ -606,6 +606,7 @@ export async function enrollStudentTransport(
         studentId: parsed.data.studentId,
         schoolId,
         sessionId: currentSession.id,
+        importId: null,
       },
       orderBy: { dueDate: "desc" },
       include: { items: true },

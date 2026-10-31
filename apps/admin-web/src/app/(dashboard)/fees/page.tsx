@@ -6,6 +6,7 @@ import { FeesContent } from "@/components/fees/fees-content";
 import { getCache } from "@/lib/redis";
 import { can } from "@schoolos/types";
 import { getPermissions } from "@/lib/auth-guard";
+import { isAdmin } from "@/lib/session";
 
 export const metadata = { title: "Fees Management" };
 
@@ -181,6 +182,7 @@ export default async function FeesPage(props: {
       transactions={JSON.parse(JSON.stringify(transactions))}
       school={JSON.parse(JSON.stringify(school))}
       canEdit={canEdit}
+      canImportBalances={isAdmin(user.role)}
     />
   );
 }

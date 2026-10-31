@@ -12,10 +12,10 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import { read, utils } from "xlsx";
 import { toast } from "sonner";
 import { bulkImportStudents } from "@/lib/actions/student-import";
 import { suggestImportMapping } from "@/lib/actions/import-mapping";
+import { readSpreadsheet, type SheetRow } from "@/lib/read-spreadsheet";
 import {
   IMPORT_FIELD_LABELS,
   IMPORT_FIELDS,
@@ -28,9 +28,6 @@ import {
   normalizeImportRow,
   type ColumnMapping,
 } from "@/lib/student-import-helpers";
-
-/** A spreadsheet row as read, with its line in the sheet. */
-type SheetRow = { cells: Record<string, unknown>; sheetRow: number };
 
 /** SheetJS names columns without a header "__EMPTY", "__EMPTY_1", … */
 const columnLabel = (header: string) =>
@@ -82,67 +79,27 @@ export function ImportStudentsDialog({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setLoading(true);
-    // A CSV is read as UTF-8 text, so Hindi names and headers arrive as
-    // written; read as bytes they turned into "à¤à¤¾…". Excel files are
-    // read as bytes, which SheetJS decodes itself.
-    const isText =
-      /\.(csv|tsv|txt)$/i.test(file.name) || file.type.startsWith("text/");
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = event.target?.result;
-        // raw: keep CSV cells as typed, so "05/06/2010" isn't reread as a
-        // US month-first date before the server parses it as DD/MM/YYYY (D5).
-        // Excel date cells still arrive as serial numbers, which the server
-        // converts.
-        const workbook = isText
-          ? read(data as string, { type: "string", raw: true })
-          : read(data, { type: "array", raw: true });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const rawData = utils.sheet_to_json<Record<string, unknown>>(
-          worksheet,
-          { defval: "" },
-        );
-        // Every row has every column (defval), so the first row's keys are
-        // the headers, duplicates made unique by SheetJS ("Name_1").
-        const fileHeaders = Object.keys(rawData[0] ?? {});
-        const rows = rawData
-          .map((cells, index) => ({
-            cells,
-            // SheetJS keeps each row's 0-based line; the header is line 1.
-            sheetRow:
-              typeof (cells as { __rowNum__?: unknown }).__rowNum__ === "number"
-                ? (cells as { __rowNum__: number }).__rowNum__ + 1
-                : index + 2,
-          }))
-          // Leave out rows with nothing in them.
-          .filter(({ cells }) =>
-            Object.values(cells).some((v) => String(v ?? "").trim() !== ""),
-          );
-
-        const guessed = guessColumnMapping(fileHeaders);
-        touched.current = new Set();
-        setHeaders(fileHeaders);
-        setSheetRows(rows);
-        setMapping(guessed);
-        setAiSuggested(new Set());
-        setStep(2);
-        void suggestColumns(fileHeaders, rows, guessed);
-      } catch (err) {
-        toast.error("Failed to parse file. Please check the format.");
-      } finally {
-        setLoading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
-    if (isText) reader.readAsText(file, "utf-8");
-    else reader.readAsArrayBuffer(file);
+    try {
+      const { headers: fileHeaders, rows } = await readSpreadsheet(file);
+      const guessed = guessColumnMapping(fileHeaders);
+      touched.current = new Set();
+      setHeaders(fileHeaders);
+      setSheetRows(rows);
+      setMapping(guessed);
+      setAiSuggested(new Set());
+      setStep(2);
+      void suggestColumns(fileHeaders, rows, guessed);
+    } catch {
+      toast.error("Failed to parse file. Please check the format.");
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   /**

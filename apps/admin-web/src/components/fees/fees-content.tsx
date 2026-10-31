@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useQueryTab } from "@/hooks/use-query-state";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, Users, IndianRupee, FileText } from "lucide-react";
+import { Settings, Users, IndianRupee, FileText, Upload } from "lucide-react";
 import { CollectionTab } from "./tabs/collection-tab";
 import { SetupTab } from "./tabs/setup-tab";
 import { AssignmentsTab } from "./tabs/assignments-tab";
 import { GeneratorTab } from "./tabs/generator-tab";
+import { ImportBalancesDialog } from "./import-balances-dialog";
 
 interface Props {
   sessions: any[];
@@ -19,6 +20,8 @@ interface Props {
   transactions: any[];
   school?: any;
   canEdit: boolean;
+  /** School admins bring in a school's balances from its earlier records. */
+  canImportBalances?: boolean;
 }
 
 export function FeesContent(props: Readonly<Props>) {
@@ -27,6 +30,7 @@ export function FeesContent(props: Readonly<Props>) {
     validTabs: ["collection", "generator", "assignments", "settings"],
     defaultTab: "collection",
   });
+  const [importOpen, setImportOpen] = useState(false);
 
   const TABS = [
     { id: "collection", label: "Fee Collection", icon: IndianRupee },
@@ -45,6 +49,16 @@ export function FeesContent(props: Readonly<Props>) {
             and collections.
           </p>
         </div>
+        {props.canImportBalances && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 h-9 px-4 w-fit bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Import Balances
+          </button>
+        )}
       </div>
 
       <div
@@ -102,6 +116,10 @@ export function FeesContent(props: Readonly<Props>) {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {props.canImportBalances && (
+        <ImportBalancesDialog open={importOpen} onOpenChange={setImportOpen} />
+      )}
     </div>
   );
 }

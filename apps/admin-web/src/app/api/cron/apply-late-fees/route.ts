@@ -103,13 +103,15 @@ export async function GET(req: Request) {
         });
       }
 
-      // B13: Find all overdue FeeCharges for active students only
+      // B13: Find all overdue FeeCharges for active students only. Imported
+      // balances get no late fee: their dates aren't real due dates.
       const overdueCharges = await prisma.feeCharge.findMany({
         where: {
           schoolId: school.id,
           status: "OVERDUE",
           dueDate: { lt: today },
           student: { isActive: true },
+          importId: null,
         },
         include: { items: true },
       });
