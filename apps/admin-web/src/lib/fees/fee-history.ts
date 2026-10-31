@@ -1,14 +1,16 @@
 /**
  * Full fee history: a school's bills and payments, month by month. The school
- * fills a template with one row per student per month, one column per fee
- * head, and the month's late fee, discount and payment. Pure functions, shared
- * by the import dialog and the server.
+ * fills a template with one row per student and a group of columns per month:
+ * fees, late fee, what was paid, when, how, and the receipt. Each filled month
+ * becomes one `FeeHistoryRow`. Pure functions, shared by the import dialog and
+ * the server.
  */
 
 import { PAYMENT_METHOD_OPTIONS } from "../payment-methods";
 import { parseImportDate } from "../student-import-helpers";
 import {
   formatPeriodLabel,
+  isPeriodKey,
   isPeriodWithinSession,
   parsePeriodKey,
   toPeriodKey,
@@ -21,16 +23,15 @@ const roundMoney = (n: number) => Math.round(n * 100) / 100;
 export const HISTORY_TEMPLATE_INSTRUCTIONS = [
   "How to fill this file",
   "",
-  "There is one row for each student for each month. Fee amounts are filled in from your fee structure: change any that are different in your records.",
-  "1. Paid: what was paid for that month. Leave it blank if nothing was paid.",
-  "2. Paid On: the date it was paid, as DD/MM/YYYY.",
-  "3. Mode: Cash, UPI, Bank transfer, Cheque, Card or Online.",
-  "4. Receipt No: your old receipt number. Use the same number on every month one receipt paid for. Leave it blank if you don't have one.",
-  "5. Late Fee: the late fee charged for that month. Type 0 if there was none.",
-  "6. Discount: anything taken off that month's bill.",
-  "7. Two payments for one month? Copy the row, clear its fee amounts, and fill in the second payment.",
-  "8. Delete a row, or clear its amounts, for a month that was never billed.",
-  "9. Don't change the Admission Number or Month columns. Save the file and upload it on the Fees page.",
+  "There is one row for each student, and a group of columns for each month. Fees are filled in from your fee structure.",
+  "1. Fees: the month's total bill. Lower it if there was a discount. Anything above your fee structure goes under Other Fees. Clear it for a month that was never billed.",
+  "2. Late Fee: the late fee charged that month. Type 0 if there was none.",
+  "3. Paid: what was paid for that month. Leave it blank if nothing was paid.",
+  "4. Paid On: the date it was paid, as DD/MM/YYYY.",
+  "5. Mode: Cash, UPI, Bank transfer, Cheque, Card or Online.",
+  "6. Receipt: your old receipt number. Use the same number in every month one receipt paid for. Leave it blank if you don't have one.",
+  "7. Two payments for one month? Add a new row with only the Admission Number and that month's second Paid, Paid On, Mode and Receipt.",
+  "8. Don't change the Admission Number column. Save the file and upload it on the Fees page.",
 ];
 
 /** Bills count as due on the 10th, as the monthly fee run bills them. */
@@ -38,126 +39,140 @@ export const historyDueDate = (period: string) => `${period}-10`;
 
 const key = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** The template's headers for a school's fee heads. */
-export const historyHeaders = (heads: string[]) => [
+export const HISTORY_STUDENT_HEADERS = [
   "Admission Number",
   "Student Name",
   "Class",
   "Section",
-  "Month",
-  ...heads.map((h) => `${h} (₹)`),
+];
+
+/** The columns of each month in the template. */
+export const HISTORY_MONTH_FIELDS = [
+  "Fees (₹)",
   "Late Fee (₹)",
-  "Discount (₹)",
   "Paid (₹)",
   "Paid On",
   "Mode",
-  "Receipt No",
-  "Reference",
+  "Receipt",
 ];
 
-export interface HistoryColumns {
-  admissionNumber: string;
-  month: string;
-  paid: string;
+/** "Apr 2026" for "2026-04". */
+export function monthLabel(period: string): string {
+  const { year, month } = parsePeriodKey(period)!;
+  const name = MONTH_NAMES[month - 1];
+  return `${name[0].toUpperCase()}${name.slice(1)} ${year}`;
+}
+
+/** The template's headers for a range of months. */
+export const historyHeaders = (months: string[]) => [
+  ...HISTORY_STUDENT_HEADERS,
+  ...months.flatMap((period) =>
+    HISTORY_MONTH_FIELDS.map((field) => `${monthLabel(period)} ${field}`),
+  ),
+];
+
+/** The headers of one month's columns in a file. */
+export interface MonthColumns {
+  period: string;
+  fees?: string;
   lateFee?: string;
-  discount?: string;
+  paid?: string;
   paidOn?: string;
   mode?: string;
   receiptNo?: string;
-  reference?: string;
-  /** Every other column is a fee head. */
-  heads: { header: string; name: string }[];
 }
 
-const NAMED_COLUMNS: Record<string, keyof HistoryColumns> = {
-  admissionnumber: "admissionNumber",
-  month: "month",
-  paid: "paid",
+export interface HistoryColumns {
+  admissionNumber: string;
+  /** Oldest first. */
+  months: MonthColumns[];
+}
+
+const MONTH_COLUMN =
+  /^(.+?)\s+(late\s*fee|fees|paid\s*on|paid|mode|receipt(?:\s*no)?)\s*(?:\([^)]*\))?$/i;
+
+const MONTH_FIELD: Record<string, keyof Omit<MonthColumns, "period">> = {
   latefee: "lateFee",
-  discount: "discount",
+  fees: "fees",
   paidon: "paidOn",
+  paid: "paid",
   mode: "mode",
+  receipt: "receiptNo",
   receiptno: "receiptNo",
-  reference: "reference",
 };
-const INFO_COLUMNS = new Set(["studentname", "class", "section", "rollnumber"]);
 
 /** Which column is which. `missing` means this isn't the template. */
 export function findHistoryColumns(
   headers: string[],
 ): HistoryColumns | { missing: string[] } {
-  const found: Partial<Record<keyof HistoryColumns, string>> = {};
-  const heads: HistoryColumns["heads"] = [];
+  let admissionNumber: string | undefined;
+  const months = new Map<string, MonthColumns>();
   for (const header of headers) {
-    if (header.startsWith("__EMPTY")) continue;
-    const name = key(header);
-    const column = NAMED_COLUMNS[name];
-    if (column) found[column] = header;
-    else if (!INFO_COLUMNS.has(name)) {
-      const head = header.replace(/\s*\([^)]*\)\s*$/, "").trim();
-      if (head) heads.push({ header, name: head });
+    if (key(header) === "admissionnumber") {
+      admissionNumber = header;
+      continue;
     }
+    const match = MONTH_COLUMN.exec(header.trim());
+    const period = match && parseMonth(match[1]);
+    if (!match || !period) continue;
+    const month = months.get(period) ?? { period };
+    month[MONTH_FIELD[key(match[2])]] = header;
+    months.set(period, month);
   }
-  const { admissionNumber, month, paid } = found;
-  if (!admissionNumber || !month || !paid) {
+  if (!admissionNumber || months.size === 0) {
     return {
       missing: [
-        ...(admissionNumber ? [] : ["Admission Number"]),
-        ...(month ? [] : ["Month"]),
-        ...(paid ? [] : ["Paid"]),
+        ...(admissionNumber ? [] : ["Admission Number column"]),
+        ...(months.size > 0 ? [] : ["month columns"]),
       ],
     };
   }
-  return { ...found, admissionNumber, month, paid, heads };
+  return {
+    admissionNumber,
+    months: [...months.values()].sort((a, b) =>
+      a.period.localeCompare(b.period),
+    ),
+  };
 }
 
-/** One filled row of the template. */
+/** One filled month of one row of the template. */
 export interface FeeHistoryRow {
   sheetRow: number;
   admissionNumber: string;
-  month: string;
-  /** Fee head name to amount, in column order; blank cells left out. */
-  heads: Record<string, string>;
+  /** "YYYY-MM" */
+  period: string;
+  fees: string;
   lateFee: string;
-  discount: string;
   paid: string;
   paidOn: string;
   mode: string;
   receiptNo: string;
-  reference: string;
 }
 
 const text = (v: unknown) =>
   v === null || v === undefined ? "" : String(v).trim();
 
-/** A sheet row as a history row, or null when nothing was billed or paid. */
-export function toHistoryRow(
+/** The months a sheet row has anything in. */
+export function toHistoryRows(
   cells: Record<string, unknown>,
   sheetRow: number,
   columns: HistoryColumns,
-): FeeHistoryRow | null {
+): FeeHistoryRow[] {
   const cell = (header?: string) => (header ? text(cells[header]) : "");
-  const heads: Record<string, string> = {};
-  for (const { header, name } of columns.heads) {
-    const value = cell(header);
-    if (value) heads[name] = value;
-  }
-  const row = {
-    sheetRow,
-    admissionNumber: cell(columns.admissionNumber),
-    month: cell(columns.month),
-    heads,
-    lateFee: cell(columns.lateFee),
-    discount: cell(columns.discount),
-    paid: cell(columns.paid),
-    paidOn: cell(columns.paidOn),
-    mode: cell(columns.mode),
-    receiptNo: cell(columns.receiptNo),
-    reference: cell(columns.reference),
-  };
-  const hasMoney =
-    Object.keys(heads).length > 0 || row.lateFee || row.discount || row.paid;
-  return hasMoney ? row : null;
+  const admissionNumber = cell(columns.admissionNumber);
+  return columns.months
+    .map((month) => ({
+      sheetRow,
+      admissionNumber,
+      period: month.period,
+      fees: cell(month.fees),
+      lateFee: cell(month.lateFee),
+      paid: cell(month.paid),
+      paidOn: cell(month.paidOn),
+      mode: cell(month.mode),
+      receiptNo: cell(month.receiptNo),
+    }))
+    .filter((row) => row.fees || row.lateFee || row.paid);
 }
 
 const MONTH_NAMES = [
@@ -176,8 +191,9 @@ const MONTH_NAMES = [
 ];
 
 /**
- * A month cell as "YYYY-MM": "Apr 2026", "April 2026", "Apr-26", "04/2026",
- * "2026-04", a full date, or the serial number Excel stores a date as.
+ * A month in a column heading as "YYYY-MM": "Apr 2026", "April 2026", "Apr-26",
+ * "04/2026", "2026-04", a full date, or the serial number Excel stores a date
+ * as.
  */
 export function parseMonth(raw: string): string | null {
   const value = raw.trim().toLowerCase();
@@ -265,6 +281,35 @@ export function parseMode(raw: string): string | null {
 /** The fee line a month's late fee goes on. */
 export const LATE_FEE_LINE = "__late_fee__";
 
+/** Where fees above the fee structure go, and old fees with no structure. */
+export const OTHER_FEES_HEAD = "Other Fees";
+
+/** A fee head and what the fee structure bills for it. */
+export interface ExpectedLine {
+  head: string;
+  amount: number;
+}
+
+/**
+ * Splits a month's total across its fee heads, using what the fee structure
+ * expects. Anything less is a discount, taken off the fee heads in order;
+ * anything more goes under Other Fees.
+ */
+export function splitFees(fees: number, expected: ExpectedLine[]) {
+  const total = roundMoney(expected.reduce((sum, e) => sum + e.amount, 0));
+  const lines = expected.map((e) => ({ ...e }));
+  let toTakeOff = Math.max(0, roundMoney(total - fees));
+  const discount = toTakeOff;
+  for (const line of lines) {
+    const off = Math.min(line.amount, toTakeOff);
+    line.amount = roundMoney(line.amount - off);
+    toTakeOff = roundMoney(toTakeOff - off);
+  }
+  const other = Math.max(0, roundMoney(fees - total));
+  if (other > 0) lines.push({ head: OTHER_FEES_HEAD, amount: other });
+  return { lines: lines.filter((l) => l.amount > 0), discount, other };
+}
+
 export interface HistoryBillLine {
   /** A fee head's name, or `LATE_FEE_LINE`. */
   head: string;
@@ -280,13 +325,14 @@ export interface HistoryBill {
 
 export interface HistoryPayment {
   studentId: string;
-  /** Null when the row had none; `sheetRow` then makes one up. */
+  /** Null when the month had none; the server then makes one up. */
   receiptNo: string | null;
   sheetRow: number;
+  /** The month it was first seen on. */
+  period: string;
   /** "YYYY-MM-DD" */
   date: string;
   method: string;
-  reference: string | null;
   amount: number;
   allocations: { period: string; head: string; amount: number }[];
   /** Paid beyond the bills: held as the student's advance. */
@@ -299,6 +345,8 @@ export interface HistoryContext {
   billedMonths: ReadonlySet<string>;
   /** Student to the last month their opening balance covers. */
   openingMonths: ReadonlyMap<string, string>;
+  /** "studentId|YYYY-MM" to what the fee structure bills that month. */
+  expected: ReadonlyMap<string, ExpectedLine[]>;
   /** Receipt numbers in use, lowercased. */
   usedReceipts: ReadonlySet<string>;
   /** "YYYY-MM-DD", the school's date. */
@@ -312,7 +360,10 @@ export interface HistoryTotals {
   payments: number;
   billed: number;
   lateFees: number;
+  /** Fees lowered below the fee structure. */
   discounts: number;
+  /** Fees above the fee structure, or with no structure to follow. */
+  otherFees: number;
   paid: number;
   dues: number;
   advance: number;
@@ -327,12 +378,15 @@ export interface HistoryPlan {
   bills: HistoryBill[];
   payments: HistoryPayment[];
   problems: string[];
-  /** Fee heads the bills use, by the file's name. */
+  /** Fee heads the bills use. */
   heads: string[];
   /** Months the bills are for. */
   periods: string[];
   totals: HistoryTotals;
 }
+
+const monthProblem = (row: FeeHistoryRow, message: string) =>
+  `Row ${row.sheetRow}, ${formatPeriodLabel(row.period)}: ${message}`;
 
 const daysBetween = (from: string, to: string) =>
   Math.floor(
@@ -364,6 +418,7 @@ export function planFeeHistory(
       billed: 0,
       lateFees: 0,
       discounts: 0,
+      otherFees: 0,
       paid: 0,
       dues: 0,
       advance: 0,
@@ -373,7 +428,7 @@ export function planFeeHistory(
     },
   };
   const { totals } = plan;
-  const problem = (row: FeeHistoryRow, message: string) =>
+  const rowProblem = (row: FeeHistoryRow, message: string) =>
     plan.problems.push(`Row ${row.sheetRow}: ${message}`);
 
   const byAdmission = new Map(
@@ -385,40 +440,38 @@ export function planFeeHistory(
   for (const row of rows) {
     const number = row.admissionNumber.trim();
     if (!number) {
-      problem(row, "Admission number is missing");
+      rowProblem(row, "Admission number is missing");
       continue;
     }
     const student = byAdmission.get(number.toLowerCase());
     if (!student) {
-      problem(row, `Admission number ${number} isn't a student at this school`);
-      continue;
-    }
-    if (!student.isActive) {
-      problem(row, `${student.name} (${number}) has left the school`);
-      continue;
-    }
-    const period = parseMonth(row.month);
-    if (!period) {
-      problem(
+      rowProblem(
         row,
-        `Month "${row.month}" can't be read. Use a month like Apr 2026`,
+        `Admission number ${number} isn't a student at this school`,
       );
       continue;
     }
-    if (period > currentMonth) {
-      problem(row, `${formatPeriodLabel(period)} hasn't happened yet`);
+    if (!student.isActive) {
+      rowProblem(row, `${student.name} (${number}) has left the school`);
       continue;
     }
-    const id = `${student.id}|${period}`;
+    if (!isPeriodKey(row.period)) {
+      rowProblem(row, `"${row.period}" isn't a month`);
+      continue;
+    }
+    if (row.period > currentMonth) {
+      rowProblem(row, `${formatPeriodLabel(row.period)} hasn't happened yet`);
+      continue;
+    }
+    const id = `${student.id}|${row.period}`;
     const month = months.get(id);
     if (month) month.rows.push(row);
-    else months.set(id, { student, period, rows: [row] });
+    else months.set(id, { student, period: row.period, rows: [row] });
   }
 
   const payments = new Map<string, HistoryPayment>();
 
   for (const [id, { student, period, rows: monthRows }] of months) {
-    const label = formatPeriodLabel(period);
     const covered = context.openingMonths.get(student.id);
     if (covered && period <= covered) {
       totals.inOpeningBalance++;
@@ -430,6 +483,8 @@ export function planFeeHistory(
     }
 
     const problemsBefore = plan.problems.length;
+    const problem = (row: FeeHistoryRow, message: string) =>
+      plan.problems.push(monthProblem(row, message));
     const amount = (row: FeeHistoryRow, value: string, name: string) => {
       const parsed = parseAmount(value);
       if ("error" in parsed) {
@@ -440,32 +495,23 @@ export function planFeeHistory(
     };
 
     let billRow: FeeHistoryRow | null = null;
-    let lines: HistoryBillLine[] = [];
+    let fees = 0;
     let lateFee: number | null = null;
-    let discount = 0;
 
     for (const row of monthRows) {
-      const rowLines = Object.entries(row.heads)
-        .map(([head, value]) => ({
-          head,
-          amount: amount(row, value, head),
-          paid: 0,
-        }))
-        .filter((line) => line.amount > 0);
+      const rowFees = amount(row, row.fees, "Fees");
       const rowLate = row.lateFee ? amount(row, row.lateFee, "Late Fee") : null;
-      const rowDiscount = amount(row, row.discount, "Discount");
-      if (rowLines.length === 0 && !rowLate && !rowDiscount) continue;
+      if (!rowFees && !rowLate) continue;
       if (billRow) {
         problem(
           row,
-          `${student.name} has ${label} twice with fee amounts. Keep the amounts on one row`,
+          `${student.name} has fees for this month on two rows. Keep them on one`,
         );
         continue;
       }
       billRow = row;
-      lines = rowLines;
+      fees = rowFees;
       lateFee = rowLate;
-      discount = rowDiscount;
     }
 
     // Payments for the month, in row order.
@@ -495,21 +541,16 @@ export function planFeeHistory(
         method,
       });
     }
-
-    // A discount comes off the fee heads, in column order.
-    const principalBefore = lines.reduce((sum, l) => sum + l.amount, 0);
-    if (billRow && discount > principalBefore) {
-      problem(billRow, `Discount is more than ${label}'s fees`);
-    }
     if (plan.problems.length > problemsBefore) continue;
 
-    let toTakeOff = discount;
-    for (const line of lines) {
-      const off = Math.min(line.amount, toTakeOff);
-      line.amount = roundMoney(line.amount - off);
-      toTakeOff = roundMoney(toTakeOff - off);
-    }
-    lines = lines.filter((line) => line.amount > 0);
+    const split =
+      fees > 0
+        ? splitFees(fees, context.expected.get(id) ?? [])
+        : { lines: [], discount: 0, other: 0 };
+    const lines: HistoryBillLine[] = split.lines.map((l) => ({
+      ...l,
+      paid: 0,
+    }));
     const principal = roundMoney(lines.reduce((sum, l) => sum + l.amount, 0));
 
     // A late fee in the file stands as written; a blank one can come from
@@ -538,7 +579,8 @@ export function planFeeHistory(
         problem(row, `Receipt ${receiptNo} is already in Kora`);
         continue;
       }
-      const paymentKey = receiptKey || `row-${row.sheetRow}`;
+      // A row holds many months, so a blank receipt is one payment per month.
+      const paymentKey = receiptKey || `row-${row.sheetRow}-${period}`;
       let payment = payments.get(paymentKey);
       if (payment && payment.studentId !== student.id) {
         problem(row, `Receipt ${receiptNo} is also used for another student`);
@@ -550,9 +592,9 @@ export function planFeeHistory(
           studentId: student.id,
           receiptNo: receiptNo || null,
           sheetRow: row.sheetRow,
+          period,
           date: date ?? (dueDate < context.today ? dueDate : context.today),
           method,
-          reference: row.reference.trim() || null,
           amount: 0,
           allocations: [],
           advance: 0,
@@ -574,7 +616,8 @@ export function planFeeHistory(
 
     if (lines.length > 0) {
       plan.bills.push({ studentId: student.id, period, lines });
-      totals.discounts = roundMoney(totals.discounts + discount);
+      totals.discounts = roundMoney(totals.discounts + split.discount);
+      totals.otherFees = roundMoney(totals.otherFees + split.other);
     }
   }
 
@@ -602,6 +645,8 @@ export function planFeeHistory(
     ),
   ];
   plan.periods = [...new Set(plan.bills.map((b) => b.period))].sort();
+  // A row with a bad admission number says so once, not once per month.
+  plan.problems = [...new Set(plan.problems)];
   return plan;
 }
 
@@ -619,7 +664,10 @@ export function findSharedReceipts(rows: FeeHistoryRow[]): string[] {
     const first = owner.get(receipt);
     if (first && first !== student) {
       problems.push(
-        `Row ${row.sheetRow}: Receipt ${row.receiptNo.trim()} is also used for another student`,
+        monthProblem(
+          row,
+          `Receipt ${row.receiptNo.trim()} is also used for another student`,
+        ),
       );
     } else {
       owner.set(receipt, student);

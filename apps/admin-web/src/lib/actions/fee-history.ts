@@ -19,14 +19,15 @@ import {
   LATE_FEE_LINE,
   findSessionForPeriod,
   historyDueDate,
-  historyHeaders,
   monthsBetween,
   pastSessionFor,
   planFeeHistory,
+  type ExpectedLine,
   type FeeHistoryRow,
   type HistoryContext,
   type HistoryTotals,
 } from "@/lib/fees/fee-history";
+import type { HistoryTemplate } from "@/lib/fees/fee-history-template";
 import { PREVIOUS_DUES_CATEGORY } from "@/lib/fees/opening-balance";
 import { formatReceiptNumber } from "@/lib/fees/receipt-number";
 import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
@@ -40,6 +41,9 @@ import type { FeeImportSummary } from "./fee-import";
  * `startFeeHistoryImport` opens an import, each batch saves under it, and
  * `finishFeeHistoryImport` closes it. If a batch fails, the browser undoes the
  * import, so a school never ends up half imported. School admins only.
+ *
+ * Every call gets the file's months as well as its rows. A year's fee belongs
+ * to the first month of the file, even for a student with that month blank.
  */
 
 const LATE_FEE_CATEGORY = "LATE_FEE";
@@ -47,18 +51,19 @@ const LATE_FEE_CATEGORY = "LATE_FEE";
 const RowSchema = z.object({
   sheetRow: z.number().int().positive(),
   admissionNumber: z.string().max(100),
-  month: z.string().max(40),
-  heads: z.record(z.string().max(40)),
+  period: z.string().max(7),
+  fees: z.string().max(40),
   lateFee: z.string().max(40),
-  discount: z.string().max(40),
   paid: z.string().max(40),
   paidOn: z.string().max(40),
   mode: z.string().max(40),
   receiptNo: z.string().max(60),
-  reference: z.string().max(100),
 });
 
+const MonthsSchema = z.array(z.string().max(7)).min(1).max(240);
+
 const CheckSchema = z.object({
+  months: MonthsSchema,
   rows: z.array(RowSchema).min(1).max(5000),
   calculateLateFees: z.boolean().default(false),
 });
@@ -73,6 +78,7 @@ const StartSchema = z.object({
 
 const BatchSchema = z.object({
   importId: z.string().min(1),
+  months: MonthsSchema,
   rows: z.array(RowSchema).min(1).max(5000),
 });
 
@@ -177,15 +183,6 @@ export async function getFeeHistorySetup(): Promise<
   };
 }
 
-const monthLabel = (period: string) => {
-  const [year, month] = period.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-IN", {
-    timeZone: "UTC",
-    month: "short",
-    year: "numeric",
-  });
-};
-
 /** The month a bill is for, or null for one that isn't a month's bill. */
 const billedPeriod = (charge: { periodKey: string | null; dueDate: Date }) => {
   const key = charge.periodKey;
@@ -194,86 +191,57 @@ const billedPeriod = (charge: { periodKey: string | null; dueDate: Date }) => {
 };
 
 /**
- * The template: a row per active student per month, leaving out months they
- * already have bills for or that an opening balance covers. Fee amounts come
- * from the fee structure, the same way fee generation works them out, so the
- * school only fills in what's different and what was paid.
+ * What the fee structure bills each student each month, worked out the same
+ * way fee generation does, leaving out months they already have bills for or
+ * that an opening balance covers. `months` must be oldest first: a year's fee
+ * goes on the first month that isn't left out.
  */
-export async function getFeeHistoryTemplate(
-  input: unknown,
-): Promise<{ headers: string[]; rows: string[][] } | { error: string }> {
-  const admin = await requireSchoolAdmin();
-  if (isError(admin)) return { error: admin.error };
-  const { schoolId } = admin;
-
-  const parsed = LoadTemplateSchema.safeParse(input);
-  if (!parsed.success) return { error: "Choose the months to include" };
-  const { from, to } = parsed.data;
-  const school = await prisma.school.findUnique({
-    where: { id: schoolId },
-    select: { timezone: true },
-  });
-  const currentMonth = calendarDateInTimeZone(
-    resolveTimeZone(school?.timezone),
-  ).slice(0, 7);
-  if (!isPeriodKey(from) || !isPeriodKey(to) || from > to) {
-    return { error: "Choose the months to include" };
-  }
-  if (to > currentMonth) {
-    return { error: "The last month can't be in the future" };
-  }
-  const months = monthsBetween(from, to);
-  if (months.length > 60) return { error: "Choose 5 years or fewer at a time" };
-
-  const [students, sessions, components, structures, overrides, transports] =
-    await Promise.all([
-      prisma.student.findMany({
-        where: { schoolId, isActive: true },
-        select: {
-          id: true,
-          admissionNumber: true,
-          name: true,
-          rollNumber: true,
-          classId: true,
-          class: { select: { name: true, grade: true } },
-          section: { select: { name: true } },
-        },
-      }),
-      prisma.academicSession.findMany({ where: { schoolId } }),
-      prisma.feeComponent.findMany({
-        where: { schoolId },
-        orderBy: { name: "asc" },
-      }),
-      prisma.classFeeStructure.findMany({
-        where: { structure: { schoolId, status: "ACTIVE" } },
-        select: {
-          classId: true,
-          structure: {
-            select: {
-              sessionId: true,
-              items: {
-                select: {
-                  componentId: true,
-                  amount: true,
-                  component: {
-                    select: { amount: true, frequency: true, isActive: true },
-                  },
-                },
+async function loadExpectedBills(
+  schoolId: string,
+  students: { id: string; classId: string }[],
+  months: string[],
+) {
+  const ids = students.map((s) => s.id);
+  const [
+    sessions,
+    components,
+    structures,
+    overrides,
+    transports,
+    charges,
+    openings,
+  ] = await Promise.all([
+    prisma.academicSession.findMany({ where: { schoolId } }),
+    prisma.feeComponent.findMany({
+      where: { schoolId },
+      orderBy: { name: "asc" },
+    }),
+    prisma.classFeeStructure.findMany({
+      where: { structure: { schoolId, status: "ACTIVE" } },
+      select: {
+        classId: true,
+        structure: {
+          select: {
+            sessionId: true,
+            items: {
+              select: {
+                componentId: true,
+                amount: true,
+                component: { select: { amount: true, frequency: true } },
               },
             },
           },
         },
-      }),
-      prisma.studentFeeOverride.findMany({
-        where: { student: { schoolId } },
-      }),
-      prisma.studentTransport.findMany({
-        where: { schoolId, status: "ACTIVE" },
-      }),
-    ]);
-  const [charges, openings] = await Promise.all([
+      },
+    }),
+    prisma.studentFeeOverride.findMany({
+      where: { studentId: { in: ids } },
+    }),
+    prisma.studentTransport.findMany({
+      where: { schoolId, studentId: { in: ids }, status: "ACTIVE" },
+    }),
     prisma.feeCharge.findMany({
-      where: { schoolId },
+      where: { schoolId, studentId: { in: ids } },
       select: {
         studentId: true,
         sessionId: true,
@@ -283,26 +251,28 @@ export async function getFeeHistoryTemplate(
       },
     }),
     prisma.feeImportStudent.findMany({
-      where: { student: { schoolId } },
-      select: { studentId: true, import: { select: { asOfDate: true } } },
+      where: { studentId: { in: ids } },
+      select: {
+        studentId: true,
+        import: {
+          select: {
+            asOfDate: true,
+            sessionId: true,
+            chargedComponentIds: true,
+          },
+        },
+      },
     }),
   ]);
 
-  students.sort(
-    (a, b) =>
-      a.class.grade - b.class.grade ||
-      a.class.name.localeCompare(b.class.name) ||
-      a.section.name.localeCompare(b.section.name) ||
-      compareRollNumbers(a.rollNumber, b.rollNumber),
-  );
-
-  // Late fees and opening dues have their own place, not fee head columns.
+  // Late fees and opening dues have their own place, not fee heads.
   const heads = components.filter(
     (c) =>
       c.isActive &&
       c.category !== LATE_FEE_CATEGORY &&
       c.category !== PREVIOUS_DUES_CATEGORY,
   );
+  const billable = new Set(heads.map((h) => h.id));
   const frequency = new Map(components.map((c) => [c.id, c.frequency]));
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const transportHead = heads.find(
@@ -352,87 +322,179 @@ export async function getFeeHistoryTemplate(
       }
     }
   }
-  const openingMonth = new Map(
+  // Fee heads the school said it had charged before importing balances.
+  for (const { studentId, import: opening } of openings) {
+    const session = sessionById.get(opening.sessionId);
+    if (!session) continue;
+    for (const componentId of opening.chargedComponentIds) {
+      const bucket = billingBucket(
+        frequency.get(componentId) ?? "",
+        session.startDate,
+        periodKeyFromDate(opening.asOfDate),
+      );
+      if (bucket) {
+        billedBuckets.add(
+          bucketKey(studentId, componentId, session.id, bucket),
+        );
+      }
+    }
+  }
+  const openingMonths = new Map(
     openings.map((o) => [o.studentId, periodKeyFromDate(o.import.asOfDate)]),
   );
 
-  const rows: string[][] = [];
+  const expected = new Map<string, ExpectedLine[]>();
   for (const student of students) {
     for (const period of months) {
       if (billedMonths.has(`${student.id}|${period}`)) continue;
-      const covered = openingMonth.get(student.id);
+      const covered = openingMonths.get(student.id);
       if (covered && period <= covered) continue;
+      const session = findSessionForPeriod(period, sessions);
+      if (!session) continue;
 
       const amounts = new Map<string, number>();
-      const session = findSessionForPeriod(period, sessions);
-      if (session) {
-        const assigned =
-          structureItems.get(`${student.classId}|${session.id}`) ?? [];
-        for (const item of assigned.flatMap((a) => a.structure.items)) {
-          if (!item.component.isActive) continue;
-          const bucket = billingBucket(
-            item.component.frequency,
-            session.startDate,
-            period,
-          );
-          if (!bucket) continue;
-          const seen = bucketKey(
-            student.id,
-            item.componentId,
-            session.id,
-            bucket,
-          );
-          if (billedBuckets.has(seen)) continue;
+      const assigned =
+        structureItems.get(`${student.classId}|${session.id}`) ?? [];
+      for (const item of assigned.flatMap((a) => a.structure.items)) {
+        if (!billable.has(item.componentId)) continue;
+        const bucket = billingBucket(
+          item.component.frequency,
+          session.startDate,
+          period,
+        );
+        if (!bucket) continue;
+        const seen = bucketKey(
+          student.id,
+          item.componentId,
+          session.id,
+          bucket,
+        );
+        if (billedBuckets.has(seen)) continue;
 
-          const own = override.get(
-            `${student.id}|${session.id}|${item.componentId}`,
-          );
-          if (own?.isExempt) continue;
-          let amount =
-            own?.amount !== null && own?.amount !== undefined
-              ? Number(own.amount)
-              : Number(item.amount ?? item.component.amount);
-          if (own?.discountAmount) {
-            amount = Math.max(0, amount - Number(own.discountAmount));
-          }
-          if (amount > 0) {
-            amounts.set(item.componentId, amount);
-            billedBuckets.add(seen);
-          }
+        const own = override.get(
+          `${student.id}|${session.id}|${item.componentId}`,
+        );
+        if (own?.isExempt) continue;
+        let amount =
+          own?.amount !== null && own?.amount !== undefined
+            ? Number(own.amount)
+            : Number(item.amount ?? item.component.amount);
+        if (own?.discountAmount) {
+          amount = Math.max(0, amount - Number(own.discountAmount));
         }
-        const ride = transport.get(`${student.id}|${session.id}`);
-        if (
-          transportHead &&
-          ride &&
-          Number(ride.monthlyFee) > 0 &&
-          !amounts.has(transportHead.id) &&
-          periodKeyFromDate(ride.startDate) <= period &&
-          (!ride.endDate || periodKeyFromDate(ride.endDate) >= period)
-        ) {
-          amounts.set(transportHead.id, Number(ride.monthlyFee));
+        if (amount > 0) {
+          amounts.set(item.componentId, amount);
+          billedBuckets.add(seen);
         }
       }
+      const ride = transport.get(`${student.id}|${session.id}`);
+      if (
+        transportHead &&
+        ride &&
+        Number(ride.monthlyFee) > 0 &&
+        !amounts.has(transportHead.id) &&
+        periodKeyFromDate(ride.startDate) <= period &&
+        (!ride.endDate || periodKeyFromDate(ride.endDate) >= period)
+      ) {
+        amounts.set(transportHead.id, Number(ride.monthlyFee));
+      }
 
-      rows.push([
-        student.admissionNumber,
-        student.name,
-        student.class.name,
-        student.section.name,
-        monthLabel(period),
-        ...heads.map((h) => {
-          const amount = amounts.get(h.id);
-          return amount ? String(amount) : "";
-        }),
-        ...Array.from({ length: 7 }, () => ""),
-      ]);
+      expected.set(
+        `${student.id}|${period}`,
+        heads
+          .filter((h) => amounts.has(h.id))
+          .map((h) => ({ head: h.name, amount: amounts.get(h.id)! })),
+      );
     }
   }
+  return { expected, billedMonths, openingMonths };
+}
 
-  return { headers: historyHeaders(heads.map((h) => h.name)), rows };
+/**
+ * The template: a row per active student, leaving out students with nothing
+ * left to bring in. Fees come from the fee structure, so the school only
+ * fills in what was paid and changes what's different.
+ */
+export async function getFeeHistoryTemplate(
+  input: unknown,
+): Promise<HistoryTemplate | { error: string }> {
+  const admin = await requireSchoolAdmin();
+  if (isError(admin)) return { error: admin.error };
+  const { schoolId } = admin;
+
+  const parsed = LoadTemplateSchema.safeParse(input);
+  if (!parsed.success) return { error: "Choose the months to include" };
+  const { from, to } = parsed.data;
+  const school = await prisma.school.findUnique({
+    where: { id: schoolId },
+    select: { timezone: true },
+  });
+  const currentMonth = calendarDateInTimeZone(
+    resolveTimeZone(school?.timezone),
+  ).slice(0, 7);
+  if (!isPeriodKey(from) || !isPeriodKey(to) || from > to) {
+    return { error: "Choose the months to include" };
+  }
+  if (to > currentMonth) {
+    return { error: "The last month can't be in the future" };
+  }
+  const months = monthsBetween(from, to);
+  if (months.length > 60) return { error: "Choose 5 years or fewer at a time" };
+
+  const students = await prisma.student.findMany({
+    where: { schoolId, isActive: true },
+    select: {
+      id: true,
+      admissionNumber: true,
+      name: true,
+      rollNumber: true,
+      classId: true,
+      class: { select: { name: true, grade: true } },
+      section: { select: { name: true } },
+    },
+  });
+  students.sort(
+    (a, b) =>
+      a.class.grade - b.class.grade ||
+      a.class.name.localeCompare(b.class.name) ||
+      a.section.name.localeCompare(b.section.name) ||
+      compareRollNumbers(a.rollNumber, b.rollNumber),
+  );
+
+  const { expected, billedMonths, openingMonths } = await loadExpectedBills(
+    schoolId,
+    students,
+    months,
+  );
+  const isOpen = (studentId: string, period: string) => {
+    const covered = openingMonths.get(studentId);
+    return (
+      !billedMonths.has(`${studentId}|${period}`) &&
+      !(covered && period <= covered)
+    );
+  };
+
+  return {
+    months,
+    students: students
+      .filter((s) => months.some((period) => isOpen(s.id, period)))
+      .map((s) => ({
+        admissionNumber: s.admissionNumber,
+        name: s.name,
+        className: s.class.name,
+        section: s.section.name,
+        fees: months.map((period) => {
+          const lines = expected.get(`${s.id}|${period}`) ?? [];
+          const total = lines.reduce((sum, l) => sum + l.amount, 0);
+          return total > 0 ? Math.round(total * 100) / 100 : null;
+        }),
+      })),
+  };
 }
 
 async function loadContext(
   schoolId: string,
+  months: string[],
   rows: FeeHistoryRow[],
   calculateLateFees: boolean,
 ): Promise<HistoryContext> {
@@ -442,7 +504,13 @@ async function loadContext(
   const [students, school] = await Promise.all([
     prisma.student.findMany({
       where: { schoolId },
-      select: { id: true, admissionNumber: true, name: true, isActive: true },
+      select: {
+        id: true,
+        admissionNumber: true,
+        name: true,
+        isActive: true,
+        classId: true,
+      },
     }),
     prisma.school.findUnique({
       where: { id: schoolId },
@@ -455,38 +523,30 @@ async function loadContext(
       },
     }),
   ]);
-  const ids = students
-    .filter((s) => inFile.has(s.admissionNumber.trim().toLowerCase()))
-    .map((s) => s.id);
   const receipts = [
     ...new Set(rows.map((r) => r.receiptNo.trim()).filter(Boolean)),
   ];
-  const [charges, openings, used] = await Promise.all([
-    prisma.feeCharge.findMany({
-      where: { schoolId, studentId: { in: ids } },
-      select: { studentId: true, periodKey: true, dueDate: true },
-    }),
-    prisma.feeImportStudent.findMany({
-      where: { studentId: { in: ids } },
-      select: { studentId: true, import: { select: { asOfDate: true } } },
-    }),
+  const [{ expected, billedMonths, openingMonths }, used] = await Promise.all([
+    loadExpectedBills(
+      schoolId,
+      students.filter((s) =>
+        inFile.has(s.admissionNumber.trim().toLowerCase()),
+      ),
+      [...new Set([...months, ...rows.map((r) => r.period)])]
+        .filter(isPeriodKey)
+        .sort(),
+    ),
     prisma.paymentTransaction.findMany({
       where: { schoolId, receiptNo: { in: receipts } },
       select: { receiptNo: true },
     }),
   ]);
 
-  const billedMonths = new Set<string>();
-  for (const charge of charges) {
-    const period = billedPeriod(charge);
-    if (period) billedMonths.add(`${charge.studentId}|${period}`);
-  }
   return {
     students,
     billedMonths,
-    openingMonths: new Map(
-      openings.map((o) => [o.studentId, periodKeyFromDate(o.import.asOfDate)]),
-    ),
+    openingMonths,
+    expected,
     usedReceipts: new Set(used.map((p) => p.receiptNo.toLowerCase())),
     today: calendarDateInTimeZone(resolveTimeZone(school?.timezone)),
     lateFeeRule:
@@ -524,9 +584,12 @@ export async function checkFeeHistory(input: unknown): Promise<
   if (!parsed.success) return { error: "That file can't be read" };
 
   const [plan, sessions, components] = await Promise.all([
-    loadContext(schoolId, parsed.data.rows, parsed.data.calculateLateFees).then(
-      (context) => planFeeHistory(parsed.data.rows, context),
-    ),
+    loadContext(
+      schoolId,
+      parsed.data.months,
+      parsed.data.rows,
+      parsed.data.calculateLateFees,
+    ).then((context) => planFeeHistory(parsed.data.rows, context)),
     prisma.academicSession.findMany({ where: { schoolId } }),
     prisma.feeComponent.findMany({
       where: { schoolId },
@@ -700,7 +763,7 @@ export async function importFeeHistoryBatch(
 
   const parsed = BatchSchema.safeParse(input);
   if (!parsed.success) return { error: "That file can't be imported" };
-  const { importId, rows } = parsed.data;
+  const { importId, months, rows } = parsed.data;
 
   const record = await prisma.feeImport.findFirst({
     where: {
@@ -714,7 +777,12 @@ export async function importFeeHistoryBatch(
   if (!record) return { error: "This import isn't open" };
 
   try {
-    const context = await loadContext(schoolId, rows, record.calculateLateFees);
+    const context = await loadContext(
+      schoolId,
+      months,
+      rows,
+      record.calculateLateFees,
+    );
     const plan = planFeeHistory(rows, context);
     if (plan.problems.length > 0) return { error: plan.problems[0] };
 
@@ -781,14 +849,13 @@ export async function importFeeHistoryBatch(
       const date = new Date(`${payment.date}T12:00:00Z`);
       const receiptNo =
         payment.receiptNo ??
-        `IMP-${importId.slice(-6).toUpperCase()}-${payment.sheetRow}`;
+        `IMP-${importId.slice(-6).toUpperCase()}-${payment.sheetRow}-${payment.period}`;
       payments.push({
         id,
         schoolId,
         studentId: payment.studentId,
         amount: payment.amount,
         method: payment.method as any,
-        reference: payment.reference,
         receiptNo,
         date,
         // Kept with its date, so old payments don't fill "Recent Payments".

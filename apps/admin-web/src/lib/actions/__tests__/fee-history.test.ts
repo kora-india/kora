@@ -52,42 +52,53 @@ const signIn = (role = "SCHOOL_ADMIN") =>
 let nextRow = 2;
 const row = (
   name: string,
-  month: string,
+  period: string,
   over: Partial<FeeHistoryRow> = {},
 ): FeeHistoryRow => ({
   sheetRow: nextRow++,
   admissionNumber: adm(name),
-  month,
-  heads: { Tuition: "1000" },
+  period,
+  fees: "1000",
   lateFee: "",
-  discount: "",
   paid: "",
   paidOn: "",
   mode: "",
   receiptNo: "",
-  reference: "",
   ...over,
 });
+
+const monthsOf = (rows: FeeHistoryRow[]) =>
+  [...new Set(rows.map((r) => r.period))].sort();
 
 /** The whole upload, as the dialog does it. */
 async function importRows(
   rows: FeeHistoryRow[],
-  options: { calculateLateFees?: boolean; continueLateFees?: boolean } = {},
+  options: {
+    calculateLateFees?: boolean;
+    continueLateFees?: boolean;
+    months?: string[];
+  } = {},
 ) {
+  const { months = monthsOf(rows), ...choices } = options;
   const check = await checkFeeHistory({
+    months,
     rows,
     calculateLateFees: options.calculateLateFees,
   });
   if ("error" in check) throw new Error(check.error);
   expect(check.problems).toEqual([]);
   const started = await startFeeHistoryImport({
-    ...options,
+    ...choices,
     fileName: "history.xlsx",
     periods: check.periods,
     heads: check.heads,
   });
   if ("error" in started) throw new Error(started.error);
-  const batch = await importFeeHistoryBatch({ importId: started.id, rows });
+  const batch = await importFeeHistoryBatch({
+    importId: started.id,
+    months,
+    rows,
+  });
   if ("error" in batch) throw new Error(batch.error);
   const finished = await finishFeeHistoryImport(started.id);
   if ("error" in finished) throw new Error(finished.error);
@@ -233,13 +244,14 @@ describe("fee history import", () => {
   describe("access", () => {
     it.each(["ACCOUNTANT", "TEACHER"])("is closed to a %s", async (role) => {
       signIn(role);
-      const rows = [row("Asha", "Apr 2026")];
+      const rows = [row("Asha", "2026-04")];
+      const months = monthsOf(rows);
       for (const result of [
         await getFeeHistorySetup(),
         await getFeeHistoryTemplate({ from: "2026-04", to: "2026-05" }),
-        await checkFeeHistory({ rows }),
+        await checkFeeHistory({ months, rows }),
         await startFeeHistoryImport({ periods: [], heads: [] }),
-        await importFeeHistoryBatch({ importId: "x", rows }),
+        await importFeeHistoryBatch({ importId: "x", months, rows }),
         await finishFeeHistoryImport("x"),
       ]) {
         expect(result).toHaveProperty("error");
@@ -262,45 +274,45 @@ describe("fee history import", () => {
     const template = async (from = "2026-04", to = "2026-05") => {
       const res = await getFeeHistoryTemplate({ from, to });
       if ("error" in res) throw new Error(res.error);
-      const index = (name: string) => res.headers.indexOf(name);
       return {
         ...res,
-        cell: (student: string, month: string, header: string) =>
-          res.rows.find(
-            (r) => r[0] === adm(student) && r[index("Month")] === month,
-          )?.[index(header)],
+        fees: (student: string, month: string) =>
+          res.students.find((s) => s.admissionNumber === adm(student))?.fees[
+            res.months.indexOf(month)
+          ],
       };
     };
 
-    it("has a row per student per month, with the fee heads as columns", async () => {
-      const { headers, rows } = await template();
-      expect(headers).toEqual([
-        "Admission Number",
-        "Student Name",
-        "Class",
-        "Section",
-        "Month",
-        "Annual (₹)",
-        "Transport Fee (₹)",
-        "Tuition (₹)",
-        "Late Fee (₹)",
-        "Discount (₹)",
-        "Paid (₹)",
-        "Paid On",
-        "Mode",
-        "Receipt No",
-        "Reference",
-      ]);
-      expect(rows).toHaveLength(4);
-      for (const r of rows) expect(r).toHaveLength(headers.length);
+    const openingBalance = (asOfDate: string, charged: string[] = []) =>
+      importOpeningBalances({
+        asOfDate,
+        chargedComponentIds: charged,
+        rows: [
+          {
+            sheetRow: 2,
+            admissionNumber: adm("Asha"),
+            dues: "500",
+            advance: "",
+          },
+        ],
+      });
+
+    it("has a row per student and the months asked for", async () => {
+      const { months, students } = await template();
+      expect(months).toEqual(["2026-04", "2026-05"]);
+      expect(students).toHaveLength(2);
+      expect(students[0]).toMatchObject({
+        admissionNumber: adm("Asha"),
+        name: "Asha",
+        className: "Grade 5",
+        section: "A",
+      });
     });
 
-    it("fills in monthly fees every month and yearly fees once", async () => {
-      const { cell } = await template();
-      expect(cell("Asha", "Apr 2026", "Tuition (₹)")).toBe("1000");
-      expect(cell("Asha", "May 2026", "Tuition (₹)")).toBe("1000");
-      expect(cell("Asha", "Apr 2026", "Annual (₹)")).toBe("3000");
-      expect(cell("Asha", "May 2026", "Annual (₹)")).toBe("");
+    it("adds up each month, with yearly fees in the first one only", async () => {
+      const { fees } = await template();
+      expect(fees("Asha", "2026-04")).toBe(4000);
+      expect(fees("Asha", "2026-05")).toBe(1000);
     });
 
     it("uses each student's concessions", async () => {
@@ -320,9 +332,9 @@ describe("fee history import", () => {
           isExempt: true,
         },
       });
-      const { cell } = await template();
-      expect(cell("Asha", "Apr 2026", "Tuition (₹)")).toBe("800");
-      expect(cell("Kabir", "Apr 2026", "Annual (₹)")).toBe("");
+      const { fees } = await template();
+      expect(fees("Asha", "2026-04")).toBe(3800);
+      expect(fees("Kabir", "2026-04")).toBe(1000);
     });
 
     it("adds transport from the month the student started", async () => {
@@ -348,41 +360,38 @@ describe("fee history import", () => {
           startDate: new Date("2026-05-01"),
         },
       });
-      const { cell } = await template();
-      expect(cell("Asha", "Apr 2026", "Transport Fee (₹)")).toBe("");
-      expect(cell("Asha", "May 2026", "Transport Fee (₹)")).toBe("800");
+      const { fees } = await template();
+      expect(fees("Asha", "2026-04")).toBe(4000);
+      expect(fees("Asha", "2026-05")).toBe(1800);
       await prisma.studentTransport.deleteMany({ where: { schoolId } });
       await prisma.transportRoute.delete({ where: { id: route.id } });
     });
 
-    it("leaves out months already billed", async () => {
+    it("leaves months already billed blank, without repeating a yearly fee", async () => {
       await generate("2026-04");
-      const { rows } = await template();
-      expect(rows.map((r) => r[4])).toEqual(["May 2026", "May 2026"]);
+      const { fees } = await template();
+      expect(fees("Asha", "2026-04")).toBeNull();
+      expect(fees("Asha", "2026-05")).toBe(1000);
     });
 
-    it("doesn't repeat a yearly fee billed already", async () => {
-      await generate("2026-04");
-      const { cell } = await template();
-      expect(cell("Asha", "May 2026", "Annual (₹)")).toBe("");
+    it("leaves months inside an opening balance blank", async () => {
+      await openingBalance("2026-04-30");
+      const { fees } = await template();
+      expect(fees("Asha", "2026-04")).toBeNull();
+      expect(fees("Kabir", "2026-04")).toBe(4000);
     });
 
-    it("leaves out months inside an opening balance", async () => {
-      await importOpeningBalances({
-        asOfDate: "2026-04-30",
-        rows: [
-          {
-            sheetRow: 2,
-            admissionNumber: adm("Asha"),
-            dues: "500",
-            advance: "",
-          },
-        ],
-      });
-      const { rows } = await template();
-      expect(rows.filter((r) => r[0] === adm("Asha")).map((r) => r[4])).toEqual(
-        ["May 2026"],
-      );
+    it("doesn't repeat a yearly fee an opening balance already charged", async () => {
+      await openingBalance("2026-04-30", [annualId]);
+      const { fees } = await template();
+      expect(fees("Asha", "2026-05")).toBe(1000);
+      expect(fees("Kabir", "2026-05")).toBe(1000);
+    });
+
+    it("leaves out a student with nothing left to bring in", async () => {
+      await openingBalance("2026-05-31");
+      const { students } = await template();
+      expect(students.map((s) => s.name)).toEqual(["Kabir"]);
     });
 
     it("refuses months that can't be listed", async () => {
@@ -403,9 +412,10 @@ describe("fee history import", () => {
   describe("check", () => {
     it("reports what importing would do, and saves nothing", async () => {
       const res = await checkFeeHistory({
+        months: ["2025-04"],
         rows: [
-          row("Asha", "Apr 2025", {
-            heads: { Tuition: "1000", "Old Library": "50" },
+          row("Asha", "2025-04", {
+            fees: "1050",
             lateFee: "100",
             paid: "800",
             paidOn: "05/04/2025",
@@ -415,7 +425,7 @@ describe("fee history import", () => {
       expect(res).toMatchObject({
         success: true,
         problems: [],
-        newHeads: ["Old Library"],
+        newHeads: ["Other Fees"],
         newSessions: ["2025-26"],
       });
       expect("totals" in res && res.totals).toMatchObject({
@@ -424,6 +434,7 @@ describe("fee history import", () => {
         paid: 800,
         dues: 350,
         lateFees: 100,
+        otherFees: 1050,
       });
       expect(await prisma.feeCharge.count({ where: { schoolId } })).toBe(0);
       expect(await prisma.academicSession.count({ where: { schoolId } })).toBe(
@@ -435,9 +446,9 @@ describe("fee history import", () => {
   describe("import", () => {
     it("makes real bills with the right status, due on the 10th", async () => {
       await importRows([
-        row("Asha", "Apr 2026", { paid: "1000", paidOn: "05/04/2026" }),
-        row("Asha", "May 2026", { paid: "400", paidOn: "05/05/2026" }),
-        row("Asha", "Jun 2026"),
+        row("Asha", "2026-04", { paid: "1000", paidOn: "05/04/2026" }),
+        row("Asha", "2026-05", { paid: "400", paidOn: "05/05/2026" }),
+        row("Asha", "2026-06"),
       ]);
 
       const april = await billOrThrow(ids.Asha, "2026-04");
@@ -457,14 +468,13 @@ describe("fee history import", () => {
 
     it("keeps old receipts, and makes one where there was none", async () => {
       const { id } = await importRows([
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1000",
           paidOn: "05/04/2026",
           mode: "UPI",
           receiptNo: "OLD-1042",
-          reference: "UTR99",
         }),
-        row("Asha", "May 2026", { paid: "1000", paidOn: "05/05/2026" }),
+        row("Asha", "2026-05", { paid: "1000", paidOn: "05/05/2026" }),
       ]);
 
       const old = await prisma.paymentTransaction.findFirstOrThrow({
@@ -473,7 +483,6 @@ describe("fee history import", () => {
       });
       expect(old).toMatchObject({
         method: "UPI",
-        reference: "UTR99",
         status: "SUCCESS",
         importId: id,
         collectedById: null,
@@ -489,7 +498,7 @@ describe("fee history import", () => {
 
     it("keeps old payments out of Recent Payments", async () => {
       await importRows([
-        row("Asha", "Apr 2026", { paid: "1000", paidOn: "05/04/2026" }),
+        row("Asha", "2026-04", { paid: "1000", paidOn: "05/04/2026" }),
       ]);
       const payment = await prisma.paymentTransaction.findFirstOrThrow({
         where: { schoolId },
@@ -499,12 +508,12 @@ describe("fee history import", () => {
 
     it("puts each month's late fee on the school's Late Fee head", async () => {
       await importRows([
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           lateFee: "150",
           paid: "1150",
           paidOn: "20/04/2026",
         }),
-        row("Asha", "May 2026", {
+        row("Asha", "2026-05", {
           lateFee: "75",
           paid: "1000",
           paidOn: "20/05/2026",
@@ -533,17 +542,17 @@ describe("fee history import", () => {
 
     it("works blank late fees out from the rule when asked", async () => {
       const res = await importRows(
-        [row("Asha", "Apr 2026", { paid: "1000", paidOn: "20/04/2026" })],
+        [row("Asha", "2026-04", { paid: "1000", paidOn: "20/04/2026" })],
         { calculateLateFees: true },
       );
       expect(res.lateFees).toBe(100);
       expect(res.dues).toBe(100);
     });
 
-    it("nets a discount and holds an overpayment as advance", async () => {
+    it("takes a lower total off the bill and holds an overpayment as advance", async () => {
       const res = await importRows([
-        row("Asha", "Apr 2026", {
-          discount: "200",
+        row("Asha", "2026-04", {
+          fees: "800",
           paid: "1000",
           paidOn: "05/04/2026",
           receiptNo: "R-5",
@@ -561,16 +570,59 @@ describe("fee history import", () => {
       expect(res.advance).toBe(200);
     });
 
+    it("splits a month's total across the fee structure's heads", async () => {
+      await importRows([row("Asha", "2026-04", { fees: "4000" })]);
+      const april = await billOrThrow(ids.Asha, "2026-04");
+      expect(
+        april.items.map((i) => [i.component.name, Number(i.amount)]).sort(),
+      ).toEqual([
+        ["Annual", 3000],
+        ["Tuition", 1000],
+      ]);
+    });
+
+    it("puts fees above the structure under Other Fees", async () => {
+      await importRows([row("Asha", "2026-05", { fees: "4500" })]);
+      const may = await billOrThrow(ids.Asha, "2026-05");
+      const other = may.items.find((i) => i.component.name === "Other Fees");
+      expect(Number(other?.amount)).toBe(500);
+    });
+
+    it("keeps a yearly fee in its own month when that month is blank", async () => {
+      await importRows([row("Asha", "2026-05", { fees: "1200" })], {
+        months: ["2026-04", "2026-05"],
+      });
+      const may = await billOrThrow(ids.Asha, "2026-05");
+      expect(
+        may.items.map((i) => [i.component.name, Number(i.amount)]).sort(),
+      ).toEqual([
+        ["Other Fees", 200],
+        ["Tuition", 1000],
+      ]);
+    });
+
+    it("saves each month of a row with no receipts as its own payment", async () => {
+      const sheetRow = nextRow++;
+      const paid = { sheetRow, paid: "1000", paidOn: "05/06/2026" };
+      await importRows([
+        row("Asha", "2026-04", paid),
+        row("Asha", "2026-05", paid),
+      ]);
+      expect(
+        await prisma.paymentTransaction.count({ where: { schoolId } }),
+      ).toBe(2);
+    });
+
     it("adds what the file needs, switched off so it's never billed", async () => {
       await importRows([
-        row("Asha", "Jun 2025", {
-          heads: { "Old Library": "50" },
+        row("Asha", "2025-06", {
+          fees: "50",
           paid: "50",
           paidOn: "05/06/2025",
         }),
       ]);
       const head = await prisma.feeComponent.findFirstOrThrow({
-        where: { schoolId, name: "Old Library" },
+        where: { schoolId, name: "Other Fees" },
       });
       expect(head.isActive).toBe(false);
       const past = await prisma.academicSession.findFirstOrThrow({
@@ -584,8 +636,8 @@ describe("fee history import", () => {
 
     it("records its totals and logs once", async () => {
       await importRows([
-        row("Asha", "Apr 2026", { paid: "400", paidOn: "05/04/2026" }),
-        row("Kabir", "Apr 2026", { lateFee: "50" }),
+        row("Asha", "2026-04", { paid: "400", paidOn: "05/04/2026" }),
+        row("Kabir", "2026-04", { lateFee: "50" }),
       ]);
       const setup = await getFeeHistorySetup();
       if ("error" in setup) throw new Error(setup.error);
@@ -608,14 +660,14 @@ describe("fee history import", () => {
 
     it("adds nothing when the same file is uploaded again", async () => {
       const rows = [
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1000",
           paidOn: "05/04/2026",
           receiptNo: "R-1",
         }),
       ];
       await importRows(rows);
-      const again = await checkFeeHistory({ rows });
+      const again = await checkFeeHistory({ months: monthsOf(rows), rows });
       expect(again).toMatchObject({ problems: [] });
       expect("totals" in again && again.totals).toMatchObject({
         bills: 0,
@@ -626,15 +678,23 @@ describe("fee history import", () => {
     });
 
     it("saves across batches under one import", async () => {
-      const first = [row("Asha", "Apr 2026")];
-      const second = [row("Kabir", "Apr 2026")];
+      const first = [row("Asha", "2026-04")];
+      const second = [row("Kabir", "2026-04")];
       const started = await startFeeHistoryImport({
         periods: ["2026-04"],
         heads: ["Tuition"],
       });
       if ("error" in started) throw new Error(started.error);
-      await importFeeHistoryBatch({ importId: started.id, rows: first });
-      await importFeeHistoryBatch({ importId: started.id, rows: second });
+      await importFeeHistoryBatch({
+        importId: started.id,
+        months: ["2026-04"],
+        rows: first,
+      });
+      await importFeeHistoryBatch({
+        importId: started.id,
+        months: ["2026-04"],
+        rows: second,
+      });
       const done = await finishFeeHistoryImport(started.id);
       expect(done).toMatchObject({ students: 2, bills: 2, billed: 2000 });
     });
@@ -647,18 +707,20 @@ describe("fee history import", () => {
       if ("error" in started) throw new Error(started.error);
       const res = await importFeeHistoryBatch({
         importId: started.id,
-        rows: [row("Asha", "Apr 2026"), row("Nobody", "Apr 2026")],
+        months: ["2026-04"],
+        rows: [row("Asha", "2026-04"), row("Nobody", "2026-04")],
       });
       expect(res).toHaveProperty("error");
       expect(await prisma.feeCharge.count({ where: { schoolId } })).toBe(0);
     });
 
     it("won't add to a finished import", async () => {
-      const { id } = await importRows([row("Asha", "Apr 2026")]);
+      const { id } = await importRows([row("Asha", "2026-04")]);
       expect(
         await importFeeHistoryBatch({
           importId: id,
-          rows: [row("Asha", "May 2026")],
+          months: ["2026-05"],
+          rows: [row("Asha", "2026-05")],
         }),
       ).toEqual({ error: "This import isn't open" });
     });
@@ -672,7 +734,7 @@ describe("fee history import", () => {
       const months = Array.from({ length: 60 }, (_, i) =>
         row(
           "Asha",
-          `${String((i % 12) + 1).padStart(2, "0")}/${2021 + Math.floor(i / 12)}`,
+          `${2021 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`,
           {
             paid: "1000",
             paidOn: "05/04/2025",
@@ -686,7 +748,7 @@ describe("fee history import", () => {
       });
       expect(school.nextReceiptNumber).toBe(61);
 
-      const open = await importRows([row("Kabir", "Apr 2026")]);
+      const open = await importRows([row("Kabir", "2026-04")]);
       expect(open.bills).toBe(1);
       const dues = await billOrThrow(ids.Kabir, "2026-04");
       const paid = await allocatePayment({
@@ -699,7 +761,7 @@ describe("fee history import", () => {
 
     it("leaves the counter alone for receipts in another format", async () => {
       await importRows([
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1000",
           paidOn: "05/04/2026",
           receiptNo: "OLD-99999",
@@ -713,7 +775,7 @@ describe("fee history import", () => {
 
     it("can be reopened, marked as imported", async () => {
       await importRows([
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1000",
           paidOn: "05/04/2026",
           receiptNo: "OLD-7",
@@ -732,8 +794,8 @@ describe("fee history import", () => {
   describe("reports", () => {
     beforeEach(async () => {
       await importRows([
-        row("Asha", "Apr 2026", { paid: "1000", paidOn: "05/04/2026" }),
-        row("Kabir", "Apr 2026"),
+        row("Asha", "2026-04", { paid: "1000", paidOn: "05/04/2026" }),
+        row("Kabir", "2026-04"),
       ]);
     });
 
@@ -758,11 +820,7 @@ describe("fee history import", () => {
 
   describe("afterwards", () => {
     it("doesn't bill those months or their yearly fees again", async () => {
-      await importRows([
-        row("Asha", "Apr 2026", {
-          heads: { Tuition: "1000", Annual: "3000" },
-        }),
-      ]);
+      await importRows([row("Asha", "2026-04", { fees: "4000" })]);
       await generate("2026-04");
       await generate("2026-05");
 
@@ -773,7 +831,7 @@ describe("fee history import", () => {
     });
 
     it("collects an unpaid month like any other bill", async () => {
-      await importRows([row("Asha", "Apr 2026", { lateFee: "100" })]);
+      await importRows([row("Asha", "2026-04", { lateFee: "100" })]);
       const dues = await billOrThrow(ids.Asha, "2026-04");
 
       const paid = await allocatePayment({
@@ -795,8 +853,8 @@ describe("fee history import", () => {
 
     it("stay as the file has them unless the school asks", async () => {
       await importRows([
-        row("Asha", "Apr 2026"),
-        row("Asha", "May 2026", { lateFee: "40" }),
+        row("Asha", "2026-04"),
+        row("Asha", "2026-05", { lateFee: "40" }),
       ]);
 
       expect((await runLateFees()).status).toBe(200);
@@ -807,7 +865,7 @@ describe("fee history import", () => {
 
     it("keep running on unpaid months when the school asks", async () => {
       await importRows(
-        [row("Asha", "Apr 2026"), row("Asha", "May 2026", { lateFee: "40" })],
+        [row("Asha", "2026-04"), row("Asha", "2026-05", { lateFee: "40" })],
         { continueLateFees: true },
       );
 
@@ -819,7 +877,7 @@ describe("fee history import", () => {
 
     it("never touch a month that's been paid", async () => {
       await importRows(
-        [row("Asha", "Apr 2026", { paid: "1000", paidOn: "05/04/2026" })],
+        [row("Asha", "2026-04", { paid: "1000", paidOn: "05/04/2026" })],
         { continueLateFees: true },
       );
 
@@ -829,7 +887,7 @@ describe("fee history import", () => {
     });
 
     it("stop when the import is undone", async () => {
-      const { id } = await importRows([row("Asha", "Apr 2026")], {
+      const { id } = await importRows([row("Asha", "2026-04")], {
         continueLateFees: true,
       });
       await undoFeeImport(id);
@@ -854,7 +912,8 @@ describe("fee history import", () => {
         ],
       });
       const res = await checkFeeHistory({
-        rows: [row("Asha", "Apr 2026"), row("Asha", "Jun 2026")],
+        months: ["2026-04", "2026-06"],
+        rows: [row("Asha", "2026-04"), row("Asha", "2026-06")],
       });
       expect("totals" in res && res.totals).toMatchObject({
         bills: 1,
@@ -866,7 +925,7 @@ describe("fee history import", () => {
   describe("undo", () => {
     it("removes the bills, payments and advances", async () => {
       const { id } = await importRows([
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1500",
           paidOn: "05/04/2026",
           receiptNo: "R-1",
@@ -890,7 +949,7 @@ describe("fee history import", () => {
 
     it("lets the file be imported again afterwards", async () => {
       const rows = [
-        row("Asha", "Apr 2026", {
+        row("Asha", "2026-04", {
           paid: "1000",
           paidOn: "05/04/2026",
           receiptNo: "R-1",
@@ -902,7 +961,7 @@ describe("fee history import", () => {
     });
 
     it("is refused once someone pays towards an imported bill", async () => {
-      const { id } = await importRows([row("Asha", "Apr 2026")]);
+      const { id } = await importRows([row("Asha", "2026-04")]);
       const dues = await billOrThrow(ids.Asha, "2026-04");
       await allocatePayment({
         studentId: ids.Asha,
@@ -919,7 +978,7 @@ describe("fee history import", () => {
 
     it("is refused once an imported advance has been used", async () => {
       const { id } = await importRows([
-        row("Asha", "Apr 2026", { paid: "1500", paidOn: "05/04/2026" }),
+        row("Asha", "2026-04", { paid: "1500", paidOn: "05/04/2026" }),
       ]);
       await generate("2026-05");
 
@@ -934,7 +993,8 @@ describe("fee history import", () => {
       if ("error" in started) throw new Error(started.error);
       await importFeeHistoryBatch({
         importId: started.id,
-        rows: [row("Asha", "Apr 2026")],
+        months: ["2026-04"],
+        rows: [row("Asha", "2026-04")],
       });
 
       const setup = await getFeeHistorySetup();

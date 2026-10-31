@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ImportHistoryDialog } from "../import-history-dialog";
+import { historyHeaders } from "@/lib/fees/fee-history";
 
 const mocks = vi.hoisted(() => ({
   getFeeHistorySetup: vi.fn(),
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   importFeeHistoryBatch: vi.fn(),
   finishFeeHistoryImport: vi.fn(),
   undoFeeImport: vi.fn(),
-  writeFile: vi.fn(),
+  downloadHistoryTemplate: vi.fn(),
   refresh: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -33,9 +34,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
-vi.mock("xlsx", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("xlsx")>()),
-  writeFile: mocks.writeFile,
+vi.mock("@/lib/fees/fee-history-template", () => ({
+  downloadHistoryTemplate: mocks.downloadHistoryTemplate,
 }));
 
 const setup = {
@@ -53,6 +53,7 @@ const totals = {
   billed: 2150,
   lateFees: 150,
   discounts: 0,
+  otherFees: 0,
   paid: 1000,
   dues: 1150,
   advance: 0,
@@ -88,13 +89,11 @@ const past = {
   finished: true,
 };
 
-const HEADER =
-  "Admission Number,Student Name,Class,Section,Month,Tuition Fee (₹),Late Fee (₹),Discount (₹),Paid (₹),Paid On,Mode,Receipt No,Reference";
+const HEADER = historyHeaders(["2026-04", "2026-05"]).join(",");
 const FILLED = [
   HEADER,
-  "ADM-1,Tanvi Shah,Class 1,B,Apr 2026,1000,,,1000,05/04/2026,Cash,R-1,",
-  "ADM-1,Tanvi Shah,Class 1,B,May 2026,1000,150,,,,,,",
-  "ADM-2,Yash Roy,Class 1,B,Apr 2026,,,,,,,,",
+  "ADM-1,Tanvi Shah,Class 1,B,1000,,1000,05/04/2026,Cash,R-1,1000,150,,,,",
+  "ADM-2,Yash Roy,Class 1,B,,,,,,,,,,,,",
 ].join("\n");
 
 const csv = (contents: string) =>
@@ -149,50 +148,43 @@ describe("ImportHistoryDialog", () => {
 
     expect(await screen.findByLabelText("From")).toHaveValue("2026-04");
     expect(screen.getByLabelText("To")).toHaveValue("2026-10");
-    expect(screen.getByText(/800 students for each of 7 months/)).toBeVisible();
+    expect(
+      screen.getByText(/800 students, with a group of columns for each of 7/),
+    ).toBeVisible();
   });
 
-  it("downloads a template with amounts as numbers and months as text", async () => {
-    mocks.getFeeHistoryTemplate.mockResolvedValue({
-      headers: HEADER.split(","),
-      rows: [
-        [
-          "0042",
-          "Tanvi Shah",
-          "Class 1",
-          "B",
-          "Apr 2026",
-          "1000",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-        ],
+  it("downloads the template the server filled in", async () => {
+    const template = {
+      months: ["2026-04"],
+      students: [
+        {
+          admissionNumber: "0042",
+          name: "Tanvi Shah",
+          className: "Class 1",
+          section: "B",
+          fees: [1000],
+        },
       ],
-    });
+    };
+    mocks.getFeeHistoryTemplate.mockResolvedValue(template);
     const user = renderDialog();
 
     await user.click(await screen.findByText("Download Template"));
 
-    await waitFor(() => expect(mocks.writeFile).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mocks.downloadHistoryTemplate).toHaveBeenCalledWith(template),
+    );
     expect(mocks.getFeeHistoryTemplate).toHaveBeenCalledWith({
       from: "2026-04",
       to: "2026-10",
     });
-    const [book, name] = mocks.writeFile.mock.calls[0];
-    expect(name).toBe("fee-history-template.xlsx");
-    expect(book.SheetNames).toEqual(["Fee History", "Instructions"]);
-    const sheet = book.Sheets["Fee History"];
-    expect(sheet.A2).toMatchObject({ v: "0042", t: "s", z: "@" });
-    expect(sheet.E2).toMatchObject({ v: "Apr 2026", t: "s", z: "@" });
-    expect(sheet.F2).toMatchObject({ v: 1000, t: "n" });
   });
 
   it("says when there's nothing left to fill in", async () => {
-    mocks.getFeeHistoryTemplate.mockResolvedValue({ headers: [], rows: [] });
+    mocks.getFeeHistoryTemplate.mockResolvedValue({
+      months: ["2026-04"],
+      students: [],
+    });
     const user = renderDialog();
 
     await user.click(await screen.findByText("Download Template"));
@@ -202,7 +194,7 @@ describe("ImportHistoryDialog", () => {
         "Every student already has bills for these months",
       ),
     );
-    expect(mocks.writeFile).not.toHaveBeenCalled();
+    expect(mocks.downloadHistoryTemplate).not.toHaveBeenCalled();
   });
 
   it("offers the late-fee choices when the school has a rule", async () => {
@@ -248,18 +240,25 @@ describe("ImportHistoryDialog", () => {
 
     const sent = mocks.checkFeeHistory.mock.calls[0][0];
     expect(sent.calculateLateFees).toBe(true);
-    // The blank row isn't sent, and neither are names.
+    expect(sent.months).toEqual(["2026-04", "2026-05"]);
+    // Each filled month is a row. Blank students aren't sent, nor are names.
     expect(sent.rows).toHaveLength(2);
-    expect(sent.rows[0]).toMatchObject({
+    expect(sent.rows[0]).toEqual({
       sheetRow: 2,
       admissionNumber: "ADM-1",
-      month: "Apr 2026",
-      heads: { "Tuition Fee": "1000" },
+      period: "2026-04",
+      fees: "1000",
+      lateFee: "",
       paid: "1000",
+      paidOn: "05/04/2026",
       mode: "Cash",
       receiptNo: "R-1",
     });
-    expect(sent.rows[1]).toMatchObject({ sheetRow: 3, lateFee: "150" });
+    expect(sent.rows[1]).toMatchObject({
+      sheetRow: 2,
+      period: "2026-05",
+      lateFee: "150",
+    });
     expect(JSON.stringify(sent)).not.toContain("Tanvi");
 
     await user.click(importButton);
@@ -274,6 +273,7 @@ describe("ImportHistoryDialog", () => {
     });
     expect(mocks.importFeeHistoryBatch).toHaveBeenCalledWith({
       importId: "import-2",
+      months: ["2026-04", "2026-05"],
       rows: sent.rows,
     });
     expect(mocks.finishFeeHistoryImport).toHaveBeenCalledWith("import-2");
@@ -282,22 +282,9 @@ describe("ImportHistoryDialog", () => {
   });
 
   it("sends a big file in batches and adds up their totals", async () => {
-    const rows = Array.from({ length: 1500 }, (_, i) =>
-      [
-        `ADM-${i}`,
-        "Name",
-        "Class 1",
-        "A",
-        "Apr 2026",
-        "1000",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-      ].join(","),
+    const rows = Array.from(
+      { length: 1500 },
+      (_, i) => `ADM-${i},Name,Class 1,A,1000,,,,,,,,,,,`,
     );
     await uploadFile([HEADER, ...rows].join("\n"));
 
@@ -336,16 +323,14 @@ describe("ImportHistoryDialog", () => {
 
     await waitFor(() =>
       expect(mocks.toast.error).toHaveBeenCalledWith(
-        expect.stringContaining("no Admission Number, Month, Paid column"),
+        expect.stringContaining("no Admission Number column or month columns"),
       ),
     );
     expect(mocks.checkFeeHistory).not.toHaveBeenCalled();
   });
 
   it("turns away a file with nothing in it", async () => {
-    await uploadFile(
-      [HEADER, "ADM-1,Tanvi,Class 1,B,Apr 2026,,,,,,,,"].join("\n"),
-    );
+    await uploadFile([HEADER, "ADM-1,Tanvi,Class 1,B,,,,,,,,,,,,"].join("\n"));
 
     await waitFor(() =>
       expect(mocks.toast.error).toHaveBeenCalledWith(
@@ -359,17 +344,20 @@ describe("ImportHistoryDialog", () => {
       ...clean,
       problems: [
         'Row 12: Mode "Barter" isn\'t one we know',
-        "Row 3: Asha has April 2026 twice with fee amounts.",
+        'Row 3, April 2026: Fees "abc" isn\'t a valid amount',
+        'Row 3, May 2026: Fees "xyz" isn\'t a valid amount',
       ],
     });
     await uploadFile();
 
     const alert = await screen.findByRole("alert");
+    // Two rows, even with two months wrong on one of them.
     expect(alert).toHaveTextContent("Fix 2 rows and upload the file again");
     expect(alert).toHaveTextContent("Nothing has been saved");
     const items = alert.querySelectorAll("li");
-    expect(items[0]).toHaveTextContent("Row 3:");
-    expect(items[1]).toHaveTextContent("Row 12:");
+    expect(items[0]).toHaveTextContent("Row 3, April 2026:");
+    expect(items[1]).toHaveTextContent("Row 3, May 2026:");
+    expect(items[2]).toHaveTextContent("Row 12:");
     expect(
       screen.getByRole("button", { name: "Import 2 bills" }),
     ).toBeDisabled();
@@ -379,13 +367,13 @@ describe("ImportHistoryDialog", () => {
     await uploadFile(
       [
         HEADER,
-        "ADM-1,A,Class 1,B,Apr 2026,1000,,,1000,05/04/2026,Cash,R-1,",
-        "ADM-2,B,Class 1,B,Apr 2026,1000,,,1000,05/04/2026,Cash,R-1,",
+        "ADM-1,A,Class 1,B,1000,,1000,05/04/2026,Cash,R-1,,,,,,",
+        "ADM-2,B,Class 1,B,1000,,1000,05/04/2026,Cash,R-1,,,,,,",
       ].join("\n"),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Row 3: Receipt R-1 is also used for another student",
+      "Row 3, April 2026: Receipt R-1 is also used for another student",
     );
   });
 
@@ -397,6 +385,8 @@ describe("ImportHistoryDialog", () => {
         alreadyBilled: 3,
         inOpeningBalance: 1,
         undatedPayments: 2,
+        discounts: 1200,
+        otherFees: 300,
       },
       newHeads: ["Old Library"],
       newSessions: ["2025-26"],
@@ -406,6 +396,8 @@ describe("ImportHistoryDialog", () => {
     expect(await screen.findByText(/3 months already have/)).toBeVisible();
     expect(screen.getByText(/1 month is inside an opening/)).toBeVisible();
     expect(screen.getByText(/2 payments have no Paid On/)).toBeVisible();
+    expect(screen.getByText(/₹1,200 of fees are below/)).toBeVisible();
+    expect(screen.getByText(/₹300 of fees are above/)).toBeVisible();
     expect(screen.getByText(/Old Library/)).toBeVisible();
     expect(
       screen.getByText(/Past sessions will be added: 2025-26/),

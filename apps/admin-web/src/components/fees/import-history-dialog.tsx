@@ -27,15 +27,15 @@ import {
   type FeeHistorySummary,
 } from "@/lib/actions/fee-history";
 import {
-  HISTORY_TEMPLATE_INSTRUCTIONS,
   batchHistoryRows,
   findHistoryColumns,
   findSharedReceipts,
   monthsBetween,
-  toHistoryRow,
+  toHistoryRows,
   type FeeHistoryRow,
   type HistoryTotals,
 } from "@/lib/fees/fee-history";
+import { downloadHistoryTemplate } from "@/lib/fees/fee-history-template";
 import { readSpreadsheet } from "@/lib/read-spreadsheet";
 import {
   ImportNotice as Notice,
@@ -70,6 +70,7 @@ const emptyTotals: HistoryTotals = {
   billed: 0,
   lateFees: 0,
   discounts: 0,
+  otherFees: 0,
   paid: 0,
   dues: 0,
   advance: 0,
@@ -88,40 +89,6 @@ const addTotals = (a: HistoryTotals, b: HistoryTotals) =>
 
 const rowOf = (problem: string) => Number(/^Row (\d+)/.exec(problem)?.[1] ?? 0);
 
-/** The pre-filled template, as an Excel file the browser downloads. */
-async function downloadTemplate(headers: string[], rows: string[][]) {
-  const { utils, writeFile } = await import("xlsx");
-  // Fee amounts sit between Month and Late Fee; Excel adds up numbers.
-  const firstAmount = headers.indexOf("Month") + 1;
-  const lastAmount = headers.indexOf("Paid On");
-  const sheet = utils.aoa_to_sheet([
-    headers,
-    ...rows.map((row) =>
-      row.map((cell, column) =>
-        cell && column >= firstAmount && column < lastAmount
-          ? Number(cell)
-          : cell,
-      ),
-    ),
-  ]);
-  // Text cells, so Excel doesn't turn "Apr 2026" into a date of its own.
-  for (let row = 2; row <= rows.length + 1; row++) {
-    for (const column of ["A", "E"]) {
-      const cell = sheet[`${column}${row}`];
-      if (cell) cell.z = "@";
-    }
-  }
-  sheet["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 2, 12) }));
-  const book = utils.book_new();
-  utils.book_append_sheet(book, sheet, "Fee History");
-  utils.book_append_sheet(
-    book,
-    utils.aoa_to_sheet(HISTORY_TEMPLATE_INSTRUCTIONS.map((line) => [line])),
-    "Instructions",
-  );
-  writeFile(book, "fee-history-template.xlsx");
-}
-
 export function ImportHistoryDialog({
   open,
   onOpenChange,
@@ -136,6 +103,7 @@ export function ImportHistoryDialog({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [rows, setRows] = useState<FeeHistoryRow[]>([]);
+  const [fileMonths, setFileMonths] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
   const [check, setCheck] = useState<FileCheck | null>(null);
   const [result, setResult] = useState<Finished | null>(null);
@@ -173,9 +141,9 @@ export function ImportHistoryDialog({
     try {
       const res = await getFeeHistoryTemplate({ from, to });
       if ("error" in res) toast.error(res.error);
-      else if (res.rows.length === 0) {
+      else if (res.students.length === 0) {
         toast.error("Every student already has bills for these months");
-      } else await downloadTemplate(res.headers, res.rows);
+      } else await downloadHistoryTemplate(res);
     } catch {
       toast.error("Couldn't create the template");
     } finally {
@@ -192,13 +160,14 @@ export function ImportHistoryDialog({
       const columns = findHistoryColumns(sheet.headers);
       if ("missing" in columns) {
         toast.error(
-          `This isn't the template: no ${columns.missing.join(", ")} column. Download the template and fill that in.`,
+          `This isn't the template: no ${columns.missing.join(" or ")}. Download the template and fill that in.`,
         );
         return;
       }
-      const fileRows = sheet.rows
-        .map(({ cells, sheetRow }) => toHistoryRow(cells, sheetRow, columns))
-        .filter((row): row is FeeHistoryRow => row !== null);
+      const fileRows = sheet.rows.flatMap(({ cells, sheetRow }) =>
+        toHistoryRows(cells, sheetRow, columns),
+      );
+      const months = columns.months.map((m) => m.period);
       if (fileRows.length === 0) {
         toast.error("This file has no fee amounts or payments in it");
         return;
@@ -215,7 +184,11 @@ export function ImportHistoryDialog({
       const batches = batchHistoryRows(fileRows, BATCH_SIZE);
       for (const [index, batch] of batches.entries()) {
         setProgress(`Checking ${index + 1} of ${batches.length}`);
-        const res = await checkFeeHistory({ rows: batch, calculateLateFees });
+        const res = await checkFeeHistory({
+          months,
+          rows: batch,
+          calculateLateFees,
+        });
         if ("error" in res) {
           toast.error(res.error);
           return;
@@ -228,6 +201,7 @@ export function ImportHistoryDialog({
         merged.periods.push(...res.periods);
       }
       setRows(fileRows);
+      setFileMonths(months);
       setFileName(file.name);
       setCheck({
         ...merged,
@@ -269,7 +243,11 @@ export function ImportHistoryDialog({
       const batches = batchHistoryRows(rows, BATCH_SIZE);
       for (const [index, batch] of batches.entries()) {
         setProgress(`Importing ${index + 1} of ${batches.length}`);
-        const res = await importFeeHistoryBatch({ importId, rows: batch });
+        const res = await importFeeHistoryBatch({
+          importId,
+          months: fileMonths,
+          rows: batch,
+        });
         if ("error" in res) throw new Error(res.error);
       }
       const finished = await finishFeeHistoryImport(importId);
@@ -311,6 +289,7 @@ export function ImportHistoryDialog({
         : ""
     : "";
   const monthCount = from && to ? monthsBetween(from, to).length : 0;
+  const problemRows = new Set(check?.problems.map(rowOf)).size;
 
   return (
     <>
@@ -359,16 +338,17 @@ export function ImportHistoryDialog({
               {monthCount > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   One row for each of your{" "}
-                  {plural(setup.studentCount, "student")} for each of{" "}
-                  {plural(monthCount, "month")}.
+                  {plural(setup.studentCount, "student")}, with a group of
+                  columns for each of {plural(monthCount, "month")}.
                 </p>
               )}
             </Step>
 
             <Step number={2} title="Download the template">
               <p className="text-xs text-muted-foreground mb-2">
-                Fee amounts are filled in from your fee structure. Fill in what
-                was paid, and change anything that&apos;s different.
+                Each month&apos;s fees are filled in from your fee structure.
+                Fill in what was paid, and change anything that&apos;s
+                different.
               </p>
               <button
                 type="button"
@@ -529,8 +509,7 @@ export function ImportHistoryDialog({
               >
                 <p className="text-sm font-bold text-red-800 dark:text-red-400 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
-                  Fix {plural(check.problems.length, "row")} and upload the file
-                  again
+                  Fix {plural(problemRows, "row")} and upload the file again
                 </p>
                 <p className="text-xs text-red-700 dark:text-red-500 mt-1">
                   Nothing has been saved.
@@ -569,6 +548,18 @@ export function ImportHistoryDialog({
                 {check.totals.undatedPayments === 1 ? "has" : "have"} no Paid On
                 date, so {check.totals.undatedPayments === 1 ? "it" : "they"}{" "}
                 will use the bill&apos;s due date.
+              </Notice>
+            )}
+            {check.totals.discounts > 0 && (
+              <Notice>
+                {formatCurrency(check.totals.discounts)} of fees are below your
+                fee structure and count as discounts.
+              </Notice>
+            )}
+            {check.totals.otherFees > 0 && (
+              <Notice>
+                {formatCurrency(check.totals.otherFees)} of fees are above your
+                fee structure, or have none to follow, and go under Other Fees.
               </Notice>
             )}
             {check.newHeads.length > 0 && (

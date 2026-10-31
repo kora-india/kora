@@ -43,7 +43,15 @@ const nextConfig = {
 
   // Prevent Next.js from bundling Prisma; Node.js module resolution at runtime
   // correctly finds the native engine binary.
-  serverExternalPackages: ["@prisma/client", ".prisma/client", "pino", "pino-pretty"],
+  // ExcelJS only runs in the browser; its Node build is too big to bundle for
+  // a server that never calls it.
+  serverExternalPackages: [
+    "@prisma/client",
+    ".prisma/client",
+    "pino",
+    "pino-pretty",
+    "exceljs",
+  ],
 
   // In a monorepo, Prisma lives outside the app folder; set tracing root so Vercel
   // includes the Prisma query engine in the serverless bundle.

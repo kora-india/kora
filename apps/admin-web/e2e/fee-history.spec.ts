@@ -18,7 +18,7 @@ test("a school imports months of bills, late fees and payments, and can undo the
   await dialog.getByLabel("To", { exact: true }).fill("2026-09");
   await page.screenshot({ path: testInfo.outputPath("start.png") });
 
-  // The template lists every student for each month, with fees filled in.
+  // The template has a row per student, with each month's fees filled in.
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     dialog.getByRole("button", { name: "Download Template" }).click(),
@@ -33,26 +33,19 @@ test("a school imports months of bills, late fees and payments, and can undo the
   const headers = rows[0] as string[];
   const column = (name: string) => headers.indexOf(name);
   const pooja = rows.filter((r) => r[1] === "Pooja Kumari");
-  expect(pooja.map((r) => r[column("Month")])).toEqual([
-    "Aug 2026",
-    "Sept 2026",
-  ]);
-  const firstFee = column("Month") + 1;
-  const billOf = (r: (string | number)[]) =>
-    r
-      .slice(firstFee, column("Late Fee (₹)"))
-      .reduce<number>((sum, cell) => sum + Number(cell || 0), 0);
-  const august = billOf(pooja[0]);
-  const september = billOf(pooja[1]);
+  expect(pooja).toHaveLength(1);
+  const august = Number(pooja[0][column("Aug 2026 Fees (₹)")]);
+  const september = Number(pooja[0][column("Sep 2026 Fees (₹)")]);
   expect(august).toBeGreaterThan(0);
+  expect(september).toBeGreaterThan(0);
 
   // August was paid in full on a late date; September is unpaid with a fine.
-  pooja[0][column("Paid (₹)")] = august;
-  pooja[0][column("Paid On")] = "20/08/2026";
-  pooja[0][column("Mode")] = "UPI";
-  pooja[0][column("Receipt No")] = "OLD-500";
-  pooja[0][column("Late Fee (₹)")] = 0;
-  pooja[1][column("Late Fee (₹)")] = 150;
+  pooja[0][column("Aug 2026 Paid (₹)")] = august;
+  pooja[0][column("Aug 2026 Paid On")] = "20/08/2026";
+  pooja[0][column("Aug 2026 Mode")] = "UPI";
+  pooja[0][column("Aug 2026 Receipt")] = "OLD-500";
+  pooja[0][column("Aug 2026 Late Fee (₹)")] = 0;
+  pooja[0][column("Sep 2026 Late Fee (₹)")] = 150;
   const filled = utils.book_new();
   utils.book_append_sheet(
     filled,
@@ -122,7 +115,7 @@ test("a file with a mistake is stopped, with nothing saved", async ({
     name: "history.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(
-      "Admission Number,Month,Tuition Fee (₹),Paid (₹)\nNOT-A-STUDENT,Apr 2026,1000,\n",
+      "Admission Number,Apr 2026 Fees (₹),Apr 2026 Paid (₹)\nNOT-A-STUDENT,1000,\n",
     ),
   });
 
