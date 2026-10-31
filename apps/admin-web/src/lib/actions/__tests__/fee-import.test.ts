@@ -19,7 +19,7 @@ import {
   getOpeningBalanceSetup,
   getOpeningBalanceTemplate,
   importOpeningBalances,
-  undoOpeningBalanceImport,
+  undoFeeImport,
 } from "../fee-import";
 import { allocatePayment, waiveFeeChargeItem } from "../fee-allocator";
 import { enrollStudentTransport } from "../transport";
@@ -206,7 +206,7 @@ describe("opening balance import", () => {
         await getOpeningBalanceTemplate(),
         await checkOpeningBalances({ asOfDate: AS_OF, rows: fileRows() }),
         await importFile(),
-        await undoOpeningBalanceImport("any"),
+        await undoFeeImport("any"),
       ]) {
         expect(result).toHaveProperty("error");
       }
@@ -216,7 +216,7 @@ describe("opening balance import", () => {
     it("won't undo another school's import", async () => {
       const id = await importedId();
       signIn("SCHOOL_ADMIN", otherSchoolId);
-      expect(await undoOpeningBalanceImport(id)).toEqual({
+      expect(await undoFeeImport(id)).toEqual({
         error: "Import not found",
       });
     });
@@ -494,7 +494,7 @@ describe("opening balance import", () => {
     it("removes the import's bills and credits, and bills as usual again", async () => {
       const id = await importedId();
 
-      expect(await undoOpeningBalanceImport(id)).toEqual({ success: true });
+      expect(await undoFeeImport(id)).toEqual({ success: true });
 
       expect(await prisma.feeCharge.count({ where: { schoolId } })).toBe(0);
       expect(
@@ -522,14 +522,14 @@ describe("opening balance import", () => {
 
     it("lets the corrected file be imported afterwards", async () => {
       const id = await importedId();
-      await undoOpeningBalanceImport(id);
+      await undoFeeImport(id);
       expect(await importFile()).toMatchObject({ success: true });
     });
 
     it("can't be done twice", async () => {
       const id = await importedId();
-      await undoOpeningBalanceImport(id);
-      expect(await undoOpeningBalanceImport(id)).toEqual({
+      await undoFeeImport(id);
+      expect(await undoFeeImport(id)).toEqual({
         error: "This import was already undone",
       });
     });
@@ -543,7 +543,7 @@ describe("opening balance import", () => {
         method: "CASH",
       });
 
-      expect(await undoOpeningBalanceImport(id)).toEqual({
+      expect(await undoFeeImport(id)).toEqual({
         error:
           "This import can't be undone: Owes already paid, had dues waived, or used their advance.",
       });
@@ -555,14 +555,14 @@ describe("opening balance import", () => {
       const bill = await openingBill(ids.Owes);
       await waiveFeeChargeItem(bill.items[0].id, "Hardship case");
 
-      expect(await undoOpeningBalanceImport(id)).toHaveProperty("error");
+      expect(await undoFeeImport(id)).toHaveProperty("error");
     });
 
     it("is refused once an opening advance has been used", async () => {
       const id = await importedId();
       await generate("2026-06");
 
-      const res = await undoOpeningBalanceImport(id);
+      const res = await undoFeeImport(id);
 
       expect(res).toHaveProperty("error");
       expect("error" in res && res.error).toContain("Credit");

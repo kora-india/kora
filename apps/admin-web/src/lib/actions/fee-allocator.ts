@@ -1104,7 +1104,7 @@ export async function getFeeReceiptDetails(
   try {
     const payment = await prisma.paymentTransaction.findFirst({
       where: { receiptNo, schoolId: user.schoolId },
-      select: { id: true, receiptSnapshot: true },
+      select: { id: true, receiptSnapshot: true, importId: true },
     });
     if (!payment) return { success: false, error: "Receipt not found" };
 
@@ -1120,7 +1120,11 @@ export async function getFeeReceiptDetails(
     // don't store the result: it would freeze today's balances as history.
     return {
       success: true,
-      data: await buildReceiptData(prisma, { id: payment.id }, user.name),
+      data: await buildReceiptData(
+        prisma,
+        { id: payment.id },
+        payment.importId ? "Imported from earlier records" : user.name,
+      ),
     };
   } catch (e: any) {
     return {

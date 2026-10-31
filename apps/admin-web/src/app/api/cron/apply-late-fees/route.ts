@@ -5,6 +5,7 @@ import { createLogger } from "@schoolos/logger";
 import { invalidateFeesCache } from "@/lib/redis";
 import { logActivity, SYSTEM_ACTOR } from "@/lib/activity";
 import { todayInTimeZone } from "@/lib/fees/timezone";
+import { calculateLateFee } from "@/lib/fees/late-fee";
 import crypto from "crypto";
 
 const cronLogger = createLogger("cron-apply-late-fees");
@@ -104,14 +105,26 @@ export async function GET(req: Request) {
       }
 
       // B13: Find all overdue FeeCharges for active students only. Imported
-      // balances get no late fee: their dates aren't real due dates.
+      // bills stay as the school's records have them, unless the school
+      // chose to keep late fees running on a history import.
+      const finedImports = await prisma.feeImport.findMany({
+        where: {
+          schoolId: school.id,
+          continueLateFees: true,
+          undoneAt: null,
+        },
+        select: { id: true },
+      });
       const overdueCharges = await prisma.feeCharge.findMany({
         where: {
           schoolId: school.id,
           status: "OVERDUE",
           dueDate: { lt: today },
           student: { isActive: true },
-          importId: null,
+          OR: [
+            { importId: null },
+            { importId: { in: finedImports.map((i) => i.id) } },
+          ],
         },
         include: { items: true },
       });
@@ -128,38 +141,20 @@ export async function GET(req: Request) {
         );
 
         if (daysOverdue > 0) {
-          // B13: Safety caps on late fee multiplier
-          let multiplier = 1;
-          if (school.lateFeeFrequency === "DAILY") {
-            multiplier = Math.min(daysOverdue, 30); // Max 30 days daily penalty
-          } else if (school.lateFeeFrequency === "WEEKLY") {
-            multiplier = Math.min(Math.ceil(daysOverdue / 7), 5); // Max 5 weeks
-          } else {
-            // MONTHLY default
-            multiplier = Math.min(Math.max(1, Math.ceil(daysOverdue / 30)), 3); // Max 3 months
-          }
-
-          let totalLateFee = Number(school.lateFeeAmount) * multiplier;
-
-          // B13: Cap late fee by school setting and 50% of charge principal
           const chargePrincipal = charge.items
             .filter((i) => i.componentId !== lateFeeComponent!.id)
             .reduce((s, it) => s + Number(it.amount), 0);
-
-          if (school.maxLateFeeCap) {
-            totalLateFee = Math.min(totalLateFee, Number(school.maxLateFeeCap));
-          }
-          if (chargePrincipal > 0) {
-            totalLateFee = Math.min(
-              totalLateFee,
-              Math.max(
-                Number(school.lateFeeAmount),
-                Math.round(chargePrincipal * 0.5),
-              ),
-            );
-          }
-
-          totalLateFee = Math.round(totalLateFee * 100) / 100;
+          const totalLateFee = calculateLateFee(
+            {
+              lateFeeAmount: Number(school.lateFeeAmount),
+              lateFeeFrequency: school.lateFeeFrequency,
+              maxLateFeeCap: school.maxLateFeeCap
+                ? Number(school.maxLateFeeCap)
+                : null,
+            },
+            daysOverdue,
+            chargePrincipal,
+          );
 
           // Check if there's already a late fee item
           const existingLateFeeItem = charge.items.find(

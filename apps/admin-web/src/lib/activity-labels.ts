@@ -29,6 +29,8 @@ export const isActivityModule = (v: string): v is ActivityModule =>
 
 /** Role stored on an activity row for automatic jobs. */
 export const SYSTEM_ROLE = "SYSTEM";
+/** What the ledger shows for payments brought in from earlier records. */
+export const IMPORTED_ROLE = "IMPORTED";
 
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super admin",
@@ -36,6 +38,7 @@ const ROLE_LABELS: Record<string, string> = {
   ACCOUNTANT: "Accountant",
   TEACHER: "Teacher",
   [SYSTEM_ROLE]: "System",
+  [IMPORTED_ROLE]: "Imported",
 };
 
 export const roleLabel = (role: string | null | undefined) =>

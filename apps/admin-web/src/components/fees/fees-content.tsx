@@ -3,12 +3,20 @@
 import { useState } from "react";
 import { useQueryTab } from "@/hooks/use-query-state";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, Users, IndianRupee, FileText, Upload } from "lucide-react";
+import {
+  Settings,
+  Users,
+  IndianRupee,
+  FileText,
+  History,
+  Upload,
+} from "lucide-react";
 import { CollectionTab } from "./tabs/collection-tab";
 import { SetupTab } from "./tabs/setup-tab";
 import { AssignmentsTab } from "./tabs/assignments-tab";
 import { GeneratorTab } from "./tabs/generator-tab";
 import { ImportBalancesDialog } from "./import-balances-dialog";
+import { ImportHistoryDialog } from "./import-history-dialog";
 
 interface Props {
   sessions: any[];
@@ -31,6 +39,7 @@ export function FeesContent(props: Readonly<Props>) {
     defaultTab: "collection",
   });
   const [importOpen, setImportOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const TABS = [
     { id: "collection", label: "Fee Collection", icon: IndianRupee },
@@ -50,14 +59,24 @@ export function FeesContent(props: Readonly<Props>) {
           </p>
         </div>
         {props.canImportBalances && (
-          <button
-            type="button"
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2 h-9 px-4 w-fit bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import Balances
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import Balances
+            </button>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <History className="w-4 h-4" />
+              Import Fee History
+            </button>
+          </div>
         )}
       </div>
 
@@ -118,7 +137,16 @@ export function FeesContent(props: Readonly<Props>) {
       </div>
 
       {props.canImportBalances && (
-        <ImportBalancesDialog open={importOpen} onOpenChange={setImportOpen} />
+        <>
+          <ImportBalancesDialog
+            open={importOpen}
+            onOpenChange={setImportOpen}
+          />
+          <ImportHistoryDialog
+            open={historyOpen}
+            onOpenChange={setHistoryOpen}
+          />
+        </>
       )}
     </div>
   );

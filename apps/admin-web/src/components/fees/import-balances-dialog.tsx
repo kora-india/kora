@@ -20,7 +20,7 @@ import {
   getOpeningBalanceSetup,
   getOpeningBalanceTemplate,
   importOpeningBalances,
-  undoOpeningBalanceImport,
+  undoFeeImport,
   type FeeImportSummary,
   type OpeningBalanceSetup,
 } from "@/lib/actions/fee-import";
@@ -33,6 +33,11 @@ import {
   type OpeningBalanceRow,
 } from "@/lib/fees/opening-balance";
 import { readSpreadsheet } from "@/lib/read-spreadsheet";
+import {
+  ImportNotice as Notice,
+  ImportStep as Step,
+  ImportTotal as Total,
+} from "./import-parts";
 
 type CheckResult = Extract<
   Awaited<ReturnType<typeof checkOpeningBalances>>,
@@ -202,7 +207,7 @@ export function ImportBalancesDialog({
 
   const handleUndo = async () => {
     if (!undoTarget) return;
-    const res = await undoOpeningBalanceImport(undoTarget.id).catch(() => ({
+    const res = await undoFeeImport(undoTarget.id).catch(() => ({
       error: "Couldn't undo the import",
     }));
     if ("error" in res) {
@@ -488,40 +493,5 @@ export function ImportBalancesDialog({
         onConfirm={handleUndo}
       />
     </>
-  );
-}
-
-function Step({
-  number,
-  title,
-  children,
-}: Readonly<{ number: number; title: string; children: React.ReactNode }>) {
-  return (
-    <section className="flex gap-3">
-      <span className="w-6 h-6 flex-shrink-0 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 text-xs font-bold flex items-center justify-center">
-        {number}
-      </span>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold mb-1">{title}</h3>
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function Total({ label, value }: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="border rounded-xl p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-bold tabular-nums">{value}</p>
-    </div>
-  );
-}
-
-function Notice({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <p className="p-3 text-sm rounded-xl border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-400">
-      {children}
-    </p>
   );
 }

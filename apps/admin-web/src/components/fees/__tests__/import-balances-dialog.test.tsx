@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   getOpeningBalanceTemplate: vi.fn(),
   checkOpeningBalances: vi.fn(),
   importOpeningBalances: vi.fn(),
-  undoOpeningBalanceImport: vi.fn(),
+  undoFeeImport: vi.fn(),
   writeFile: vi.fn(),
   refresh: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
@@ -21,7 +21,7 @@ vi.mock("@/lib/actions/fee-import", () => ({
   getOpeningBalanceTemplate: mocks.getOpeningBalanceTemplate,
   checkOpeningBalances: mocks.checkOpeningBalances,
   importOpeningBalances: mocks.importOpeningBalances,
-  undoOpeningBalanceImport: mocks.undoOpeningBalanceImport,
+  undoFeeImport: mocks.undoFeeImport,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
@@ -265,7 +265,7 @@ describe("ImportBalancesDialog", () => {
         ...setup,
         imports: [{ ...pastImport, undoneAt: "2026-10-02T05:00:00.000Z" }],
       });
-    mocks.undoOpeningBalanceImport.mockResolvedValue({ success: true });
+    mocks.undoFeeImport.mockResolvedValue({ success: true });
     const user = renderDialog();
 
     await user.click(
@@ -273,11 +273,11 @@ describe("ImportBalancesDialog", () => {
         name: "Undo import as of 30 Sept 2026",
       }),
     );
-    expect(mocks.undoOpeningBalanceImport).not.toHaveBeenCalled();
+    expect(mocks.undoFeeImport).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Undo Import" }));
 
     await waitFor(() =>
-      expect(mocks.undoOpeningBalanceImport).toHaveBeenCalledWith("import-1"),
+      expect(mocks.undoFeeImport).toHaveBeenCalledWith("import-1"),
     );
     expect(await screen.findByText("Undone")).toBeInTheDocument();
     expect(mocks.refresh).toHaveBeenCalled();
@@ -288,7 +288,7 @@ describe("ImportBalancesDialog", () => {
       ...setup,
       imports: [pastImport],
     });
-    mocks.undoOpeningBalanceImport.mockResolvedValue({
+    mocks.undoFeeImport.mockResolvedValue({
       error: "This import can't be undone: Tanvi already paid.",
     });
     const user = renderDialog();

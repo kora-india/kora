@@ -133,5 +133,8 @@ test("an accountant login gets the money pages and nothing else", async ({
   await expect(
     accountant.getByRole("button", { name: "Import Balances" }),
   ).toHaveCount(0);
+  await expect(
+    accountant.getByRole("button", { name: "Import Fee History" }),
+  ).toHaveCount(0);
   await context.close();
 });

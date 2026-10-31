@@ -631,6 +631,8 @@ model PaymentTransaction {
   /// recording it can never fail a payment). null for automatic advance
   /// settlements and for payments made before this was recorded.
   collectedById   String?
+  /// The FeeImport this payment came from; null for money taken in the app.
+  importId        String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   allocations     PaymentAllocation[]
@@ -643,6 +645,7 @@ model PaymentTransaction {
   @@index([studentId])
   @@index([schoolId, date])
   @@index([studentId, date])
+  @@index([importId])
   @@map("payment_transactions")
 }
 
@@ -1246,7 +1249,10 @@ model FeeImport {
   id                  String             @id @default(cuid())
   schoolId            String
   /// OPENING_BALANCE: what each student owes or holds in advance on one date.
+  /// FULL_HISTORY: month-by-month bills and payments.
   kind                String             @default("OPENING_BALANCE")
+  /// IMPORTING while a history upload's batches arrive, then DONE.
+  status              String             @default("DONE")
   /// The session its bills belong to.
   sessionId           String
   /// The date the balances are for. The app bills these students from the
@@ -1256,6 +1262,14 @@ model FeeImport {
   studentCount        Int
   totalDues           Decimal            @db.Decimal(14, 2)
   totalAdvance        Decimal            @db.Decimal(14, 2)
+  billCount           Int                @default(0)
+  totalBilled         Decimal            @default(0) @db.Decimal(14, 2)
+  totalPaid           Decimal            @default(0) @db.Decimal(14, 2)
+  totalLateFees       Decimal            @default(0) @db.Decimal(14, 2)
+  /// Work out late fees from the school's rule where the file leaves them blank.
+  calculateLateFees   Boolean            @default(false)
+  /// The daily job may keep adding late fees to this import's unpaid months.
+  continueLateFees    Boolean            @default(false)
   /// Yearly and one-time fee heads the school already charged, so fee
   /// generation doesn't charge them again.
   chargedComponentIds String[]

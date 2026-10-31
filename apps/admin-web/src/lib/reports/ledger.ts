@@ -1,5 +1,5 @@
 import { prisma, Prisma } from "@schoolos/db";
-import { SYSTEM_ROLE } from "@/lib/activity-labels";
+import { IMPORTED_ROLE, SYSTEM_ROLE } from "@/lib/activity-labels";
 import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
 import {
   LEDGER_EXPORT_MAX,
@@ -284,6 +284,7 @@ async function countRows(schoolId: string, c: Conditions) {
 }
 
 const SYSTEM = { name: "System", role: SYSTEM_ROLE };
+const IMPORTED = { name: "Imported", role: IMPORTED_ROLE };
 const person = { select: { name: true, role: true } } as const;
 const section = (s: {
   class?: { name: string } | null;
@@ -353,7 +354,7 @@ export async function ledgerRows(
       method: p.method,
       doneBy:
         (p.collectedById && collectors.get(p.collectedById)) ||
-        (settlement ? SYSTEM : null),
+        (p.importId ? IMPORTED : settlement ? SYSTEM : null),
       billUrl: null,
     });
   }

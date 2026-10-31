@@ -113,7 +113,7 @@ export async function getOpeningBalanceSetup(): Promise<
     currentSession(schoolId),
     prisma.student.count({ where: { schoolId, isActive: true } }),
     prisma.feeImport.findMany({
-      where: { schoolId },
+      where: { schoolId, kind: "OPENING_BALANCE" },
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
@@ -416,11 +416,11 @@ export async function importOpeningBalances(input: unknown) {
 }
 
 /**
- * Removes an import's bills and credits and bills these students as usual
- * again. Refused once money has moved: a student has paid towards their dues,
- * had them waived, or used the advance.
+ * Removes an import's bills, payments and credits, and bills these students
+ * as usual again. Refused once money has moved in the app: someone has paid
+ * towards an imported bill, had it waived, or used an imported advance.
  */
-export async function undoOpeningBalanceImport(importId: string) {
+export async function undoFeeImport(importId: string) {
   const admin = await requireSchoolAdmin();
   if (isError(admin)) return { error: admin.error };
   const { schoolId } = admin;
@@ -445,24 +445,32 @@ export async function undoOpeningBalanceImport(importId: string) {
           where: { schoolId, importId },
           select: {
             student: { select: { name: true } },
-            items: { select: { paidAmount: true, status: true } },
+            items: {
+              select: {
+                status: true,
+                allocations: {
+                  select: { payment: { select: { importId: true } } },
+                },
+              },
+            },
           },
         });
-        const moved = charges
-          .filter((c) =>
-            c.items.some(
-              (i) => Number(i.paidAmount) > 0 || i.status === FeeStatus.WAIVED,
-            ),
-          )
-          .map((c) => c.student.name);
+        const moved = new Set(
+          charges
+            .filter((c) =>
+              c.items.some(
+                (i) =>
+                  i.status === FeeStatus.WAIVED ||
+                  i.allocations.some((a) => a.payment.importId !== importId),
+              ),
+            )
+            .map((c) => c.student.name),
+        );
 
-        const credits = await tx.advanceLedger.findMany({
+        const credits = await tx.advanceLedger.groupBy({
+          by: ["studentId"],
           where: { importId },
-          select: {
-            studentId: true,
-            amount: true,
-            student: { select: { name: true } },
-          },
+          _sum: { amount: true },
         });
         const balances = await tx.advanceLedger.groupBy({
           by: ["studentId"],
@@ -472,13 +480,23 @@ export async function undoOpeningBalanceImport(importId: string) {
         const balance = new Map(
           balances.map((b) => [b.studentId, Number(b._sum.amount ?? 0)]),
         );
-        for (const c of credits) {
-          if ((balance.get(c.studentId) ?? 0) < Number(c.amount)) {
-            moved.push(c.student.name);
-          }
+        const spent = credits
+          .filter(
+            (c) => (balance.get(c.studentId) ?? 0) < Number(c._sum.amount ?? 0),
+          )
+          .map((c) => c.studentId);
+        if (spent.length > 0) {
+          const students = await tx.student.findMany({
+            where: { id: { in: spent } },
+            select: { name: true },
+          });
+          for (const s of students) moved.add(s.name);
         }
-        if (moved.length > 0) return moved;
+        if (moved.size > 0) return [...moved];
 
+        await tx.paymentTransaction.deleteMany({
+          where: { schoolId, importId },
+        });
         await tx.feeCharge.deleteMany({ where: { schoolId, importId } });
         await tx.advanceLedger.deleteMany({ where: { importId } });
         await tx.feeImportStudent.deleteMany({ where: { importId } });
@@ -488,7 +506,7 @@ export async function undoOpeningBalanceImport(importId: string) {
         });
         return [];
       },
-      { maxWait: 10_000, timeout: 60_000 },
+      { maxWait: 10_000, timeout: 120_000 },
     );
 
     if (blocked.length > 0) {
@@ -503,13 +521,22 @@ export async function undoOpeningBalanceImport(importId: string) {
     revalidatePath("/fees");
     revalidatePath("/ledger");
     revalidatePath("/dashboard");
-    await logActivity(admin, {
-      action: "fee.opening_import_undo",
-      module: "fees",
-      summary: `Undid the opening balances as of ${formatAsOfDate(record.asOfDate.toISOString().slice(0, 10))} for ${record.studentCount} student${record.studentCount === 1 ? "" : "s"}`,
-      entityType: "FeeImport",
-      entityId: record.id,
-    });
+    // An upload that never finished was never logged as done.
+    if (record.status === "DONE") {
+      await logActivity(admin, {
+        action:
+          record.kind === "FULL_HISTORY"
+            ? "fee.history_import_undo"
+            : "fee.opening_import_undo",
+        module: "fees",
+        summary:
+          record.kind === "FULL_HISTORY"
+            ? `Undid the fee history import of ${record.billCount} bill${record.billCount === 1 ? "" : "s"} for ${record.studentCount} student${record.studentCount === 1 ? "" : "s"}`
+            : `Undid the opening balances as of ${formatAsOfDate(record.asOfDate.toISOString().slice(0, 10))} for ${record.studentCount} student${record.studentCount === 1 ? "" : "s"}`,
+        entityType: "FeeImport",
+        entityId: record.id,
+      });
+    }
     return { success: true as const };
   } catch (e) {
     return { error: actionErrorMessage(e, "Couldn't undo the import") };
