@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ImportHistoryDialog } from "../import-history-dialog";
-import { historyHeaders } from "@/lib/fees/fee-history";
+import { historyHeaders, studentHistoryHeaders } from "@/lib/fees/fee-history";
 
 const mocks = vi.hoisted(() => ({
   getFeeHistorySetup: vi.fn(),
@@ -14,7 +14,11 @@ const mocks = vi.hoisted(() => ({
   importFeeHistoryBatch: vi.fn(),
   finishFeeHistoryImport: vi.fn(),
   undoFeeImport: vi.fn(),
+  getStudentsHistoryTemplate: vi.fn(),
+  checkStudentsWithHistory: vi.fn(),
+  importStudentsWithHistory: vi.fn(),
   downloadHistoryTemplate: vi.fn(),
+  downloadStudentsHistoryTemplate: vi.fn(),
   refresh: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -22,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/actions/fee-history", () => ({
   getFeeHistorySetup: mocks.getFeeHistorySetup,
   getFeeHistoryTemplate: mocks.getFeeHistoryTemplate,
+  getStudentsHistoryTemplate: mocks.getStudentsHistoryTemplate,
   checkFeeHistory: mocks.checkFeeHistory,
   startFeeHistoryImport: mocks.startFeeHistoryImport,
   importFeeHistoryBatch: mocks.importFeeHistoryBatch,
@@ -30,12 +35,17 @@ vi.mock("@/lib/actions/fee-history", () => ({
 vi.mock("@/lib/actions/fee-import", () => ({
   undoFeeImport: mocks.undoFeeImport,
 }));
+vi.mock("@/lib/actions/student-import", () => ({
+  checkStudentsWithHistory: mocks.checkStudentsWithHistory,
+  importStudentsWithHistory: mocks.importStudentsWithHistory,
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
 vi.mock("@/lib/fees/fee-history-template", () => ({
   downloadHistoryTemplate: mocks.downloadHistoryTemplate,
+  downloadStudentsHistoryTemplate: mocks.downloadStudentsHistoryTemplate,
 }));
 
 const setup = {
@@ -44,6 +54,7 @@ const setup = {
   firstMonth: "2026-04",
   currentMonth: "2026-10",
   lateFeeRule: "₹100 monthly",
+  feeHeadCount: 6,
   imports: [],
 };
 
@@ -248,6 +259,7 @@ describe("ImportHistoryDialog", () => {
       admissionNumber: "ADM-1",
       period: "2026-04",
       fees: "1000",
+      heads: {},
       lateFee: "",
       paid: "1000",
       paidOn: "05/04/2026",
@@ -437,5 +449,221 @@ describe("ImportHistoryDialog", () => {
     expect(
       screen.getByRole("button", { name: /^Undo import of/ }),
     ).toBeEnabled();
+  });
+
+  describe("with students", () => {
+    const BLANK = studentHistoryHeaders(["2026-04"], ["Tuition Fee"]).join(",");
+    const cells = (student: string, month: string) =>
+      `${student}${",".repeat(16 - student.split(",").length)}${month}`;
+    const asha = cells(
+      "ADM-1,Asha,Class 1,A,Ravi,9000000000",
+      "1000,,1000,05/04/2026,Cash,R-1",
+    );
+    const secondPayment = cells("ADM-1", ",,500,20/04/2026,Cash,R-2");
+    const file = (...rows: string[]) => [BLANK, ...rows].join("\n");
+
+    const studentsClean = {
+      imported: 1,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      existing: 0,
+      added: [],
+    };
+
+    function renderWithStudents() {
+      const user = userEvent.setup();
+      render(<ImportHistoryDialog withStudents open onOpenChange={vi.fn()} />);
+      return user;
+    }
+
+    async function uploadBlank(contents: string) {
+      const user = renderWithStudents();
+      await screen.findByText("Upload the filled file");
+      await user.upload(
+        screen.getByLabelText("Filled fee history"),
+        csv(contents),
+      );
+      return user;
+    }
+
+    beforeEach(() => {
+      mocks.checkStudentsWithHistory.mockResolvedValue(studentsClean);
+      mocks.importStudentsWithHistory.mockResolvedValue(studentsClean);
+    });
+
+    it("works for a school with no students yet", async () => {
+      mocks.getFeeHistorySetup.mockResolvedValue({ ...setup, studentCount: 0 });
+      renderWithStudents();
+
+      expect(
+        await screen.findByText("Import Students with Fee History"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Download Template")).toBeInTheDocument();
+      expect(screen.getByText(/6 fee heads and late fee/)).toBeVisible();
+    });
+
+    it("asks for fee heads first", async () => {
+      mocks.getFeeHistorySetup.mockResolvedValue({ ...setup, feeHeadCount: 0 });
+      renderWithStudents();
+
+      expect(
+        await screen.findByText(/Add your fee heads in Fee Settings first/),
+      ).toBeInTheDocument();
+    });
+
+    it("downloads the blank template for the chosen months", async () => {
+      const blank = { months: ["2026-04"], heads: ["Tuition Fee"] };
+      mocks.getStudentsHistoryTemplate.mockResolvedValue(blank);
+      const user = renderWithStudents();
+
+      await user.click(await screen.findByText("Download Template"));
+
+      await waitFor(() =>
+        expect(mocks.downloadStudentsHistoryTemplate).toHaveBeenCalledWith(
+          blank,
+        ),
+      );
+      expect(mocks.getStudentsHistoryTemplate).toHaveBeenCalledWith({
+        from: "2026-04",
+        to: "2026-10",
+      });
+      expect(mocks.getFeeHistoryTemplate).not.toHaveBeenCalled();
+    });
+
+    it("checks students and fees together, then adds students first", async () => {
+      const user = await uploadBlank(file(asha, secondPayment));
+
+      const button = await screen.findByRole("button", {
+        name: "Import 1 student and 2 bills",
+      });
+      expect(mocks.checkStudentsWithHistory).toHaveBeenCalledWith([
+        expect.objectContaining({
+          admissionNumber: "ADM-1",
+          name: "Asha",
+          classId: "Class 1",
+          sectionId: "A",
+          sheetRow: 2,
+        }),
+      ]);
+      const sent = mocks.checkFeeHistory.mock.calls[0][0];
+      expect(sent.newAdmissions).toEqual(["ADM-1"]);
+      expect(sent.rows.map((r: any) => r.sheetRow)).toEqual([2, 3]);
+      expect(sent.rows[0].heads).toEqual({ "Tuition Fee": "1000" });
+      expect(mocks.importStudentsWithHistory).not.toHaveBeenCalled();
+
+      await user.click(button);
+
+      expect(await screen.findByText("Students imported")).toBeInTheDocument();
+      expect(
+        mocks.importStudentsWithHistory.mock.invocationCallOrder[0],
+      ).toBeLessThan(mocks.startFeeHistoryImport.mock.invocationCallOrder[0]);
+      expect(mocks.importFeeHistoryBatch).toHaveBeenCalledWith(
+        expect.objectContaining({ months: ["2026-04"] }),
+      );
+    });
+
+    it("shows a student problem with the fee problems, saving nothing", async () => {
+      mocks.checkStudentsWithHistory.mockResolvedValue({
+        ...studentsClean,
+        errors: ["Row 2: Parent name is missing"],
+      });
+      await uploadBlank(file(asha));
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("Row 2: Parent name is missing");
+      expect(
+        screen.getByRole("button", { name: /^Import 1 student/ }),
+      ).toBeDisabled();
+    });
+
+    it("imports students with no fees in the file", async () => {
+      mocks.checkFeeHistory.mockClear();
+      const user = await uploadBlank(
+        file(cells("ADM-1,Asha,Class 1,A,Ravi,9000000000", ",,,,,")),
+      );
+
+      await user.click(
+        await screen.findByRole("button", { name: "Import 1 student" }),
+      );
+
+      expect(await screen.findByText("Students imported")).toBeInTheDocument();
+      expect(mocks.checkFeeHistory).not.toHaveBeenCalled();
+      expect(mocks.startFeeHistoryImport).not.toHaveBeenCalled();
+    });
+
+    it("turns away a file with no students", async () => {
+      await uploadBlank(file(cells("", ",,,,,")));
+
+      await waitFor(() =>
+        expect(mocks.toast.error).toHaveBeenCalledWith(
+          "This file has no students in it",
+        ),
+      );
+    });
+
+    it("says what's already here and what will be added", async () => {
+      mocks.checkStudentsWithHistory.mockResolvedValue({
+        ...studentsClean,
+        existing: 2,
+        added: ["Grade 11", "Grade 5 C"],
+      });
+      await uploadBlank(file(asha));
+
+      expect(await screen.findByText(/2 students are already/)).toBeVisible();
+      expect(screen.getByText(/Grade 11, Grade 5 C/)).toBeVisible();
+    });
+
+    it("stops before the fees if the students can't be added", async () => {
+      mocks.importStudentsWithHistory.mockResolvedValue({
+        ...studentsClean,
+        imported: 0,
+        errors: ["Some rows need fixing, so nothing was saved."],
+      });
+      const user = await uploadBlank(file(asha));
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Import 1 student and 2 bills",
+        }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.toast.error).toHaveBeenCalledWith(
+          "Nothing was saved. Some rows need fixing, so nothing was saved.",
+        ),
+      );
+      expect(mocks.startFeeHistoryImport).not.toHaveBeenCalled();
+    });
+
+    it("says the students stayed if only the fees failed", async () => {
+      mocks.importFeeHistoryBatch.mockResolvedValue({ error: "Bad batch." });
+      mocks.undoFeeImport.mockResolvedValue({ success: true });
+      const user = await uploadBlank(file(asha));
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Import 1 student and 2 bills",
+        }),
+      );
+
+      await waitFor(() =>
+        expect(mocks.toast.error).toHaveBeenCalledWith(
+          "Your students were added, but not their fees. Bad batch. Upload the same file again to bring the fees in.",
+        ),
+      );
+      expect(mocks.undoFeeImport).toHaveBeenCalledWith("import-2");
+    });
+
+    it("leaves past imports to the Fees page", async () => {
+      mocks.getFeeHistorySetup.mockResolvedValue({
+        ...setup,
+        imports: [past],
+      });
+      renderWithStudents();
+
+      await screen.findByText("Upload the filled file");
+      expect(screen.queryByText("Past imports")).not.toBeInTheDocument();
+    });
   });
 });

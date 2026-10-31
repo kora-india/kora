@@ -13,6 +13,7 @@ test("a sheet headed the way a school writes it imports, row problems named", as
   await signIn(page, SEEDED.schoolAdmin.email, SEEDED.schoolAdmin.password);
   await page.goto("/students");
   await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByRole("button", { name: /^Import students only/ }).click();
   await page
     .locator('input[type="file"]')
     .setInputFiles(
@@ -60,6 +61,7 @@ test("columns it can't read are matched by hand before importing", async ({
   await signIn(page, SEEDED.schoolAdmin.email, SEEDED.schoolAdmin.password);
   await page.goto("/students");
   await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByRole("button", { name: /^Import students only/ }).click();
   await page
     .locator('input[type="file"]')
     .setInputFiles(

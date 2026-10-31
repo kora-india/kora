@@ -195,6 +195,7 @@ model User {
   attendances        Attendance[]
   notices            Notice[]
   teacher            Teacher?
+  staff              Staff?
   recordedExpenses   Expense[]
   school             School?      @relation(fields: [schoolId], references: [id])
 
@@ -363,9 +364,12 @@ model Staff {
   salary        Decimal?  @db.Decimal(10, 2)
   joiningDate   DateTime?
   isActive      Boolean   @default(true)
+  /// An accountant's login. Only accountants have one; other staff don't sign in.
+  userId        String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([schoolId])
   @@map("staff")

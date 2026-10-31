@@ -29,6 +29,9 @@ import { useQueryState } from "@/hooks/use-query-state";
 import { formatCurrency } from "@schoolos/utils";
 import { StudentDialog } from "./student-dialog";
 import { ImportStudentsDialog } from "./import-students-dialog";
+import { ImportOptions } from "./import-options";
+import { ImportHistoryDialog } from "@/components/fees/import-history-dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { PromoteStudentsDialog } from "./promote-students-dialog";
 import { StudentFeeCollection } from "./student-fee-collection";
 import { FeeReceiptModal } from "@/components/fees/fee-receipt-modal";
@@ -141,6 +144,8 @@ interface Props {
   canEdit: boolean;
   /** School admins move the whole school up at the end of the year. */
   canPromote?: boolean;
+  /** School admins can bring fee history in with their students. */
+  canImportHistory?: boolean;
   /** The search, class and section filters the server used to load `students`. */
   appliedFilters?: { q: string; classId: string; sectionId: string };
 }
@@ -152,6 +157,7 @@ export function StudentsContent({
   classes,
   canEdit,
   canPromote = false,
+  canImportHistory = false,
   appliedFilters,
 }: Readonly<Props>) {
   const router = useRouter();
@@ -195,7 +201,13 @@ export function StudentsContent({
   const [pageSize, setPageSize] = useState(20);
 
   const [dialog, setDialog] = useState<
-    "closed" | "create" | "edit" | "import" | "promote"
+    | "closed"
+    | "create"
+    | "edit"
+    | "import"
+    | "import-choice"
+    | "import-history"
+    | "promote"
   >("closed");
   const [editTarget, setEditTarget] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -544,7 +556,9 @@ export function StudentsContent({
               )}
               <button
                 type="button"
-                onClick={() => setDialog("import")}
+                onClick={() =>
+                  setDialog(canImportHistory ? "import-choice" : "import")
+                }
                 className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
               >
                 <Upload className="w-4 h-4" />
@@ -852,6 +866,14 @@ export function StudentsContent({
                           ? "Try adjusting or resetting your search and filter criteria."
                           : "Add your first student to get started tracking enrollment."}
                       </p>
+                      {canEdit && canImportHistory && !hasActiveFilters && (
+                        <div className="w-full max-w-2xl mb-4">
+                          <ImportOptions
+                            onStudentsOnly={() => setDialog("import")}
+                            onWithHistory={() => setDialog("import-history")}
+                          />
+                        </div>
+                      )}
                       {hasActiveFilters ? (
                         <button
                           type="button"
@@ -928,6 +950,32 @@ export function StudentsContent({
           }}
           classes={classes}
         />
+        {canImportHistory && (
+          <>
+            <Dialog
+              open={dialog === "import-choice"}
+              onOpenChange={(open) => {
+                if (!open) setDialog("closed");
+              }}
+              title="Import Students"
+              description="Choose how to bring your students in"
+              icon={<Upload className="w-5 h-5" />}
+              className="max-w-2xl"
+            >
+              <ImportOptions
+                onStudentsOnly={() => setDialog("import")}
+                onWithHistory={() => setDialog("import-history")}
+              />
+            </Dialog>
+            <ImportHistoryDialog
+              withStudents
+              open={dialog === "import-history"}
+              onOpenChange={(open) => {
+                if (!open) setDialog("closed");
+              }}
+            />
+          </>
+        )}
 
         <ConfirmDialog
           open={!!deleteTarget}

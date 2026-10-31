@@ -6,6 +6,7 @@ import {
   findHistoryColumns,
   findSessionForPeriod,
   findSharedReceipts,
+  STUDENT_TEMPLATE_HEADERS,
   historyHeaders,
   monthLabel,
   monthsBetween,
@@ -14,12 +15,18 @@ import {
   pastSessionFor,
   planFeeHistory,
   splitFees,
+  studentHistoryHeaders,
   toHistoryRows,
+  toStudentRows,
   type ExpectedLine,
   type FeeHistoryRow,
   type HistoryColumns,
   type HistoryContext,
 } from "../fees/fee-history";
+import {
+  guessColumnMapping,
+  importFieldForHeader,
+} from "../student-import-helpers";
 
 const students = [
   { id: "asha", admissionNumber: "ADM-1", name: "Asha", isActive: true },
@@ -60,6 +67,7 @@ const row = (over: Partial<FeeHistoryRow> = {}): FeeHistoryRow => ({
   admissionNumber: "ADM-1",
   period: "2026-04",
   fees: "1000",
+  heads: {},
   lateFee: "",
   paid: "",
   paidOn: "",
@@ -99,6 +107,7 @@ describe("template columns", () => {
     expect(columns.months.map((m) => m.period)).toEqual(["2026-04", "2026-05"]);
     expect(columns.months[0]).toEqual({
       period: "2026-04",
+      heads: [],
       fees: "Apr 2026 Fees (₹)",
       lateFee: "Apr 2026 Late Fee (₹)",
       paid: "Apr 2026 Paid (₹)",
@@ -118,6 +127,7 @@ describe("template columns", () => {
     expect(columns.months).toEqual([
       {
         period: "2026-09",
+        heads: [],
         fees: "September 2026 fees",
         paidOn: "09/2026 PAID ON",
         receiptNo: "Sept-26 Receipt No",
@@ -161,6 +171,7 @@ describe("template columns", () => {
         admissionNumber: "ADM-1",
         period: "2026-04",
         fees: "1000",
+        heads: {},
         lateFee: "",
         paid: "1000",
         paidOn: "05/04/2026",
@@ -195,6 +206,145 @@ describe("template columns", () => {
   it("names months the short way", () => {
     expect(monthLabel("2026-04")).toBe("Apr 2026");
     expect(monthLabel("2026-09")).toBe("Sep 2026");
+  });
+});
+
+describe("blank template columns", () => {
+  const headers = studentHistoryHeaders(
+    ["2026-04", "2026-05"],
+    ["Tuition Fee", "Examination Fees"],
+  );
+  const columns = findHistoryColumns(headers) as HistoryColumns;
+
+  it("has the student, then each fee head and the rest for each month", () => {
+    expect(headers.slice(0, 2)).toEqual(["Admission Number", "Student Name"]);
+    expect(headers).toHaveLength(15 + 2 * 7);
+    expect(headers.slice(15, 22)).toEqual([
+      "Apr 2026 Tuition Fee (₹)",
+      "Apr 2026 Examination Fees (₹)",
+      "Apr 2026 Late Fee (₹)",
+      "Apr 2026 Paid (₹)",
+      "Apr 2026 Paid On",
+      "Apr 2026 Mode",
+      "Apr 2026 Receipt",
+    ]);
+  });
+
+  it("names every student column the way the student import reads it", () => {
+    for (const header of STUDENT_TEMPLATE_HEADERS) {
+      expect(importFieldForHeader(header), header).not.toBeNull();
+    }
+    expect(
+      new Set(Object.values(guessColumnMapping(STUDENT_TEMPLATE_HEADERS))).size,
+    ).toBe(STUDENT_TEMPLATE_HEADERS.length);
+  });
+
+  it("reads each fee head as a head of that month", () => {
+    expect(columns.months[0]).toMatchObject({
+      period: "2026-04",
+      lateFee: "Apr 2026 Late Fee (₹)",
+      heads: [
+        { header: "Apr 2026 Tuition Fee (₹)", name: "Tuition Fee" },
+        { header: "Apr 2026 Examination Fees (₹)", name: "Examination Fees" },
+      ],
+    });
+    expect(columns.months[0].fees).toBeUndefined();
+  });
+
+  it("treats a month column it doesn't know as a fee head", () => {
+    const found = findHistoryColumns([
+      "Admission Number",
+      "Apr 2026 Bus Charge",
+    ]) as HistoryColumns;
+    expect(found.months[0].heads).toEqual([
+      { header: "Apr 2026 Bus Charge", name: "Bus Charge" },
+    ]);
+  });
+
+  it("keeps a month's filled fee heads, and counts a head on its own", () => {
+    const rows = toHistoryRows(
+      {
+        "Admission Number": "ADM-1",
+        "Apr 2026 Tuition Fee (₹)": 1000,
+        "Apr 2026 Examination Fees (₹)": "",
+      },
+      5,
+      columns,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].heads).toEqual({ "Tuition Fee": "1000" });
+  });
+
+  describe("toStudentRows", () => {
+    const student = {
+      "Admission Number": "ADM-1",
+      "Student Name": "Asha",
+      Class: "Class 5",
+      Section: "A",
+      "Parent Name": "Ravi",
+      "Parent Phone": 9000000000,
+      Gender: "F",
+    };
+
+    it("reads a student, leaving the months out", () => {
+      expect(
+        toStudentRows(
+          [
+            {
+              sheetRow: 2,
+              cells: { ...student, "Apr 2026 Tuition Fee (₹)": 1000 },
+            },
+          ],
+          columns,
+        ),
+      ).toEqual([
+        {
+          admissionNumber: "ADM-1",
+          name: "Asha",
+          classId: "Class 5",
+          sectionId: "A",
+          parentName: "Ravi",
+          parentPhone: "9000000000",
+          gender: "FEMALE",
+          sheetRow: 2,
+        },
+      ]);
+    });
+
+    it("doesn't take a second payment's row for a student", () => {
+      expect(
+        toStudentRows(
+          [
+            {
+              sheetRow: 3,
+              cells: {
+                "Admission Number": "ADM-1",
+                "Apr 2026 Paid (₹)": 500,
+              },
+            },
+          ],
+          columns,
+        ),
+      ).toEqual([]);
+    });
+
+    it("keeps a row missing its name, so the check can say so", () => {
+      const rows = toStudentRows(
+        [
+          {
+            sheetRow: 4,
+            cells: {
+              "Admission Number": "ADM-1",
+              "Parent Name": "Ravi",
+              "Apr 2026 Paid (₹)": 500,
+            },
+          },
+          { sheetRow: 5, cells: { "Admission Number": "ADM-2" } },
+        ],
+        columns,
+      );
+      expect(rows.map((r) => r.sheetRow)).toEqual([4, 5]);
+    });
   });
 });
 
@@ -616,6 +766,80 @@ describe("planFeeHistory", () => {
         context({ billedMonths: new Set(["asha|2026-04"]) }),
       );
       expect(plan.totals.discounts).toBe(0);
+    });
+  });
+
+  describe("fee heads in the file", () => {
+    const heads = { "Tuition Fee": "1000", "Exam Fee": "600" };
+
+    it("bills each head as written, without the fee structure", () => {
+      const plan = planFeeHistory(
+        [row({ fees: "", heads, paid: "1200", paidOn: "05/04/2026" })],
+        context(),
+      );
+      expect(lines(plan)).toEqual([
+        { head: "Tuition Fee", amount: 1000, paid: 1000 },
+        { head: "Exam Fee", amount: 600, paid: 200 },
+      ]);
+      expect(plan.heads).toEqual(["Tuition Fee", "Exam Fee"]);
+      expect(plan.totals).toMatchObject({
+        billed: 1600,
+        dues: 400,
+        discounts: 0,
+        otherFees: 0,
+      });
+    });
+
+    it("leaves out a head with 0", () => {
+      const plan = planFeeHistory(
+        [row({ fees: "", heads: { "Tuition Fee": "1000", "Exam Fee": "0" } })],
+        context(),
+      );
+      expect(lines(plan).map((l) => l.head)).toEqual(["Tuition Fee"]);
+    });
+
+    it("adds the late fee after them", () => {
+      const plan = planFeeHistory(
+        [row({ fees: "", heads, lateFee: "150" })],
+        context(),
+      );
+      expect(lines(plan).at(-1)).toEqual({
+        head: LATE_FEE_LINE,
+        amount: 150,
+        paid: 0,
+      });
+    });
+
+    it("works blank late fees out from the rule", () => {
+      const plan = planFeeHistory(
+        [row({ fees: "", heads, paid: "1600", paidOn: "20/04/2026" })],
+        context({ lateFeeRule: rule }),
+      );
+      expect(plan.totals.lateFees).toBe(100);
+    });
+
+    it("names the head with a bad amount", () => {
+      const r = row({ fees: "", heads: { "Tuition Fee": "abc" } });
+      expect(planFeeHistory([r], context()).problems).toEqual([
+        `Row ${r.sheetRow}, April 2026: Tuition Fee "abc" isn't a valid amount`,
+      ]);
+    });
+
+    it("refuses Fees and fee heads for one month", () => {
+      const r = row({ heads });
+      expect(planFeeHistory([r], context()).problems).toEqual([
+        `Row ${r.sheetRow}, April 2026: Fill in Fees or the fee heads, not both`,
+      ]);
+    });
+
+    it("refuses fee heads for one month on two rows", () => {
+      const second = row({ fees: "", heads });
+      const { problems } = planFeeHistory(
+        [row({ fees: "", heads }), second],
+        context(),
+      );
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(`Row ${second.sheetRow}, April 2026:`);
     });
   });
 

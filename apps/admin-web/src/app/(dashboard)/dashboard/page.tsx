@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { can } from "@schoolos/types";
 import { getPermissions } from "@/lib/auth-guard";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
+import { getFeeHistorySetup } from "@/lib/actions/fee-history";
+import { isAdmin } from "@/lib/session";
 import { UserRole } from "@schoolos/types";
 import { getCache } from "@/lib/redis";
 import { todayInTimeZone } from "@/lib/fees/timezone";
@@ -247,12 +249,29 @@ export default async function DashboardPage() {
     postNotices: can(permissions, "notices", "manage"),
   };
 
+  // Onboarding's last step, until the school has students.
+  const needsStudents = isAdmin(user.role) && data.stats.totalStudents === 0;
+  const [setup, classes] = needsStudents
+    ? await Promise.all([
+        getFeeHistorySetup(),
+        prisma.class.findMany({
+          where: { schoolId },
+          include: { sections: { select: { id: true, name: true } } },
+          orderBy: { grade: "asc" },
+          take: 200,
+        }),
+      ])
+    : [null, []];
+
   return (
     <DashboardContent
       data={visibleDashboardData(data, access)}
       userRole={user.role}
       userName={user.name}
       access={access}
+      addStudents={
+        setup && !("error" in setup) ? { setup, classes } : undefined
+      }
     />
   );
 }

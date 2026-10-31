@@ -5,6 +5,7 @@ import { StudentsContent } from "@/components/students/students-content";
 import { getCache } from "@/lib/redis";
 import { can } from "@schoolos/types";
 import { getPermissions } from "@/lib/auth-guard";
+import { isAdmin } from "@/lib/session";
 
 export const metadata = { title: "Students" };
 
@@ -102,6 +103,7 @@ export default async function StudentsPage({
       classes={classes}
       canEdit={canEdit}
       canPromote={user.role === "SCHOOL_ADMIN"}
+      canImportHistory={isAdmin(user.role)}
       appliedFilters={{
         q: query ?? "",
         classId: classId ?? "",

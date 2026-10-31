@@ -19,10 +19,15 @@ import {
   finishFeeHistoryImport,
   getFeeHistorySetup,
   getFeeHistoryTemplate,
+  getStudentsHistoryTemplate,
   importFeeHistoryBatch,
   startFeeHistoryImport,
 } from "../fee-history";
 import { importOpeningBalances, undoFeeImport } from "../fee-import";
+import {
+  checkStudentsWithHistory,
+  importStudentsWithHistory,
+} from "../student-import";
 import { allocatePayment, getFeeReceiptDetails } from "../fee-allocator";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
 import { GET as applyLateFees } from "@/app/api/cron/apply-late-fees/route";
@@ -59,6 +64,7 @@ const row = (
   admissionNumber: adm(name),
   period,
   fees: "1000",
+  heads: {},
   lateFee: "",
   paid: "",
   paidOn: "",
@@ -249,6 +255,7 @@ describe("fee history import", () => {
       for (const result of [
         await getFeeHistorySetup(),
         await getFeeHistoryTemplate({ from: "2026-04", to: "2026-05" }),
+        await getStudentsHistoryTemplate({ from: "2026-04", to: "2026-05" }),
         await checkFeeHistory({ months, rows }),
         await startFeeHistoryImport({ periods: [], heads: [] }),
         await importFeeHistoryBatch({ importId: "x", months, rows }),
@@ -267,6 +274,7 @@ describe("fee history import", () => {
       expect(setup.firstMonth).toBe("2026-04");
       expect(setup.lateFeeRule).toBe("₹100 monthly");
       expect(setup.studentCount).toBe(2);
+      expect(setup.feeHeadCount).toBe(3);
     });
   });
 
@@ -406,6 +414,165 @@ describe("fee history import", () => {
       expect(await ask("2019-01", "2026-04")).toEqual({
         error: "Choose 5 years or fewer at a time",
       });
+    });
+  });
+
+  describe("blank template", () => {
+    it("has the school's fee heads, late fee and classes", async () => {
+      const template = await getStudentsHistoryTemplate({
+        from: "2026-04",
+        to: "2026-05",
+      });
+      expect(template).toEqual({
+        months: ["2026-04", "2026-05"],
+        heads: ["Annual", "Transport Fee", "Tuition"],
+        feeHeadNotes: [
+          "Annual: ₹3,000 yearly",
+          "Transport Fee: ₹0 monthly",
+          "Tuition: ₹1,000 monthly",
+        ],
+        classNotes: ["Grade 5: A"],
+        lateFeeRule: "₹100 monthly",
+      });
+    });
+
+    it("leaves out switched-off heads and those with their own column", async () => {
+      await prisma.feeComponent.createMany({
+        data: [
+          {
+            schoolId,
+            name: "Old Bus",
+            amount: 1,
+            isActive: false,
+            frequency: "MONTHLY",
+          },
+          {
+            schoolId,
+            name: "Fine",
+            amount: 1,
+            category: "LATE_FEE",
+            frequency: "MONTHLY",
+          },
+          { schoolId, name: "Late Fee", amount: 1, frequency: "MONTHLY" },
+        ],
+      });
+      const template = await getStudentsHistoryTemplate({
+        from: "2026-04",
+        to: "2026-04",
+      });
+      expect("heads" in template && template.heads).toEqual([
+        "Annual",
+        "Transport Fee",
+        "Tuition",
+      ]);
+    });
+
+    it("refuses months that can't be listed", async () => {
+      expect(
+        await getStudentsHistoryTemplate({ from: "2999-01", to: "2999-02" }),
+      ).toEqual({ error: "The last month can't be in the future" });
+    });
+  });
+
+  describe("students with their fee history", () => {
+    const student = (name: string, admissionNumber: string) => ({
+      name,
+      classId: "Grade 5",
+      sectionId: "A",
+      parentName: "Parent",
+      parentPhone: "9000000000",
+      admissionNumber,
+    });
+    const headRow = (number: string, over: Partial<FeeHistoryRow> = {}) => ({
+      ...row("Asha", "2026-04"),
+      admissionNumber: number,
+      fees: "",
+      heads: { Tuition: "1000", "Transport Fee": "800" },
+      ...over,
+    });
+    const removeStudent = (admissionNumber: string) =>
+      prisma.student.deleteMany({ where: { schoolId, admissionNumber } });
+
+    it("checks fees for students the file is about to add", async () => {
+      const number = adm("New");
+      const res = await checkFeeHistory({
+        months: ["2026-04"],
+        rows: [headRow(number, { paid: "1800", paidOn: "05/04/2026" })],
+        newAdmissions: [number],
+      });
+      expect(res).toMatchObject({ problems: [] });
+      expect("totals" in res && res.totals).toMatchObject({
+        bills: 1,
+        billed: 1800,
+        paid: 1800,
+      });
+    });
+
+    it("still refuses a number nobody is adding", async () => {
+      const res = await checkFeeHistory({
+        months: ["2026-04"],
+        rows: [headRow("NOBODY")],
+        newAdmissions: [adm("New")],
+      });
+      expect("problems" in res && res.problems[0]).toContain(
+        "isn't a student at this school",
+      );
+    });
+
+    it("adds the students, then bills each fee head as written", async () => {
+      const number = adm("Fresh");
+      const students = [student("Fresh", number)];
+      const rows = [
+        headRow(number, {
+          lateFee: "50",
+          paid: "1000",
+          paidOn: "05/04/2026",
+          receiptNo: "BOOK-1",
+        }),
+      ];
+
+      const check = await checkStudentsWithHistory(students);
+      expect(check).toMatchObject({ imported: 1, errors: [] });
+      await importStudentsWithHistory(students);
+      const done = await importRows(rows);
+
+      expect(done).toMatchObject({ bills: 1, billed: 1850, paid: 1000 });
+      const fresh = await prisma.student.findFirstOrThrow({
+        where: { schoolId, admissionNumber: number },
+      });
+      const april = await billOrThrow(fresh.id, "2026-04");
+      expect(
+        april.items
+          .map((i) => [
+            i.component.name,
+            Number(i.amount),
+            Number(i.paidAmount),
+          ])
+          .sort(),
+      ).toEqual([
+        ["Late Fee", 50, 0],
+        ["Transport Fee", 800, 0],
+        ["Tuition", 1000, 1000],
+      ]);
+      await prisma.paymentAllocation.deleteMany({
+        where: { payment: { schoolId } },
+      });
+      await prisma.paymentTransaction.deleteMany({ where: { schoolId } });
+      await prisma.feeCharge.deleteMany({ where: { schoolId } });
+      await removeStudent(number);
+    });
+
+    it("picks up where it stopped when the same file is sent again", async () => {
+      const number = adm("Again");
+      const students = [student("Again", number)];
+      await importStudentsWithHistory(students);
+
+      const retry = await checkStudentsWithHistory(students);
+
+      expect(retry).toMatchObject({ imported: 0, existing: 1, errors: [] });
+      expect(await importRows([headRow(number)])).toMatchObject({ bills: 1 });
+      await prisma.feeCharge.deleteMany({ where: { schoolId } });
+      await removeStudent(number);
     });
   });
 

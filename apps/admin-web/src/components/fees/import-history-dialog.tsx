@@ -21,6 +21,7 @@ import {
   finishFeeHistoryImport,
   getFeeHistorySetup,
   getFeeHistoryTemplate,
+  getStudentsHistoryTemplate,
   importFeeHistoryBatch,
   startFeeHistoryImport,
   type FeeHistorySetup,
@@ -32,10 +33,18 @@ import {
   findSharedReceipts,
   monthsBetween,
   toHistoryRows,
+  toStudentRows,
   type FeeHistoryRow,
   type HistoryTotals,
 } from "@/lib/fees/fee-history";
-import { downloadHistoryTemplate } from "@/lib/fees/fee-history-template";
+import {
+  downloadHistoryTemplate,
+  downloadStudentsHistoryTemplate,
+} from "@/lib/fees/fee-history-template";
+import {
+  checkStudentsWithHistory,
+  importStudentsWithHistory,
+} from "@/lib/actions/student-import";
 import { readSpreadsheet } from "@/lib/read-spreadsheet";
 import {
   ImportNotice as Notice,
@@ -51,6 +60,10 @@ const plural = (n: number, word: string) =>
   `${n.toLocaleString("en-IN")} ${word}${n === 1 ? "" : "s"}`;
 
 type FileCheck = {
+  /** Students the file would add, and those already at the school. */
+  studentsToAdd: number;
+  existingStudents: number;
+  newClasses: string[];
   problems: string[];
   totals: HistoryTotals;
   newHeads: string[];
@@ -63,6 +76,17 @@ type Finished = Extract<
   Awaited<ReturnType<typeof finishFeeHistoryImport>>,
   { success: true }
 >;
+
+const noHistory: Finished = {
+  success: true,
+  students: 0,
+  bills: 0,
+  billed: 0,
+  paid: 0,
+  dues: 0,
+  lateFees: 0,
+  advance: 0,
+};
 
 const emptyTotals: HistoryTotals = {
   bills: 0,
@@ -89,10 +113,21 @@ const addTotals = (a: HistoryTotals, b: HistoryTotals) =>
 
 const rowOf = (problem: string) => Number(/^Row (\d+)/.exec(problem)?.[1] ?? 0);
 
+/**
+ * Brings in fee history for students already in Kora, from a template filled
+ * in with them. `withStudents` is for a school without its students yet: the
+ * template is blank, with a column for each fee head, and uploading it adds the
+ * students first, then their fees.
+ */
 export function ImportHistoryDialog({
   open,
   onOpenChange,
-}: Readonly<{ open: boolean; onOpenChange: (open: boolean) => void }>) {
+  withStudents = false,
+}: Readonly<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  withStudents?: boolean;
+}>) {
   const router = useRouter();
   const [setup, setSetup] = useState<FeeHistorySetup | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -104,6 +139,9 @@ export function ImportHistoryDialog({
   const [progress, setProgress] = useState("");
   const [rows, setRows] = useState<FeeHistoryRow[]>([]);
   const [fileMonths, setFileMonths] = useState<string[]>([]);
+  const [fileStudents, setFileStudents] = useState<
+    ReturnType<typeof toStudentRows>
+  >([]);
   const [fileName, setFileName] = useState("");
   const [check, setCheck] = useState<FileCheck | null>(null);
   const [result, setResult] = useState<Finished | null>(null);
@@ -139,6 +177,12 @@ export function ImportHistoryDialog({
   const handleDownload = async () => {
     setBusy(true);
     try {
+      if (withStudents) {
+        const blank = await getStudentsHistoryTemplate({ from, to });
+        if ("error" in blank) toast.error(blank.error);
+        else await downloadStudentsHistoryTemplate(blank);
+        return;
+      }
       const res = await getFeeHistoryTemplate({ from, to });
       if ("error" in res) toast.error(res.error);
       else if (res.students.length === 0) {
@@ -157,6 +201,13 @@ export function ImportHistoryDialog({
     setBusy(true);
     try {
       const sheet = await readSpreadsheet(file);
+      const nothingFilled = withStudents
+        ? "This file has no students in it"
+        : "This file has no fee amounts or payments in it";
+      if (sheet.rows.length === 0) {
+        toast.error(nothingFilled);
+        return;
+      }
       const columns = findHistoryColumns(sheet.headers);
       if ("missing" in columns) {
         toast.error(
@@ -168,12 +219,16 @@ export function ImportHistoryDialog({
         toHistoryRows(cells, sheetRow, columns),
       );
       const months = columns.months.map((m) => m.period);
-      if (fileRows.length === 0) {
-        toast.error("This file has no fee amounts or payments in it");
+      const students = withStudents ? toStudentRows(sheet.rows, columns) : [];
+      if (fileRows.length === 0 && students.length === 0) {
+        toast.error(nothingFilled);
         return;
       }
 
       const merged: FileCheck = {
+        studentsToAdd: 0,
+        existingStudents: 0,
+        newClasses: [],
         problems: findSharedReceipts(fileRows),
         totals: emptyTotals,
         newHeads: [],
@@ -181,13 +236,28 @@ export function ImportHistoryDialog({
         heads: [],
         periods: [],
       };
+      if (students.length > 0) {
+        setProgress("Checking students");
+        const res = await checkStudentsWithHistory(students);
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        merged.studentsToAdd = res.imported;
+        merged.existingStudents = res.existing;
+        merged.newClasses = res.added;
+        merged.problems.push(...res.errors);
+      }
+      const newAdmissions = students.flatMap((s) => s.admissionNumber ?? []);
       const batches = batchHistoryRows(fileRows, BATCH_SIZE);
       for (const [index, batch] of batches.entries()) {
         setProgress(`Checking ${index + 1} of ${batches.length}`);
+        const inBatch = new Set(batch.map((r) => r.admissionNumber));
         const res = await checkFeeHistory({
           months,
           rows: batch,
           calculateLateFees,
+          newAdmissions: newAdmissions.filter((n) => inBatch.has(n)),
         });
         if ("error" in res) {
           toast.error(res.error);
@@ -202,6 +272,7 @@ export function ImportHistoryDialog({
       }
       setRows(fileRows);
       setFileMonths(months);
+      setFileStudents(students);
       setFileName(file.name);
       setCheck({
         ...merged,
@@ -226,7 +297,24 @@ export function ImportHistoryDialog({
     if (!check) return;
     setBusy(true);
     let importId: string | null = null;
+    let studentsAdded = false;
     try {
+      if (fileStudents.length > 0) {
+        setProgress("Adding students");
+        const added = await importStudentsWithHistory(fileStudents);
+        const failure = "error" in added ? added.error : added.errors[0];
+        if (failure) {
+          toast.error(`Nothing was saved. ${failure}`);
+          return;
+        }
+        studentsAdded = true;
+      }
+      if (rows.length === 0) {
+        setResult(noHistory);
+        router.refresh();
+        return;
+      }
+
       const started = await startFeeHistoryImport({
         fileName,
         calculateLateFees,
@@ -234,10 +322,7 @@ export function ImportHistoryDialog({
         periods: check.periods,
         heads: check.heads,
       });
-      if ("error" in started) {
-        toast.error(started.error);
-        return;
-      }
+      if ("error" in started) throw new Error(started.error);
       importId = started.id;
 
       const batches = batchHistoryRows(rows, BATCH_SIZE);
@@ -258,8 +343,11 @@ export function ImportHistoryDialog({
     } catch (e) {
       // All of it or none of it: take back whatever already went in.
       if (importId) await undoFeeImport(importId).catch(() => null);
+      const reason = e instanceof Error ? e.message : "The import failed.";
       toast.error(
-        `Nothing was saved. ${e instanceof Error ? e.message : "The import failed."}`,
+        studentsAdded
+          ? `Your students were added, but not their fees. ${reason} Upload the same file again to bring the fees in.`
+          : `Nothing was saved. ${reason}`,
       );
     } finally {
       setBusy(false);
@@ -284,9 +372,13 @@ export function ImportHistoryDialog({
   const notReady = setup
     ? !setup.session
       ? "Set a current academic session in Fee Settings first."
-      : setup.studentCount === 0
-        ? "Add your students first, then import their fee history."
-        : ""
+      : withStudents
+        ? setup.feeHeadCount === 0
+          ? "Add your fee heads in Fee Settings first."
+          : ""
+        : setup.studentCount === 0
+          ? "Add your students first, then import their fee history."
+          : ""
     : "";
   const monthCount = from && to ? monthsBetween(from, to).length : 0;
   const problemRows = new Set(check?.problems.map(rowOf)).size;
@@ -296,8 +388,16 @@ export function ImportHistoryDialog({
       <Dialog
         open={open}
         onOpenChange={onOpenChange}
-        title="Import Fee History"
-        description="Bring in bills, late fees and payments, month by month"
+        title={
+          withStudents
+            ? "Import Students with Fee History"
+            : "Import Fee History"
+        }
+        description={
+          withStudents
+            ? "Bring in students with their bills, late fees and payments"
+            : "Bring in bills, late fees and payments, month by month"
+        }
         icon={<History className="w-5 h-5" />}
         className="max-w-2xl"
       >
@@ -337,18 +437,28 @@ export function ImportHistoryDialog({
               </div>
               {monthCount > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  One row for each of your{" "}
-                  {plural(setup.studentCount, "student")}, with a group of
-                  columns for each of {plural(monthCount, "month")}.
+                  {withStudents ? (
+                    <>
+                      A group of columns for each of{" "}
+                      {plural(monthCount, "month")}, with your{" "}
+                      {plural(setup.feeHeadCount, "fee head")} and late fee.
+                    </>
+                  ) : (
+                    <>
+                      One row for each of your{" "}
+                      {plural(setup.studentCount, "student")}, with a group of
+                      columns for each of {plural(monthCount, "month")}.
+                    </>
+                  )}
                 </p>
               )}
             </Step>
 
             <Step number={2} title="Download the template">
               <p className="text-xs text-muted-foreground mb-2">
-                Each month&apos;s fees are filled in from your fee structure.
-                Fill in what was paid, and change anything that&apos;s
-                different.
+                {withStudents
+                  ? "It's blank. Put one student on each row, with what was billed and paid each month."
+                  : "Each month's fees are filled in from your fee structure. Fill in what was paid, and change anything that's different."}
               </p>
               <button
                 type="button"
@@ -432,7 +542,7 @@ export function ImportHistoryDialog({
               </button>
             </Step>
 
-            {setup.imports.length > 0 && (
+            {!withStudents && setup.imports.length > 0 && (
               <section className="border-t pt-4">
                 <h3 className="text-sm font-semibold mb-2">Past imports</h3>
                 <ul className="space-y-2">
@@ -479,6 +589,12 @@ export function ImportHistoryDialog({
         {setup && check && !result && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {withStudents && (
+                <Total
+                  label="Students to add"
+                  value={check.studentsToAdd.toLocaleString("en-IN")}
+                />
+              )}
               <Total
                 label="Bills"
                 value={check.totals.bills.toLocaleString("en-IN")}
@@ -527,6 +643,19 @@ export function ImportHistoryDialog({
               </div>
             )}
 
+            {check.existingStudents > 0 && (
+              <Notice>
+                {plural(check.existingStudents, "student")}{" "}
+                {check.existingStudents === 1 ? "is" : "are"} already in Kora.
+                Only their fees will be added.
+              </Notice>
+            )}
+            {check.newClasses.length > 0 && (
+              <Notice>
+                New classes and sections will be added:{" "}
+                {check.newClasses.join(", ")}.
+              </Notice>
+            )}
             {check.totals.alreadyBilled > 0 && (
               <Notice>
                 {plural(check.totals.alreadyBilled, "month")} already{" "}
@@ -589,12 +718,18 @@ export function ImportHistoryDialog({
                 disabled={
                   busy ||
                   check.problems.length > 0 ||
-                  check.totals.bills + check.totals.payments === 0
+                  check.studentsToAdd +
+                    check.totals.bills +
+                    check.totals.payments ===
+                    0
                 }
                 className="flex items-center gap-2 h-9 px-4 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-                {progress || `Import ${plural(check.totals.bills, "bill")}`}
+                {progress ||
+                  (check.studentsToAdd > 0
+                    ? `Import ${plural(check.studentsToAdd, "student")}${check.totals.bills > 0 ? ` and ${plural(check.totals.bills, "bill")}` : ""}`
+                    : `Import ${plural(check.totals.bills, "bill")}`)}
               </button>
             </div>
           </div>
@@ -605,10 +740,15 @@ export function ImportHistoryDialog({
             <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-4">
               <CheckCircle2 className="w-7 h-7" />
             </div>
-            <h3 className="text-lg font-bold">Fee history imported</h3>
+            <h3 className="text-lg font-bold">
+              {withStudents ? "Students imported" : "Fee history imported"}
+            </h3>
             <p className="text-sm text-muted-foreground mt-1 mb-5">
-              {plural(result.students, "student")} ·{" "}
-              {plural(result.bills, "bill")} · {formatCurrency(result.billed)}{" "}
+              {plural(
+                withStudents && check ? check.studentsToAdd : result.students,
+                "student",
+              )}{" "}
+              · {plural(result.bills, "bill")} · {formatCurrency(result.billed)}{" "}
               billed · {formatCurrency(result.paid)} paid ·{" "}
               {formatCurrency(result.dues)} still due
             </p>

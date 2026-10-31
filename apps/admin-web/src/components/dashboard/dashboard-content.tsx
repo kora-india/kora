@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { AddStudentsPanel } from "./add-students-panel";
 import {
   Users,
   GraduationCap,
@@ -70,6 +71,8 @@ interface DashboardContentProps {
   userRole: UserRole;
   userName: string;
   access?: DashboardAccess;
+  /** Set for a school with no students yet. */
+  addStudents?: React.ComponentProps<typeof AddStudentsPanel>;
 }
 
 function StatCard({ title, value, icon: Icon, trend, color, href }: any) {
@@ -119,6 +122,7 @@ export function DashboardContent({
   userRole,
   userName,
   access = FULL_DASHBOARD,
+  addStudents,
 }: Readonly<DashboardContentProps>) {
   const stats = data?.stats;
   const revenueAreaData = data?.revenueAreaData || [];
@@ -198,6 +202,8 @@ export function DashboardContent({
           )}
         </motion.div>
       </div>
+
+      {addStudents && <AddStudentsPanel {...addStudents} />}
 
       {/* Stats Grid */}
       <motion.div

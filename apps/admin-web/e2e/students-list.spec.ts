@@ -9,6 +9,7 @@ test("a long student list pages, and the page size can change", async ({
   // Enough students for more than one page of 20.
   await page.goto("/students");
   await page.getByRole("button", { name: "Import", exact: true }).click();
+  await page.getByRole("button", { name: /^Import students only/ }).click();
   await page.locator('input[type="file"]').setInputFiles({
     name: "students.csv",
     mimeType: "text/csv",

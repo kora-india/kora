@@ -2,7 +2,11 @@
 
 import { z } from "zod";
 import { prisma } from "@schoolos/db";
-import { requirePermission } from "@/lib/auth-guard";
+import {
+  isError,
+  requirePermission,
+  requireSchoolAdmin,
+} from "@/lib/auth-guard";
 import { checkClassLimit } from "@/lib/plan-limits";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { getPlan } from "@/lib/plans";
@@ -71,8 +75,37 @@ export interface ImportResult {
   errors: string[];
 }
 
+export interface StudentsWithHistoryResult extends ImportResult {
+  /** Students already at the school, kept for their fees. */
+  existing: number;
+  /** The classes and sections the file would add. */
+  added: string[];
+}
+
 /** Thrown inside the import transaction to roll everything back. */
 class ImportAbort extends Error {}
+
+/** Thrown at the end of a trial run, which rolls back as a failed one does. */
+class ImportTrialDone extends Error {
+  constructor(readonly students: number) {
+    super("Trial run finished");
+  }
+}
+
+const sameName = (a: string, b: string) =>
+  a.trim().replace(/\s+/g, " ").toLowerCase() ===
+  b.trim().replace(/\s+/g, " ").toLowerCase();
+
+interface ImportOptions {
+  /**
+   * For a file that also holds fee history: a student already at the school
+   * stays, so their fees can be added, which also lets a failed upload be
+   * sent again. Any other problem stops the whole file rather than one row.
+   */
+  withHistory?: boolean;
+  /** Does everything, then rolls it back: the file's check. */
+  trial?: boolean;
+}
 
 /**
  * Imports students from a spreadsheet. Rows are checked one by one and every
@@ -90,6 +123,39 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
       errors: [guard.error],
     };
   }
+  const { imported, skipped, failed, errors } = await importStudentRows(
+    guard,
+    data,
+  );
+  return { imported, skipped, failed, errors };
+}
+
+/** Checks a file of students and fee history's students. Saves nothing. */
+export async function checkStudentsWithHistory(
+  data: any[],
+): Promise<StudentsWithHistoryResult | { error: string }> {
+  const admin = await requireSchoolAdmin();
+  if (isError(admin)) return { error: admin.error };
+  return importStudentRows(admin, data, { withHistory: true, trial: true });
+}
+
+/** Adds a checked file's students, all of them or none. */
+export async function importStudentsWithHistory(
+  data: any[],
+): Promise<StudentsWithHistoryResult | { error: string }> {
+  const admin = await requireSchoolAdmin();
+  if (isError(admin)) return { error: admin.error };
+  return importStudentRows(admin, data, { withHistory: true });
+}
+
+async function importStudentRows(
+  guard: Exclude<
+    Awaited<ReturnType<typeof requireSchoolAdmin>>,
+    { error: string }
+  >,
+  data: any[],
+  { withHistory = false, trial = false }: ImportOptions = {},
+): Promise<StudentsWithHistoryResult> {
   const schoolId = guard.schoolId!;
 
   // 1. Validate each row's fields
@@ -119,6 +185,8 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
       skipped: 0,
       failed,
       errors: [...errors, "No valid records to import"],
+      existing: 0,
+      added: [],
     };
   }
 
@@ -150,11 +218,15 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
         errors: [
           `Importing requires creating ${newClassNames.size} new classes, which exceeds your ${classLimit.plan} plan limit (${classLimit.current}/${classLimit.max} classes). Upgrade your plan to add more.`,
         ],
+        existing: 0,
+        added: [],
       };
     }
   }
 
   let skipped = 0;
+  let existing = 0;
+  const added = [...newClassNames.values()];
 
   try {
     const imported = await prisma.$transaction(
@@ -184,6 +256,9 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
               data: { schoolId, classId: cls.id, name: row.sectionId.trim() },
             });
             cls.sections.push(section);
+            if (!newClassNames.has(classMatchKey(cls.name))) {
+              added.push(`${cls.name} ${section.name}`);
+            }
           }
           resolved.push({ ...row, classId: cls.id, sectionId: section.id });
         }
@@ -218,10 +293,10 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
               in: [...provided, ...candidates.map((c) => c.admissionNumber)],
             },
           },
-          select: { admissionNumber: true },
+          select: { admissionNumber: true, name: true },
         });
-        const takenAdmissions = new Set(
-          takenRows.map((t) => t.admissionNumber),
+        const takenAdmissions = new Map(
+          takenRows.map((t) => [t.admissionNumber, t.name]),
         );
 
         const sectionIds = [...new Set(resolved.map((r) => r.sectionId))];
@@ -257,7 +332,19 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
 
           let admissionNumber = row.admissionNumber?.trim();
           if (admissionNumber) {
-            if (takenAdmissions.has(admissionNumber)) {
+            const holder = takenAdmissions.get(admissionNumber);
+            if (holder !== undefined && withHistory) {
+              if (sameName(holder, row.name)) {
+                existing++;
+              } else {
+                failed++;
+                errors.push(
+                  `Row ${row.rowNumber}: Admission number ${admissionNumber} already belongs to ${holder}.`,
+                );
+              }
+              continue;
+            }
+            if (holder !== undefined) {
               skipped++;
               errors.push(
                 `Row ${row.rowNumber}: Skipped, admission number ${admissionNumber} already exists.`,
@@ -332,7 +419,13 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
           });
         }
 
-        if (toImport.length === 0) return 0;
+        if (withHistory && !trial && errors.length > 0) {
+          throw new ImportAbort("Some rows need fixing, so nothing was saved.");
+        }
+        if (toImport.length === 0) {
+          if (trial) throw new ImportTrialDone(0);
+          return 0;
+        }
 
         // 5. Plan limit, counted inside the transaction
         const plan = await tx.school.findUniqueOrThrow({
@@ -351,6 +444,8 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
             `Importing ${toImport.length} students would exceed your ${planName} plan limit (${activeStudents}/${limits.maxStudents} active students). Upgrade your plan to add more.`,
           );
         }
+
+        if (trial) throw new ImportTrialDone(toImport.length);
 
         // No skipDuplicates: every row was checked, so a conflict here is a
         // real error and must fail the import rather than drop students.
@@ -388,8 +483,12 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
       });
     }
 
-    return { imported, skipped, failed, errors };
+    return { imported, skipped, failed, errors, existing, added };
   } catch (error: any) {
+    if (error instanceof ImportTrialDone) {
+      const imported = error.students;
+      return { imported, skipped, failed, errors, existing, added };
+    }
     const message =
       error instanceof ImportAbort
         ? error.message
@@ -399,6 +498,8 @@ export async function bulkImportStudents(data: any[]): Promise<ImportResult> {
       skipped: 0,
       failed: data.length,
       errors: [...errors, message],
+      existing: 0,
+      added: [],
     };
   }
 }

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Plus, ShieldCheck, UserX } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, Users } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import {
   PERMISSION_MODULES,
@@ -12,10 +11,7 @@ import {
   type StaffRole,
 } from "@schoolos/types";
 import { SettingsCard } from "@/components/settings/settings-card";
-import { useConfirm } from "@/components/ui/use-confirm";
-import { removeAccountant } from "@/lib/actions/team";
 import { MemberAccessDialog } from "./member-access-dialog";
-import { AddAccountantDialog } from "./add-accountant-dialog";
 
 export interface TeamMember {
   id: string;
@@ -49,49 +45,26 @@ const labelsAt = (permissions: Permissions, level: "view" | "manage") =>
 export function TeamAccessContent({
   members,
 }: Readonly<{ members: TeamMember[] }>) {
-  const router = useRouter();
-  const { confirm, dialog: confirmDialog } = useConfirm();
   const [editing, setEditing] = useState<TeamMember | null>(null);
-  const [adding, setAdding] = useState(false);
-
-  const remove = async (member: TeamMember) => {
-    const confirmed = await confirm({
-      title: `Remove ${member.name}'s login?`,
-      description:
-        "They won't be able to sign in. Adding an accountant with the same email brings the login back.",
-      confirmLabel: "Remove login",
-      variant: "danger",
-    });
-    if (!confirmed) return;
-    const result = await removeAccountant(member.id);
-    if ("error" in result) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success(result.message);
-    router.refresh();
-  };
 
   return (
     <>
-      {confirmDialog}
       <SettingsCard
         title="Team & access"
-        description="Choose what each teacher and accountant can see and change. School admins always have full access."
+        description="Choose what each teacher and accountant can see and change. To add or remove someone, go to Teachers & Staff. School admins always have full access."
         action={
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex flex-shrink-0 items-center gap-1.5 h-8 px-3 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
+          <Link
+            href="/teachers?tab=staff"
+            className="flex flex-shrink-0 items-center gap-1.5 h-8 px-3 border rounded-lg text-xs font-medium hover:bg-muted transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> Add accountant
-          </button>
+            <Users className="w-3.5 h-3.5" /> Teachers &amp; Staff
+          </Link>
         }
       >
         {members.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No teacher or accountant logins yet. Teachers get one when you add
-            them in Teachers &amp; Staff; add accountants here.
+            No teacher or accountant logins yet. Add them in Teachers &amp;
+            Staff and they&apos;ll appear here.
           </p>
         ) : (
           <ul className="divide-y -my-2">
@@ -133,26 +106,14 @@ export function TeamAccessContent({
                             .join(" · ")}
                     </p>
                   </div>
-                  <div className="flex flex-shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditing(member)}
-                      aria-label={`Edit access for ${member.name}`}
-                      className="flex items-center gap-1.5 h-8 px-3 border rounded-lg text-xs font-medium hover:bg-muted transition-colors"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" /> Edit access
-                    </button>
-                    {member.role === UserRole.ACCOUNTANT && (
-                      <button
-                        type="button"
-                        onClick={() => remove(member)}
-                        aria-label={`Remove login for ${member.name}`}
-                        className="flex items-center gap-1.5 h-8 px-3 border rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                      >
-                        <UserX className="w-3.5 h-3.5" /> Remove
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(member)}
+                    aria-label={`Edit access for ${member.name}`}
+                    className="flex flex-shrink-0 items-center gap-1.5 h-8 px-3 border rounded-lg text-xs font-medium hover:bg-muted transition-colors"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" /> Edit access
+                  </button>
                 </li>
               );
             })}
@@ -165,12 +126,6 @@ export function TeamAccessContent({
           member={editing}
           open
           onOpenChange={(open) => !open && setEditing(null)}
-        />
-      )}
-      {adding && (
-        <AddAccountantDialog
-          open
-          onOpenChange={(open) => !open && setAdding(false)}
         />
       )}
     </>

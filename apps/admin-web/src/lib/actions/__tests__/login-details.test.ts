@@ -11,12 +11,24 @@ import nodemailer from "nodemailer";
 import { prisma } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 import { sendLoginDetailsEmail } from "@/lib/mailer";
-import { createAccountant } from "../team";
+import { createStaff } from "../staff";
 import { createTeacher } from "../teachers";
 
 const suffix = Math.random().toString(36).substring(7);
 const schoolId = `login-mail-school-${suffix}`;
 const { sendMail } = nodemailer.createTransport({} as any);
+
+const addAccountant = async (name: string, email: string) => {
+  const created = await createStaff({
+    name,
+    email,
+    phone: "9000000000",
+    occupation: "Accountant",
+    createLogin: true,
+  });
+  if ("error" in created || !created.login) throw new Error("no login");
+  return created.login;
+};
 
 /** The emails sent during this test, as nodemailer received them. */
 const sentMail = () =>
@@ -49,6 +61,7 @@ describe("emailing new logins their sign-in details", () => {
 
   afterAll(async () => {
     await prisma.teacher.deleteMany({ where: { schoolId } });
+    await prisma.staff.deleteMany({ where: { schoolId } });
     await prisma.user.deleteMany({ where: { schoolId } });
     await prisma.school.deleteMany({ where: { id: schoolId } });
   });
@@ -62,8 +75,7 @@ describe("emailing new logins their sign-in details", () => {
 
   it("sends an accountant their email, temporary password and sign-in link", async () => {
     const email = `ravi-${suffix}@test.com`;
-    const created = await createAccountant({ name: "Ravi", email });
-    if ("error" in created) throw new Error(created.error);
+    const created = await addAccountant("Ravi", email);
     expect(created.emailed).toBe(true);
 
     const [mail] = sentMail();
@@ -97,8 +109,7 @@ describe("emailing new logins their sign-in details", () => {
   it("still creates the login when the email can't be sent", async () => {
     vi.mocked(sendMail).mockRejectedValueOnce(new Error("SMTP down"));
     const email = `asha-${suffix}@test.com`;
-    const created = await createAccountant({ name: "Asha", email });
-    if ("error" in created) throw new Error(created.error);
+    const created = await addAccountant("Asha", email);
 
     expect(created.emailed).toBe(false);
     expect(created.tempPassword).toBeTruthy();

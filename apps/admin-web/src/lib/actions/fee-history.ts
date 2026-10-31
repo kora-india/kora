@@ -27,7 +27,10 @@ import {
   type HistoryContext,
   type HistoryTotals,
 } from "@/lib/fees/fee-history";
-import type { HistoryTemplate } from "@/lib/fees/fee-history-template";
+import type {
+  HistoryTemplate,
+  StudentsHistoryTemplate,
+} from "@/lib/fees/fee-history-template";
 import { PREVIOUS_DUES_CATEGORY } from "@/lib/fees/opening-balance";
 import { formatReceiptNumber } from "@/lib/fees/receipt-number";
 import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
@@ -53,6 +56,7 @@ const RowSchema = z.object({
   admissionNumber: z.string().max(100),
   period: z.string().max(7),
   fees: z.string().max(40),
+  heads: z.record(z.string().max(40)).default({}),
   lateFee: z.string().max(40),
   paid: z.string().max(40),
   paidOn: z.string().max(40),
@@ -66,6 +70,8 @@ const CheckSchema = z.object({
   months: MonthsSchema,
   rows: z.array(RowSchema).min(1).max(5000),
   calculateLateFees: z.boolean().default(false),
+  /** Students the same file is about to add, so their rows can be checked. */
+  newAdmissions: z.array(z.string().max(100)).max(5000).default([]),
 });
 
 const StartSchema = z.object({
@@ -123,8 +129,32 @@ export interface FeeHistorySetup {
   currentMonth: string;
   /** The school's late-fee rule in words; null if it has none. */
   lateFeeRule: string | null;
+  /** Fee heads a blank template would have a column for. */
+  feeHeadCount: number;
   imports: FeeHistorySummary[];
 }
+
+/** A fee head the template asks about; late fees have their own column. */
+const isFeeHead = (c: {
+  isActive: boolean;
+  name: string;
+  category: string | null;
+}) =>
+  c.isActive &&
+  c.category !== LATE_FEE_CATEGORY &&
+  c.category !== PREVIOUS_DUES_CATEGORY &&
+  c.name.toLowerCase() !== "late fee";
+
+const lateFeeRuleText = (
+  school: {
+    lateFeeEnabled: boolean;
+    lateFeeAmount: Prisma.Decimal | null;
+    lateFeeFrequency: string | null;
+  } | null,
+) =>
+  school?.lateFeeEnabled && school.lateFeeAmount
+    ? `${money(school.lateFeeAmount)} ${(school.lateFeeFrequency || "MONTHLY").toLowerCase()}`
+    : null;
 
 /** What the history dialog needs when it opens. */
 export async function getFeeHistorySetup(): Promise<
@@ -134,27 +164,32 @@ export async function getFeeHistorySetup(): Promise<
   if (isError(admin)) return { error: admin.error };
   const { schoolId } = admin;
 
-  const [school, session, studentCount, imports] = await Promise.all([
-    prisma.school.findUnique({
-      where: { id: schoolId },
-      select: {
-        timezone: true,
-        lateFeeEnabled: true,
-        lateFeeAmount: true,
-        lateFeeFrequency: true,
-      },
-    }),
-    prisma.academicSession.findFirst({
-      where: { schoolId, isCurrent: true },
-      select: { id: true, name: true, startDate: true },
-    }),
-    prisma.student.count({ where: { schoolId, isActive: true } }),
-    prisma.feeImport.findMany({
-      where: { schoolId, kind: "FULL_HISTORY" },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-  ]);
+  const [school, session, studentCount, components, imports] =
+    await Promise.all([
+      prisma.school.findUnique({
+        where: { id: schoolId },
+        select: {
+          timezone: true,
+          lateFeeEnabled: true,
+          lateFeeAmount: true,
+          lateFeeFrequency: true,
+        },
+      }),
+      prisma.academicSession.findFirst({
+        where: { schoolId, isCurrent: true },
+        select: { id: true, name: true, startDate: true },
+      }),
+      prisma.student.count({ where: { schoolId, isActive: true } }),
+      prisma.feeComponent.findMany({
+        where: { schoolId },
+        select: { isActive: true, name: true, category: true },
+      }),
+      prisma.feeImport.findMany({
+        where: { schoolId, kind: "FULL_HISTORY" },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+    ]);
   const currentMonth = calendarDateInTimeZone(
     resolveTimeZone(school?.timezone),
   ).slice(0, 7);
@@ -168,10 +203,8 @@ export async function getFeeHistorySetup(): Promise<
         ? sessionStart
         : currentMonth,
     currentMonth,
-    lateFeeRule:
-      school?.lateFeeEnabled && school.lateFeeAmount
-        ? `${money(school.lateFeeAmount)} ${(school.lateFeeFrequency || "MONTHLY").toLowerCase()}`
-        : null,
+    lateFeeRule: lateFeeRuleText(school),
+    feeHeadCount: components.filter(isFeeHead).length,
     imports: imports.map((i) => ({
       ...importSummary(i),
       billCount: i.billCount,
@@ -266,12 +299,7 @@ async function loadExpectedBills(
   ]);
 
   // Late fees and opening dues have their own place, not fee heads.
-  const heads = components.filter(
-    (c) =>
-      c.isActive &&
-      c.category !== LATE_FEE_CATEGORY &&
-      c.category !== PREVIOUS_DUES_CATEGORY,
-  );
+  const heads = components.filter(isFeeHead);
   const billable = new Set(heads.map((h) => h.id));
   const frequency = new Map(components.map((c) => [c.id, c.frequency]));
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
@@ -410,18 +438,11 @@ async function loadExpectedBills(
   return { expected, billedMonths, openingMonths };
 }
 
-/**
- * The template: a row per active student, leaving out students with nothing
- * left to bring in. Fees come from the fee structure, so the school only
- * fills in what was paid and changes what's different.
- */
-export async function getFeeHistoryTemplate(
+/** The months a template was asked for, oldest first. */
+async function templateMonths(
+  schoolId: string,
   input: unknown,
-): Promise<HistoryTemplate | { error: string }> {
-  const admin = await requireSchoolAdmin();
-  if (isError(admin)) return { error: admin.error };
-  const { schoolId } = admin;
-
+): Promise<string[] | { error: string }> {
   const parsed = LoadTemplateSchema.safeParse(input);
   if (!parsed.success) return { error: "Choose the months to include" };
   const { from, to } = parsed.data;
@@ -440,6 +461,23 @@ export async function getFeeHistoryTemplate(
   }
   const months = monthsBetween(from, to);
   if (months.length > 60) return { error: "Choose 5 years or fewer at a time" };
+  return months;
+}
+
+/**
+ * The template: a row per active student, leaving out students with nothing
+ * left to bring in. Fees come from the fee structure, so the school only
+ * fills in what was paid and changes what's different.
+ */
+export async function getFeeHistoryTemplate(
+  input: unknown,
+): Promise<HistoryTemplate | { error: string }> {
+  const admin = await requireSchoolAdmin();
+  if (isError(admin)) return { error: admin.error };
+  const { schoolId } = admin;
+
+  const months = await templateMonths(schoolId, input);
+  if ("error" in months) return months;
 
   const students = await prisma.student.findMany({
     where: { schoolId, isActive: true },
@@ -492,11 +530,68 @@ export async function getFeeHistoryTemplate(
   };
 }
 
+/**
+ * A new school's blank template: no students yet, so nothing is filled in, and
+ * a column for each fee head in each month. The Instructions sheet lists the
+ * school's own fee heads, late fee and classes.
+ */
+export async function getStudentsHistoryTemplate(
+  input: unknown,
+): Promise<StudentsHistoryTemplate | { error: string }> {
+  const admin = await requireSchoolAdmin();
+  if (isError(admin)) return { error: admin.error };
+  const { schoolId } = admin;
+
+  const months = await templateMonths(schoolId, input);
+  if ("error" in months) return months;
+
+  const [school, components, classes] = await Promise.all([
+    prisma.school.findUnique({
+      where: { id: schoolId },
+      select: {
+        lateFeeEnabled: true,
+        lateFeeAmount: true,
+        lateFeeFrequency: true,
+      },
+    }),
+    prisma.feeComponent.findMany({
+      where: { schoolId },
+      orderBy: { name: "asc" },
+    }),
+    prisma.class.findMany({
+      where: { schoolId },
+      orderBy: { grade: "asc" },
+      select: {
+        name: true,
+        sections: { select: { name: true }, orderBy: { name: "asc" } },
+      },
+    }),
+  ]);
+  const heads = components.filter(isFeeHead);
+  if (heads.length === 0) {
+    return { error: "Add your fee heads in Fee Settings first" };
+  }
+
+  return {
+    months,
+    heads: heads.map((h) => h.name),
+    feeHeadNotes: heads.map(
+      (h) =>
+        `${h.name}: ${money(h.amount)} ${h.frequency.toLowerCase().replace("_", " ")}`,
+    ),
+    classNotes: classes.map(
+      (c) => `${c.name}: ${c.sections.map((s) => s.name).join(", ")}`,
+    ),
+    lateFeeRule: lateFeeRuleText(school),
+  };
+}
+
 async function loadContext(
   schoolId: string,
   months: string[],
   rows: FeeHistoryRow[],
   calculateLateFees: boolean,
+  newAdmissions: string[] = [],
 ): Promise<HistoryContext> {
   const inFile = new Set(
     rows.map((r) => r.admissionNumber.trim().toLowerCase()),
@@ -542,8 +637,21 @@ async function loadContext(
     }),
   ]);
 
+  // Not added yet, so they have no bills and no fee structure to follow.
+  const known = new Set(
+    students.map((s) => s.admissionNumber.trim().toLowerCase()),
+  );
+  const coming = newAdmissions
+    .filter((number) => !known.has(number.trim().toLowerCase()))
+    .map((number) => ({
+      id: `new-${number}`,
+      admissionNumber: number,
+      name: number,
+      isActive: true,
+    }));
+
   return {
-    students,
+    students: [...students, ...coming],
     billedMonths,
     openingMonths,
     expected,
@@ -589,6 +697,7 @@ export async function checkFeeHistory(input: unknown): Promise<
       parsed.data.months,
       parsed.data.rows,
       parsed.data.calculateLateFees,
+      parsed.data.newAdmissions,
     ).then((context) => planFeeHistory(parsed.data.rows, context)),
     prisma.academicSession.findMany({ where: { schoolId } }),
     prisma.feeComponent.findMany({

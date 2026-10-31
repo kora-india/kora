@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { TeachersContent } from "@/components/teachers/teachers-content";
 import { can, isStaffRole } from "@schoolos/types";
 import { getPermissions } from "@/lib/auth-guard";
+import { isAdmin } from "@/lib/session";
 
 export const metadata = { title: "Teachers & Staff" };
 
@@ -61,6 +62,7 @@ export default async function TeachersPage() {
       classes={classes}
       canEdit={canEdit}
       canRunPayroll={!isStaffRole(user.role)}
+      canManageLogins={isAdmin(user.role)}
     />
   );
 }

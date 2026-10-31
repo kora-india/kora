@@ -20,6 +20,7 @@ import {
   UserRound,
   FileText,
   UserX,
+  KeyRound,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { TeacherDialog } from "./teacher-dialog";
 import { StaffDialog } from "./staff-dialog";
+import { isAccountant } from "@/lib/staff-occupation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteTeacher } from "@/lib/actions/teachers";
 import { deleteStaff } from "@/lib/actions/staff";
@@ -53,6 +55,8 @@ interface Props {
   canEdit?: boolean;
   /** Salary slips and payouts: school admins only. */
   canRunPayroll?: boolean;
+  /** School admins can give accountants a login. */
+  canManageLogins?: boolean;
 }
 
 const OCCUPATION_COLORS: Record<
@@ -102,6 +106,7 @@ export function TeachersContent({
   classes,
   canEdit = true,
   canRunPayroll = true,
+  canManageLogins = false,
 }: Readonly<Props>) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useQueryTab<"teachers" | "staff">({
@@ -625,12 +630,14 @@ export function TeachersContent({
 
                   {/* Staff Info Details */}
                   <div className="space-y-1.5 text-xs text-muted-foreground mb-3">
-                    <p className="flex items-center gap-2 font-medium text-foreground">
-                      <Phone className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                      <a href={`tel:${s.phone}`} className="hover:underline">
-                        {s.phone}
-                      </a>
-                    </p>
+                    {s.phone && (
+                      <p className="flex items-center gap-2 font-medium text-foreground">
+                        <Phone className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        <a href={`tel:${s.phone}`} className="hover:underline">
+                          {s.phone}
+                        </a>
+                      </p>
+                    )}
 
                     {s.qualification && (
                       <p className="flex items-center gap-2 text-[11px]">
@@ -642,6 +649,13 @@ export function TeachersContent({
                     {s.email && (
                       <p className="flex items-center gap-2 truncate text-[11px]">
                         <Mail className="w-3.5 h-3.5 flex-shrink-0" /> {s.email}
+                      </p>
+                    )}
+
+                    {isAccountant(s.occupation) && (
+                      <p className="flex items-center gap-2 text-[11px]">
+                        <KeyRound className="w-3.5 h-3.5 flex-shrink-0" />
+                        {s.userId ? "Signs in to Kora" : "No login yet"}
                       </p>
                     )}
 
@@ -729,6 +743,7 @@ export function TeachersContent({
 
       {/* Staff Add/Edit Modal */}
       <StaffDialog
+        canManageLogins={canManageLogins}
         open={staffDialog !== "closed"}
         onOpenChange={(open) => {
           if (!open) {
@@ -758,7 +773,7 @@ export function TeachersContent({
           if (!open) setDeleteStaffTarget(null);
         }}
         title="Remove Staff Member"
-        description={`Remove ${deleteStaffTarget?.name} (${deleteStaffTarget?.occupation})?`}
+        description={`Remove ${deleteStaffTarget?.name} (${deleteStaffTarget?.occupation})?${deleteStaffTarget?.userId ? " They won't be able to sign in any more." : ""}`}
         confirmLabel="Remove"
         onConfirm={handleDeleteStaff}
       />

@@ -2,12 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Prisma, prisma } from "@schoolos/db";
 import { auth } from "@schoolos/auth";
 import { getSchoolAccess, requirePermission } from "@/lib/auth-guard";
-import {
-  createAccountant,
-  removeAccountant,
-  resetMemberPermissions,
-  updateMemberPermissions,
-} from "../team";
+import { resetMemberPermissions, updateMemberPermissions } from "../team";
 import { getAttendanceForClass } from "../attendance";
 import { ROLE_DEFAULT_PERMISSIONS, UserRole } from "@schoolos/types";
 
@@ -126,9 +121,6 @@ describe("per-person permissions", () => {
           staff: "manage",
         }),
       ).toEqual({ error: "Unauthorized" });
-      expect(
-        await createAccountant({ name: "Sneaky", email: "s@test.com" }),
-      ).toEqual({ error: "Unauthorized" });
     });
 
     it("saves a member's access and resets it to the role defaults", async () => {
@@ -167,41 +159,6 @@ describe("per-person permissions", () => {
       ).toEqual({
         error: "That login isn't a teacher or accountant at your school",
       });
-    });
-
-    it("adds, removes and restores an accountant login", async () => {
-      signInAs("admin", "SCHOOL_ADMIN");
-      const email = `Accounts-${suffix}@Test.com`;
-      const created = await createAccountant({ name: "Ravi Accounts", email });
-      expect(created).toMatchObject({ success: true, reactivated: false });
-      if (!("tempPassword" in created)) throw new Error("not created");
-      expect(created.tempPassword).toMatch(/^[A-Za-z0-9]{16}$/);
-
-      const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
-      });
-      expect(user).toMatchObject({
-        role: "ACCOUNTANT",
-        schoolId,
-        mustChangePassword: true,
-        permissions: null,
-      });
-
-      expect(await createAccountant({ name: "Again", email })).toEqual({
-        error: "A user with this email already exists",
-      });
-      expect(await removeAccountant(teacherId)).toEqual({
-        error: "Remove teachers from Teachers & Staff",
-      });
-      expect(await removeAccountant(user!.id)).toMatchObject({
-        success: true,
-      });
-      expect(
-        (await prisma.user.findUnique({ where: { id: user!.id } }))?.isActive,
-      ).toBe(false);
-
-      const restored = await createAccountant({ name: "Ravi Accounts", email });
-      expect(restored).toMatchObject({ success: true, reactivated: true });
     });
   });
 });

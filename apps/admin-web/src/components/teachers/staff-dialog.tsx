@@ -6,12 +6,26 @@ import { FormField } from "@/components/ui/form-field";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { createStaff, updateStaff } from "@/lib/actions/staff";
-import { Loader2, Briefcase, Phone, User, GraduationCap, Mail, IndianRupee, Calendar } from "lucide-react";
+import type { AccountantLogin } from "@/lib/accountant-login";
+import { isAccountant } from "@/lib/staff-occupation";
+import { AccountantLoginDialog } from "./accountant-login-dialog";
+import {
+  Loader2,
+  Briefcase,
+  Phone,
+  User,
+  GraduationCap,
+  Mail,
+  IndianRupee,
+  Calendar,
+} from "lucide-react";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   staff?: any;
+  /** School admins can give an accountant a login from here. */
+  canManageLogins?: boolean;
 }
 
 const COMMON_OCCUPATIONS = [
@@ -39,9 +53,22 @@ const COMMON_QUALIFICATIONS = [
   "None / Not Specified",
 ];
 
-export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
+export function StaffDialog({
+  open,
+  onOpenChange,
+  staff,
+  canManageLogins = false,
+}: Readonly<Props>) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // On for someone new; on an existing card it's the admin's to ask for,
+  // since it emails them.
+  const [giveLogin, setGiveLogin] = useState(true);
+  const [created, setCreated] = useState<{
+    name: string;
+    email: string;
+    login: AccountantLogin;
+  } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -54,6 +81,8 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
   });
 
   useEffect(() => {
+    setGiveLogin(!staff);
+    setCreated(null);
     if (staff) {
       setFormData({
         name: staff.name ?? "",
@@ -62,7 +91,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
         qualification: staff.qualification ?? "",
         email: staff.email ?? "",
         salary: staff.salary ? String(staff.salary) : "",
-        joiningDate: staff.joiningDate ? new Date(staff.joiningDate).toISOString().split("T")[0] : "",
+        joiningDate: staff.joiningDate
+          ? new Date(staff.joiningDate).toISOString().split("T")[0]
+          : "",
         address: staff.address ?? "",
       });
     } else {
@@ -79,6 +110,10 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
     }
   }, [staff, open]);
 
+  const hasLogin = Boolean(staff?.userId);
+  const offersLogin =
+    canManageLogins && !hasLogin && isAccountant(formData.occupation);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -90,12 +125,20 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
       return;
     }
     if (!formData.occupation.trim()) {
-      toast.error("Please enter or select an occupation (e.g. Driver, Sweeper, Peon, Accountant)");
+      toast.error(
+        "Please enter or select an occupation (e.g. Driver, Sweeper, Peon, Accountant)",
+      );
+      return;
+    }
+    if (offersLogin && giveLogin && !formData.email.trim()) {
+      toast.error("Add their email so they can sign in");
       return;
     }
 
     setLoading(true);
-    const toastId = toast.loading(staff ? "Updating staff details..." : "Adding staff member...");
+    const toastId = toast.loading(
+      staff ? "Updating staff details..." : "Adding staff member...",
+    );
 
     try {
       const payload = {
@@ -107,25 +150,49 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
         salary: formData.salary ? Number(formData.salary) : undefined,
         joiningDate: formData.joiningDate || undefined,
         address: formData.address || undefined,
+        createLogin: offersLogin && giveLogin,
       };
 
       const result = staff
         ? await updateStaff(staff.id, payload)
         : await createStaff(payload);
 
-      if (result.error) {
+      if ("error" in result) {
         toast.error(result.error, { id: toastId });
+      } else if (result.login) {
+        toast.dismiss(toastId);
+        setCreated({
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          login: result.login,
+        });
+        router.refresh();
       } else {
-        toast.success(staff ? "Staff details updated" : "Staff member added successfully", { id: toastId });
+        toast.success(
+          staff ? "Staff details updated" : "Staff member added successfully",
+          { id: toastId },
+        );
         onOpenChange(false);
         router.refresh();
       }
     } catch (err: any) {
-      toast.error(err.message || "An unexpected error occurred", { id: toastId });
+      toast.error(err.message || "An unexpected error occurred", {
+        id: toastId,
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  if (created) {
+    return (
+      <AccountantLoginDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        {...created}
+      />
+    );
+  }
 
   return (
     <Dialog
@@ -144,7 +211,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
                 required
                 placeholder="e.g. Ramesh Kumar"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -158,7 +227,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
                 type="tel"
                 placeholder="e.g. 9876543210"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -173,8 +244,12 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
               <input
                 required
                 placeholder="Type role: Driver, Sweeper, Peon, Accountant..."
+                aria-label="Occupation"
+                disabled={hasLogin}
                 value={formData.occupation}
-                onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, occupation: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -207,7 +282,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
               <input
                 placeholder="Type or select: 10th Pass, Graduate, B.Com, ITI..."
                 value={formData.qualification}
-                onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, qualification: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -242,7 +319,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
                 min="0"
                 placeholder="e.g. 15000"
                 value={formData.salary}
-                onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, salary: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -254,12 +333,38 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
               <input
                 type="date"
                 value={formData.joiningDate}
-                onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, joiningDate: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </FormField>
         </div>
+
+        {hasLogin && (
+          <p className="text-xs text-muted-foreground rounded-lg bg-muted/40 p-3">
+            Signs in to Kora with this email, so it and their role stay as they
+            are. Set what they can do in Settings → Team &amp; Access.
+          </p>
+        )}
+        {offersLogin && (
+          <label className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={giveLogin}
+              onChange={(e) => setGiveLogin(e.target.checked)}
+            />
+            <span>
+              Let them sign in to Kora
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                We&apos;ll email them a temporary password. Set what they can do
+                in Settings → Team &amp; Access.
+              </span>
+            </span>
+          </label>
+        )}
 
         {/* Optional Email & Address */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -269,8 +374,12 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
               <input
                 type="email"
                 placeholder="staff@school.com"
+                aria-label="Email"
+                disabled={hasLogin}
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 className="w-full h-9 pl-9 pr-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -280,7 +389,9 @@ export function StaffDialog({ open, onOpenChange, staff }: Readonly<Props>) {
             <input
               placeholder="e.g. Sector 4, New Delhi"
               value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, address: e.target.value })
+              }
               className="w-full h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </FormField>

@@ -9,7 +9,7 @@ import {
 
 test("a new school signs up, sets up and lands on its dashboard", async ({
   page,
-}) => {
+}, testInfo) => {
   await stubThirdParties(page);
   const id = uniqueId();
   const schoolName = `Sunrise School ${id}`;
@@ -31,4 +31,27 @@ test("a new school signs up, sets up and lands on its dashboard", async ({
   await expect(
     page.getByRole("link", { name: /Free trial · \d+d left/ }),
   ).toBeVisible();
+
+  // Onboarding ends by asking how to bring the students in.
+  const panel = page.getByRole("region", { name: "Add your students" });
+  await expect(panel.getByText("6 fee heads")).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: /^Import students only/ }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: /^Import students with fee history/ }),
+  ).toBeVisible();
+
+  await page.screenshot({ path: testInfo.outputPath("add-students.png") });
+
+  // Skipped, the same choice waits on the Students page.
+  await panel.getByRole("button", { name: /^Skip for now/ }).click();
+  await expect(panel).toHaveCount(0);
+  await page.goto("/students");
+  await expect(
+    page
+      .getByRole("main")
+      .getByRole("button", { name: /^Import students with fee history/ }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("no-students.png") });
 });

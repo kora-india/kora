@@ -3,13 +3,18 @@ import { describe, it, expect, vi } from "vitest";
 import { Workbook } from "exceljs";
 import {
   findHistoryColumns,
+  studentHistoryHeaders,
   toHistoryRows,
+  toStudentRows,
   type HistoryColumns,
 } from "../fees/fee-history";
 import {
   buildHistoryWorkbook,
+  buildStudentsHistoryWorkbook,
   downloadHistoryTemplate,
+  downloadStudentsHistoryTemplate,
   type HistoryTemplate,
+  type StudentsHistoryTemplate,
 } from "../fees/fee-history-template";
 import { readSpreadsheet } from "../read-spreadsheet";
 
@@ -127,5 +132,145 @@ describe("fee history template workbook", () => {
 
     expect(click).toHaveBeenCalledOnce();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:template");
+  });
+});
+
+describe("blank students and fee history template", () => {
+  const blank: StudentsHistoryTemplate = {
+    months: ["2026-04", "2026-05"],
+    heads: ["Tuition Fee", "Transport Fee"],
+    feeHeadNotes: ["Tuition Fee: ₹1,500 monthly"],
+    classNotes: ["Grade 1: A, B"],
+    lateFeeRule: "₹100 monthly",
+  };
+
+  const open = async (template = blank) => {
+    const made = await buildStudentsHistoryWorkbook(template);
+    const book = new Workbook();
+    await book.xlsx.load(await made.xlsx.writeBuffer());
+    return book;
+  };
+
+  it("is blank: headers, and nothing under them", async () => {
+    const sheet = (await open()).getWorksheet("Students and Fees")!;
+    expect(sheet.rowCount).toBe(1);
+    expect((sheet.getRow(1).values as string[]).slice(1)).toEqual(
+      studentHistoryHeaders(blank.months, blank.heads),
+    );
+  });
+
+  it("keeps the student's number and name in view", async () => {
+    const sheet = (await open()).getWorksheet("Students and Fees")!;
+    expect(sheet.views[0]).toMatchObject({
+      state: "frozen",
+      xSplit: 2,
+      ySplit: 1,
+    });
+  });
+
+  it("makes the columns Excel would change text, and leaves amounts alone", async () => {
+    const sheet = (await open()).getWorksheet("Students and Fees")!;
+    const format = (header: string) => {
+      const index = (sheet.getRow(1).values as string[]).indexOf(header);
+      return sheet.getColumn(index).numFmt;
+    };
+    for (const header of [
+      "Admission Number",
+      "Roll Number",
+      "Date of Birth",
+      "Parent Phone",
+      "Pincode",
+      "Apr 2026 Paid On",
+      "May 2026 Receipt",
+    ]) {
+      expect(format(header), header).toBe("@");
+    }
+    expect(format("Apr 2026 Tuition Fee (₹)")).toBeUndefined();
+    expect(format("Apr 2026 Paid (₹)")).toBeUndefined();
+  });
+
+  it("colours a month's columns as one group", async () => {
+    const sheet = (await open()).getWorksheet("Students and Fees")!;
+    const colour = (header: string) => {
+      const index = (sheet.getRow(1).values as string[]).indexOf(header);
+      const fill = sheet.getRow(1).getCell(index).fill as {
+        fgColor?: { argb?: string };
+      };
+      return fill.fgColor?.argb;
+    };
+    expect(colour("Apr 2026 Tuition Fee (₹)")).toBe(colour("Apr 2026 Receipt"));
+    expect(colour("Apr 2026 Receipt")).not.toBe(
+      colour("May 2026 Tuition Fee (₹)"),
+    );
+  });
+
+  it("lists the school's own setup in the instructions", async () => {
+    const sheet = (await open()).getWorksheet("Instructions")!;
+    const lines = sheet.getSheetValues().flat().filter(Boolean).join("\n");
+    expect(lines).toContain("Tuition Fee: ₹1,500 monthly");
+    expect(lines).toContain("₹100 monthly");
+    expect(lines).toContain("Grade 1: A, B");
+  });
+
+  it("says when there's no late fee rule", async () => {
+    const sheet = (await open({ ...blank, lateFeeRule: null })).getWorksheet(
+      "Instructions",
+    )!;
+    expect(sheet.getSheetValues().flat()).toContain("No late-fee rule set");
+  });
+
+  it("reads back through the upload once it's filled in", async () => {
+    const book = await buildStudentsHistoryWorkbook(blank);
+    const sheet = book.getWorksheet("Students and Fees")!;
+    const headers = (sheet.getRow(1).values as string[]).slice(1);
+    const filled: Record<string, string | number> = {
+      "Admission Number": "0042",
+      "Student Name": "तन्वी शाह",
+      Class: "Grade 1",
+      Section: "A",
+      "Parent Name": "Myra Shah",
+      "Parent Phone": "09000000000",
+      "Apr 2026 Tuition Fee (₹)": 1500,
+      "Apr 2026 Paid (₹)": 1500,
+      "Apr 2026 Paid On": "05/04/2026",
+    };
+    sheet.addRow(headers.map((h) => filled[h] ?? null));
+
+    const { headers: read, rows } = await readSpreadsheet(
+      new File([await book.xlsx.writeBuffer()], "filled.xlsx"),
+    );
+    const columns = findHistoryColumns(read) as HistoryColumns;
+
+    expect(toStudentRows(rows, columns)).toEqual([
+      expect.objectContaining({
+        admissionNumber: "0042",
+        name: "तन्वी शाह",
+        classId: "Grade 1",
+        parentPhone: "09000000000",
+      }),
+    ]);
+    expect(toHistoryRows(rows[0].cells, 2, columns)).toEqual([
+      expect.objectContaining({
+        period: "2026-04",
+        heads: { "Tuition Fee": "1500" },
+        paid: "1500",
+        paidOn: "05/04/2026",
+      }),
+    ]);
+  });
+
+  it("downloads under its own name", async () => {
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    URL.createObjectURL = vi.fn(() => "blob:template");
+    URL.revokeObjectURL = vi.fn();
+
+    await downloadStudentsHistoryTemplate(blank);
+
+    expect(names).toEqual(["students-and-fee-history-template.xlsx"]);
   });
 });

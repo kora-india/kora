@@ -4,10 +4,13 @@
  * fees, late fee, what was paid, when, how, and the receipt. Each filled month
  * becomes one `FeeHistoryRow`. Pure functions, shared by the import dialog and
  * the server.
+ *
+ * A new school's template is blank and carries the students too: their details,
+ * then a column for each fee head in each month, in place of one Fees total.
  */
 
 import { PAYMENT_METHOD_OPTIONS } from "../payment-methods";
-import { parseImportDate } from "../student-import-helpers";
+import { normalizeImportRow, parseImportDate } from "../student-import-helpers";
 import {
   formatPeriodLabel,
   isPeriodKey,
@@ -71,9 +74,60 @@ export const historyHeaders = (months: string[]) => [
   ),
 ];
 
+/** A blank template's student columns, each one a student import field. */
+export const STUDENT_TEMPLATE_HEADERS = [
+  "Admission Number",
+  "Student Name",
+  "Class",
+  "Section",
+  "Parent Name",
+  "Parent Phone",
+  "Roll Number",
+  "Date of Birth",
+  "Gender",
+  "Blood Group",
+  "Parent Email",
+  "Address",
+  "City",
+  "State",
+  "Pincode",
+];
+
+/** The columns after a month's fee heads in a blank template. */
+export const BLANK_MONTH_FIELDS = HISTORY_MONTH_FIELDS.slice(1);
+
+/** A blank template's headers: students, then each month's fee heads. */
+export const studentHistoryHeaders = (months: string[], heads: string[]) => [
+  ...STUDENT_TEMPLATE_HEADERS,
+  ...months.flatMap((period) =>
+    [...heads.map((head) => `${head} (₹)`), ...BLANK_MONTH_FIELDS].map(
+      (field) => `${monthLabel(period)} ${field}`,
+    ),
+  ),
+];
+
+/** How to fill a blank template; the school's own setup is listed after it. */
+export const STUDENT_HISTORY_INSTRUCTIONS = [
+  "How to fill this file",
+  "",
+  "There is one row for each student: their details first, then a group of columns for each month.",
+  "1. Student Name, Class, Section, Parent Name and Parent Phone are needed for every student.",
+  "2. Admission Number is needed for any student with fees or payments. Use each one once.",
+  "3. Date of Birth and Paid On are written as DD/MM/YYYY.",
+  "4. Each fee head: what was billed that month. Leave it blank for a fee that wasn't billed.",
+  "5. Late Fee: the late fee charged that month. Type 0 if there was none.",
+  "6. Paid: what was paid for that month. Leave it blank if nothing was paid.",
+  "7. Mode: Cash, UPI, Bank transfer, Cheque, Card or Online.",
+  "8. Receipt: your old receipt number. Use the same number in every month one receipt paid for. Leave it blank if you don't have one.",
+  "9. Two payments for one month? Add a new row with only the Admission Number and that month's second Paid, Paid On, Mode and Receipt.",
+  "10. Save the file and upload it where you downloaded it.",
+];
+
 /** The headers of one month's columns in a file. */
 export interface MonthColumns {
   period: string;
+  /** One column per fee head, in a blank template. */
+  heads: { header: string; name: string }[];
   fees?: string;
   lateFee?: string;
   paid?: string;
@@ -88,10 +142,7 @@ export interface HistoryColumns {
   months: MonthColumns[];
 }
 
-const MONTH_COLUMN =
-  /^(.+?)\s+(late\s*fee|fees|paid\s*on|paid|mode|receipt(?:\s*no)?)\s*(?:\([^)]*\))?$/i;
-
-const MONTH_FIELD: Record<string, keyof Omit<MonthColumns, "period">> = {
+const MONTH_FIELD: Record<string, keyof MonthColumns> = {
   latefee: "lateFee",
   fees: "fees",
   paidon: "paidOn",
@@ -100,6 +151,19 @@ const MONTH_FIELD: Record<string, keyof Omit<MonthColumns, "period">> = {
   receipt: "receiptNo",
   receiptno: "receiptNo",
 };
+
+/** Splits "Apr 2026 Tuition Fee (₹)" into its month and the rest. */
+function splitMonthHeader(header: string) {
+  const words = header.trim().split(/\s+/);
+  for (const count of [2, 1]) {
+    const period = parseMonth(words.slice(0, count).join(" "));
+    if (period) {
+      const rest = words.slice(count).join(" ");
+      return { period, rest: rest.replace(/\s*\([^)]*\)$/, "") };
+    }
+  }
+  return null;
+}
 
 /** Which column is which. `missing` means this isn't the template. */
 export function findHistoryColumns(
@@ -112,12 +176,18 @@ export function findHistoryColumns(
       admissionNumber = header;
       continue;
     }
-    const match = MONTH_COLUMN.exec(header.trim());
-    const period = match && parseMonth(match[1]);
-    if (!match || !period) continue;
-    const month = months.get(period) ?? { period };
-    month[MONTH_FIELD[key(match[2])]] = header;
-    months.set(period, month);
+    const column = splitMonthHeader(header);
+    if (!column?.rest) continue;
+    const month = months.get(column.period) ?? {
+      period: column.period,
+      heads: [],
+    };
+    months.set(column.period, month);
+    const field = MONTH_FIELD[key(column.rest)];
+    // Anything else after a month is a fee head, so a renamed column shows up
+    // as a problem or a new head rather than its money going missing.
+    if (field) Object.assign(month, { [field]: header });
+    else month.heads.push({ header, name: column.rest });
   }
   if (!admissionNumber || months.size === 0) {
     return {
@@ -141,7 +211,10 @@ export interface FeeHistoryRow {
   admissionNumber: string;
   /** "YYYY-MM" */
   period: string;
+  /** The month's total, to split by the fee structure. */
   fees: string;
+  /** Or what each fee head billed: its name to the filled cell. */
+  heads: Record<string, string>;
   lateFee: string;
   paid: string;
   paidOn: string;
@@ -166,13 +239,54 @@ export function toHistoryRows(
       admissionNumber,
       period: month.period,
       fees: cell(month.fees),
+      heads: Object.fromEntries(
+        month.heads
+          .map(({ header, name }) => [name, cell(header)])
+          .filter(([, value]) => value),
+      ),
       lateFee: cell(month.lateFee),
       paid: cell(month.paid),
       paidOn: cell(month.paidOn),
       mode: cell(month.mode),
       receiptNo: cell(month.receiptNo),
     }))
-    .filter((row) => row.fees || row.lateFee || row.paid);
+    .filter(
+      (row) =>
+        row.fees ||
+        row.lateFee ||
+        row.paid ||
+        Object.keys(row.heads).length > 0,
+    );
+}
+
+/**
+ * The students in a blank template, as the student import takes them. A row
+ * with just an Admission Number and month columns is a student's second
+ * payment, so it isn't a student of its own.
+ */
+export function toStudentRows(
+  sheetRows: { cells: Record<string, unknown>; sheetRow: number }[],
+  columns: HistoryColumns,
+) {
+  const monthHeaders = new Set(
+    columns.months.flatMap((m) => [
+      ...m.heads.map((h) => h.header),
+      ...[m.fees, m.lateFee, m.paid, m.paidOn, m.mode, m.receiptNo],
+    ]),
+  );
+  return sheetRows.flatMap(({ cells, sheetRow }) => {
+    const { admissionNumber, ...details } = normalizeImportRow(
+      Object.fromEntries(
+        Object.entries(cells).filter(([header]) => !monthHeaders.has(header)),
+      ),
+    );
+    const isStudent =
+      Object.keys(details).length > 0 ||
+      toHistoryRows(cells, sheetRow, columns).length === 0;
+    if (!isStudent) return [];
+    const { class: classId, section: sectionId, ...student } = details;
+    return [{ ...student, admissionNumber, classId, sectionId, sheetRow }];
+  });
 }
 
 const MONTH_NAMES = [
@@ -496,12 +610,16 @@ export function planFeeHistory(
 
     let billRow: FeeHistoryRow | null = null;
     let fees = 0;
+    let heads: ExpectedLine[] = [];
     let lateFee: number | null = null;
 
     for (const row of monthRows) {
       const rowFees = amount(row, row.fees, "Fees");
+      const rowHeads = Object.entries(row.heads)
+        .map(([head, value]) => ({ head, amount: amount(row, value, head) }))
+        .filter((line) => line.amount > 0);
       const rowLate = row.lateFee ? amount(row, row.lateFee, "Late Fee") : null;
-      if (!rowFees && !rowLate) continue;
+      if (!rowFees && !rowLate && rowHeads.length === 0) continue;
       if (billRow) {
         problem(
           row,
@@ -509,8 +627,13 @@ export function planFeeHistory(
         );
         continue;
       }
+      if (rowFees && rowHeads.length > 0) {
+        problem(row, "Fill in Fees or the fee heads, not both");
+        continue;
+      }
       billRow = row;
       fees = rowFees;
+      heads = rowHeads;
       lateFee = rowLate;
     }
 
@@ -544,9 +667,11 @@ export function planFeeHistory(
     if (plan.problems.length > problemsBefore) continue;
 
     const split =
-      fees > 0
-        ? splitFees(fees, context.expected.get(id) ?? [])
-        : { lines: [], discount: 0, other: 0 };
+      heads.length > 0
+        ? { lines: heads, discount: 0, other: 0 }
+        : fees > 0
+          ? splitFees(fees, context.expected.get(id) ?? [])
+          : { lines: [], discount: 0, other: 0 };
     const lines: HistoryBillLine[] = split.lines.map((l) => ({
       ...l,
       paid: 0,

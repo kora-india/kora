@@ -61,17 +61,31 @@ test("an accountant login gets the money pages and nothing else", async ({
   page,
   browser,
   baseURL,
-}) => {
+}, testInfo) => {
   const name = "Meera Accounts";
   const email = `meera.${uniqueId()}@example.com`;
   await signIn(page, SEEDED.schoolAdmin.email, SEEDED.schoolAdmin.password);
+  // One place for people: Team & access only sets what they can do.
   await page.goto("/settings/team");
-  await page.getByRole("button", { name: "Add accountant" }).click();
+  await expect(
+    page.getByRole("button", { name: /Add accountant/ }),
+  ).toHaveCount(0);
+  await page.goto("/teachers?tab=staff");
+  await page
+    .locator("#tour-teachers-actions")
+    .getByRole("button", { name: "Add Staff Member" })
+    .click();
 
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Full name").fill(name);
-  await dialog.getByLabel("Email").fill(email);
-  await dialog.getByRole("button", { name: "Create login" }).click();
+  await dialog.getByPlaceholder("e.g. Ramesh Kumar").fill(name);
+  await dialog.getByPlaceholder("e.g. 9876543210").fill("9000000005");
+  await dialog.getByRole("button", { name: "Accountant", exact: true }).click();
+  await dialog.getByLabel("Email", { exact: true }).fill(email);
+  await expect(
+    dialog.getByRole("checkbox", { name: /Let them sign in to Kora/ }),
+  ).toBeChecked();
+  await page.screenshot({ path: testInfo.outputPath("add-accountant.png") });
+  await dialog.getByRole("button", { name: "Add Staff", exact: true }).click();
   await expect(dialog.getByText("Accountant added")).toBeVisible();
   await expect(
     dialog.getByText(`We've emailed the sign-in details to ${email}`),
@@ -83,7 +97,15 @@ test("an accountant login gets the money pages and nothing else", async ({
   expect(welcome.subject).toBe(`Your Kora login for ${SEEDED.school}`);
   expect(welcome.html).toContain(password);
   await dialog.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByText(name)).toBeVisible();
+  const card = page.getByRole("main").locator("div", { hasText: name }).last();
+  await expect(card).toBeVisible();
+  await expect(
+    page.getByRole("main").getByText("Signs in to Kora"),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("staff.png") });
+  await page.goto("/settings/team");
+  await expect(page.getByRole("main").getByText(name)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("team.png") });
 
   const context = await newContext(browser, baseURL);
   const accountant = await context.newPage();
