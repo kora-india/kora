@@ -1,5 +1,12 @@
 import { SEEDED, SUPER_ADMIN } from "./env";
-import { expect, expectTurnedAway, sidebarLink, signIn, test } from "./helpers";
+import {
+  expect,
+  expectTurnedAway,
+  sidebarLink,
+  sidebarSection,
+  signIn,
+  test,
+} from "./helpers";
 
 test("nobody signed in gets past the login page", async ({ page }) => {
   await expectTurnedAway(
@@ -39,6 +46,11 @@ test("a school admin runs their school, not the platform", async ({ page }) => {
   ).toBeVisible();
   await expect(sidebarLink(page, "Teachers / Staff")).toBeVisible();
   await expect(sidebarLink(page, "Schools")).toHaveCount(0);
+  await expect(sidebarSection(page, "Finance").getByRole("link")).toHaveText([
+    "Fees",
+    "Expenses",
+    "Ledger",
+  ]);
 
   await expectTurnedAway(page, ["/schools", "/subscriptions"], /\/dashboard$/);
   await expectTurnedAway(
@@ -51,6 +63,10 @@ test("a school admin runs their school, not the platform", async ({ page }) => {
 test("a teacher gets the classroom, not the office", async ({ page }) => {
   await signIn(page, SEEDED.teacher.email, SEEDED.teacher.password);
   await expect(sidebarLink(page, "Attendance")).toBeVisible();
+  // The classroom leads their menu, right after Home.
+  await expect(
+    page.getByRole("complementary").getByRole("group").nth(1),
+  ).toHaveAttribute("aria-label", "Academics");
   for (const name of [
     "Fees",
     "Expenses",

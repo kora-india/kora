@@ -187,3 +187,6 @@ export async function expectTurnedAway(
 
 export const sidebarLink = (page: Page, name: string) =>
   page.getByRole("complementary").getByRole("link", { name, exact: true });
+
+export const sidebarSection = (page: Page, name: string) =>
+  page.getByRole("complementary").getByRole("group", { name, exact: true });

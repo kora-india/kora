@@ -12,6 +12,7 @@ import {
   GraduationCap,
   DollarSign,
   Calendar,
+  ClipboardList,
   Megaphone,
   BookOpen,
   Settings,
@@ -51,28 +52,30 @@ interface SidebarProps {
 
 const adminNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Students", href: "/students", icon: Users },
   { label: "Teachers / Staff", href: "/teachers", icon: GraduationCap },
   { label: "Classes", href: "/classes", icon: BookOpen },
   { label: "Timetable", href: "/timetable", icon: Clock },
   { label: "Attendance", href: "/attendance", icon: Calendar },
+  { label: "Assignments", href: "/assignments", icon: ClipboardList },
   { label: "Exams & Results", href: "/exams", icon: Award },
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
   { label: "Ledger", href: "/ledger", icon: ReceiptText },
   { label: "Transport", href: "/transport", icon: Bus },
-  { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
+type NavItem = (typeof adminNavItems)[number];
+
 const superAdminNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Schools", href: "/schools", icon: Building2 },
   { label: "Subscriptions", href: "/subscriptions", icon: CreditCard },
   { label: "Ledger", href: "/ledger", icon: ReceiptText },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
@@ -80,10 +83,10 @@ const teacherNavItems = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Timetable", href: "/timetable", icon: Clock },
   { label: "Attendance", href: "/attendance", icon: Calendar },
+  { label: "Assignments", href: "/assignments", icon: ClipboardList },
   { label: "Exams & Marks", href: "/exams", icon: Award },
   { label: "Students", href: "/students", icon: Users },
   { label: "Transport", href: "/transport", icon: Bus },
-  { label: "Assignments", href: "/assignments", icon: BookOpen },
   { label: "Notices", href: "/notices", icon: Megaphone },
 ];
 
@@ -92,9 +95,27 @@ const accountantNavItems = [
   { label: "Fees", href: "/fees", icon: DollarSign },
   { label: "Expenses", href: "/expenses", icon: Wallet },
   { label: "Ledger", href: "/ledger", icon: ReceiptText },
-  { label: "Transport", href: "/transport", icon: Bus },
   { label: "Students", href: "/students", icon: Users },
+  { label: "Transport", href: "/transport", icon: Bus },
 ];
+
+// The heading each page sits under; the rest stay at the top of the menu.
+const NAV_SECTIONS: Record<string, string> = {
+  "/schools": "Platform",
+  "/subscriptions": "Platform",
+  "/students": "People",
+  "/teachers": "People",
+  "/classes": "Academics",
+  "/timetable": "Academics",
+  "/attendance": "Academics",
+  "/assignments": "Academics",
+  "/exams": "Academics",
+  "/fees": "Finance",
+  "/expenses": "Finance",
+  "/ledger": "Finance",
+  "/transport": "Operations",
+  "/notices": "Operations",
+};
 
 // The module behind each school page. The dashboard is open to everyone.
 const NAV_MODULES: Record<string, PermissionModule> = {
@@ -139,6 +160,19 @@ function getNavItems(role: UserRole, permissions?: Permissions) {
     default:
       return adminNavItems;
   }
+}
+
+/**
+ * Sections come in the order their first page does, so a role's usual pages
+ * lead and a page opened to someone extra joins its own section.
+ */
+function groupBySection(items: NavItem[]) {
+  const sections = new Map<string | undefined, NavItem[]>();
+  for (const item of items) {
+    const section = NAV_SECTIONS[item.href];
+    sections.set(section, [...(sections.get(section) ?? []), item]);
+  }
+  return Array.from(sections);
 }
 
 function getRoleBadge(role: UserRole) {
@@ -224,12 +258,67 @@ export function Sidebar({
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
   const pathname = usePathname();
   const navItems = getNavItems(userRole, permissions);
+  const settingsItem = navItems.find((item) => item.href === "/settings");
+  const sections = groupBySection(
+    navItems.filter((item) => item !== settingsItem),
+  );
   const roleBadge = getRoleBadge(userRole);
   const planBadge = getPlanBadge(schoolPlan, planName);
 
   useEffect(() => {
     setNavigatingTo(null);
   }, [pathname]);
+
+  const navLink = (item: NavItem) => {
+    const isActive =
+      pathname === item.href || pathname.startsWith(item.href + "/");
+    const isLoading = navigatingTo === item.href;
+    return (
+      <Link
+        key={item.href}
+        id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+        href={item.href}
+        onClick={() => {
+          if (pathname !== item.href) {
+            setNavigatingTo(item.href);
+          }
+        }}
+        title={isCollapsed ? item.label : undefined}
+        className={cn(
+          // Roomier in the drawer, where the rows are tapped.
+          "flex items-center gap-3 px-3 py-2.5 lg:py-1.5 rounded-lg text-sm transition-all duration-150 group",
+          isActive
+            ? "bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-medium"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          isCollapsed && "justify-center px-2",
+        )}
+      >
+        <item.icon
+          className={cn(
+            "w-4 h-4 flex-shrink-0",
+            isActive
+              ? "text-violet-600 dark:text-violet-400"
+              : "group-hover:text-foreground",
+          )}
+        />
+        <AnimatePresence>
+          {!isCollapsed && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="whitespace-nowrap flex-1"
+            >
+              {item.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {!isCollapsed && isLoading && (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
+        )}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -326,61 +415,52 @@ export function Sidebar({
         {/* Nav */}
         <nav
           id="tour-sidebar-nav"
-          className="flex-1 p-2 space-y-0.5 overflow-y-auto"
+          className="flex-1 flex flex-col gap-2 p-2 overflow-y-auto scroll-pb-16"
         >
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-            const isLoading = navigatingTo === item.href;
-            return (
-              <Link
-                key={item.href}
-                id={`tour-nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                href={item.href}
-                onClick={() => {
-                  if (pathname !== item.href) {
-                    setNavigatingTo(item.href);
-                  }
-                }}
-                title={isCollapsed ? item.label : undefined}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group",
-                  isActive
-                    ? "bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-medium"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  isCollapsed && "justify-center px-2",
-                )}
-              >
-                <item.icon
-                  className={cn(
-                    "w-4 h-4 flex-shrink-0",
-                    isActive
-                      ? "text-violet-600 dark:text-violet-400"
-                      : "group-hover:text-foreground",
-                  )}
-                />
-                <AnimatePresence>
-                  {!isCollapsed && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="whitespace-nowrap flex-1"
-                    >
-                      {item.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {!isCollapsed && isLoading && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600 dark:text-violet-400" />
-                )}
-              </Link>
-            );
-          })}
+          {sections.map(([section, items]) => (
+            <div
+              key={section ?? "top"}
+              role="group"
+              aria-label={section}
+              className="space-y-0.5"
+            >
+              {section && (
+                // The same height either way, so toggling the rail doesn't
+                // move the rows: the heading fades into a short rule.
+                <div aria-hidden className="relative h-6">
+                  <span
+                    className={cn(
+                      "absolute inset-x-3 bottom-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap transition-opacity duration-200",
+                      isCollapsed && "opacity-0",
+                    )}
+                  >
+                    {section}
+                  </span>
+                  <span
+                    className={cn(
+                      "absolute inset-x-3 top-2 border-t transition-opacity duration-200",
+                      !isCollapsed && "opacity-0",
+                    )}
+                  />
+                </div>
+              )}
+              {items.map(navLink)}
+            </div>
+          ))}
+          {settingsItem && (
+            <div className="sticky -bottom-2 mt-auto -mx-2 -mb-2 p-2 bg-card border-t">
+              {navLink(settingsItem)}
+            </div>
+          )}
         </nav>
 
         {/* Collapse toggle (desktop; the drawer has its own close button) */}
-        <div className="p-2 border-t hidden lg:block">
+        <div
+          className={cn(
+            "p-2 hidden lg:block",
+            settingsItem ? "pt-0" : "border-t",
+          )}
+        >
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}

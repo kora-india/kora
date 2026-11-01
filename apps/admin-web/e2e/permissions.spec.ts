@@ -7,6 +7,7 @@ import {
   lastEmail,
   newContext,
   sidebarLink,
+  sidebarSection,
   signIn,
   test,
   uniqueId,
@@ -42,7 +43,9 @@ test("the school admin opens fees to a teacher and closes attendance", async ({
   await signIn(teacherPage, teacher.email, teacher.password);
 
   // Fees to look at, not to collect.
-  await expect(sidebarLink(teacherPage, "Fees")).toBeVisible();
+  await expect(
+    sidebarSection(teacherPage, "Finance").getByRole("link", { name: "Fees" }),
+  ).toBeVisible();
   await expect(teacherPage.getByText("Pending Fees")).toBeVisible();
   await expect(
     teacherPage.getByRole("link", { name: "Collect Fee" }),
