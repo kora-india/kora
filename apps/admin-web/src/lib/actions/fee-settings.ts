@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { isError, requirePermission } from "@/lib/auth-guard";
+import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
 import { prisma, FeeFrequency } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateCache, invalidateFeesCache } from "@/lib/redis";
@@ -9,8 +9,9 @@ import { actionErrorMessage } from "@/lib/action-errors";
 import { carryTransportForward } from "@/lib/fees/transport-carry-over";
 import { classLabel, logActivity, money } from "@/lib/activity";
 
-async function getFinanceSession() {
-  const access = await requirePermission("fees", "manage");
+/** Fee setup is the school admin's; anyone else with fee access only collects. */
+async function getFeeSetupSession() {
+  const access = await requireSchoolAdmin();
   return isError(access) ? null : access;
 }
 
@@ -47,7 +48,7 @@ export async function createAcademicSession(data: {
   endDate: string;
   isCurrent: boolean;
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = academicSessionSchema.safeParse(data);
@@ -105,7 +106,7 @@ export async function createFeeComponent(data: {
   frequency: FeeFrequency;
   isOptional: boolean;
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = feeComponentSchema.safeParse(data);
@@ -148,7 +149,7 @@ export async function createFeeStructure(data: {
   sessionId: string;
   components: { componentId: string; amount?: number }[];
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
@@ -201,7 +202,7 @@ export async function assignFeeStructureToClass(
   classId: string,
   structureId: string,
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
@@ -258,7 +259,7 @@ export async function setStudentFeeOverride(
   componentId: string,
   data: { isExempt: boolean; discountAmount: number; amount?: number },
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
@@ -342,7 +343,7 @@ export async function updateAcademicSession(
     isCurrent: boolean;
   },
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = academicSessionSchema.safeParse(data);
@@ -427,7 +428,7 @@ export async function updateFeeComponent(
     isOptional: boolean;
   },
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = feeComponentSchema.safeParse(data);
@@ -473,7 +474,7 @@ export async function updateFeeStructure(
     components: { componentId: string; amount?: number }[];
   },
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
@@ -552,7 +553,7 @@ export async function saveLateFeeSettings(data: {
   /** Most late fee a single charge can accrue; null removes the cap. */
   maxLateFeeCap?: number | null;
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = lateFeeSettingsSchema.safeParse(data);
@@ -627,7 +628,7 @@ export async function saveLateFeeSettings(data: {
 export async function saveFeeAutomationSettings(data: {
   autoFeeGeneration: boolean;
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
   if (typeof data?.autoFeeGeneration !== "boolean") {
     return { error: "Invalid setting" };
@@ -657,7 +658,7 @@ export async function saveFeeCollectionPolicy(data: {
   minPartialPaymentPercentage?: number;
   minPartialPaymentAmount?: number;
 }) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   try {
@@ -724,7 +725,7 @@ const CopyStructuresSchema = z
  * already has a structure there. Student concessions keep their amounts.
  */
 export async function copyFeeStructures(data: unknown) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const parsed = CopyStructuresSchema.safeParse(data);

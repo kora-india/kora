@@ -10,6 +10,7 @@ import {
   FileText,
   History,
   Upload,
+  Eye,
 } from "lucide-react";
 import { CollectionTab } from "./tabs/collection-tab";
 import { SetupTab } from "./tabs/setup-tab";
@@ -28,8 +29,11 @@ interface Props {
   transactions: any[];
   school?: any;
   canEdit: boolean;
-  /** School admins bring in a school's balances from its earlier records. */
-  canImportBalances?: boolean;
+  /**
+   * School admins set fees up, generate them, waive them and import earlier
+   * records. `canEdit` only lets someone collect payments.
+   */
+  canManageSetup?: boolean;
 }
 
 export function FeesContent(props: Readonly<Props>) {
@@ -58,7 +62,7 @@ export function FeesContent(props: Readonly<Props>) {
             and collections.
           </p>
         </div>
-        {props.canImportBalances && (
+        {props.canManageSetup && (
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -126,17 +130,40 @@ export function FeesContent(props: Readonly<Props>) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
+            {activeTab !== "collection" && !props.canManageSetup && (
+              <p
+                role="status"
+                className="mb-4 flex items-center gap-2 rounded-xl border bg-muted/40 p-3 text-sm text-muted-foreground"
+              >
+                <Eye className="h-4 w-4 flex-shrink-0" aria-hidden />
+                You can view this, but only a school admin can change it.
+              </p>
+            )}
             {activeTab === "collection" && <CollectionTab {...props} />}
-            {activeTab === "generator" && <GeneratorTab {...props} />}
-            {activeTab === "assignments" && <AssignmentsTab {...props} />}
+            {activeTab === "generator" && (
+              <GeneratorTab
+                {...props}
+                canEdit={Boolean(props.canManageSetup)}
+              />
+            )}
+            {activeTab === "assignments" && (
+              <AssignmentsTab
+                {...props}
+                canEdit={Boolean(props.canManageSetup)}
+              />
+            )}
             {activeTab === "settings" && (
-              <SetupTab {...props} school={props.school} />
+              <SetupTab
+                {...props}
+                canEdit={Boolean(props.canManageSetup)}
+                school={props.school}
+              />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {props.canImportBalances && (
+      {props.canManageSetup && (
         <>
           <ImportBalancesDialog
             open={importOpen}

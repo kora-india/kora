@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@schoolos/db";
-import { requirePermission } from "@/lib/auth-guard";
+import { requireSchoolAdmin } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache } from "@/lib/redis";
 import { processClassFeeGeneration } from "@/lib/services/fee-generation-service";
@@ -12,8 +12,9 @@ import {
 } from "@/lib/fees/billing-period";
 import { logActivity } from "@/lib/activity";
 
-async function getFinanceSession() {
-  const guard = await requirePermission("fees", "manage");
+/** Billing a class is the school admin's; others with fee access only collect. */
+async function getFeeSetupSession() {
+  const guard = await requireSchoolAdmin();
   if ("error" in guard) return null;
   return { ...guard, schoolId: guard.schoolId! };
 }
@@ -25,7 +26,7 @@ export async function generateMonthlyFees(
   dueDateStr: string,
   billingMonth?: string,
 ) {
-  const user = await getFinanceSession();
+  const user = await getFeeSetupSession();
   if (!user) return { error: "Unauthorized" };
 
   const ids = Array.isArray(classIds) ? classIds : [classIds];

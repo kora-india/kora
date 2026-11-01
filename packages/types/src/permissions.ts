@@ -79,8 +79,8 @@ export const PERMISSION_MODULES = [
   {
     key: "fees",
     label: "Fees",
-    view: "See fee dues, payments and receipts",
-    manage: "Collect payments, generate fees and change fee settings",
+    view: "See fee dues, payments, receipts and fee setup",
+    manage: "Collect payments. Only school admins change fee setup",
   },
   {
     key: "expenses",

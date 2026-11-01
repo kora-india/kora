@@ -37,6 +37,8 @@ import {
 interface StudentFeeCollectionProps {
   student: any;
   canEdit: boolean;
+  /** Waiving a late fee is the school admin's. */
+  canWaive?: boolean;
   onPaymentSuccess: (receiptNo: string) => void;
   onWaiveSuccess?: () => void;
 }
@@ -44,6 +46,7 @@ interface StudentFeeCollectionProps {
 export function StudentFeeCollection({
   student,
   canEdit,
+  canWaive = false,
   onPaymentSuccess,
   onWaiveSuccess,
 }: Readonly<StudentFeeCollectionProps>) {
@@ -1096,7 +1099,7 @@ export function StudentFeeCollection({
                                     <td className="py-1.5 text-right">
                                       {item.isLateFee &&
                                         item.due > 0 &&
-                                        canEdit && (
+                                        canWaive && (
                                           <button
                                             type="button"
                                             disabled={waivingItemId === item.id}

@@ -57,6 +57,38 @@ test("the school admin opens fees to a teacher and closes attendance", async ({
   await context.close();
 });
 
+test("the access dialog stays in place while a module low in the list changes", async ({
+  page,
+}, testInfo) => {
+  await signIn(page, SEEDED.schoolAdmin.email, SEEDED.schoolAdmin.password);
+  await page.goto("/settings/team");
+  await page
+    .getByRole("button", { name: /^Edit access for / })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog");
+
+  await dialog
+    .getByRole("radiogroup", { name: "Expenses" })
+    .getByText("Manage", { exact: true })
+    .click();
+
+  // The list scrolls inside the dialog; the dialog itself doesn't move.
+  await expect(
+    dialog.getByRole("button", { name: "Save access" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: /^Access for / }),
+  ).toBeInViewport();
+  expect(
+    await dialog.evaluate((el) => ({
+      scrolled: el.scrollTop,
+      blankBelow: el.scrollHeight - el.clientHeight,
+    })),
+  ).toEqual({ scrolled: 0, blankBelow: 0 });
+  await page.screenshot({ path: testInfo.outputPath("access-dialog.png") });
+});
+
 test("an accountant login gets the money pages and nothing else", async ({
   page,
   browser,
@@ -158,5 +190,44 @@ test("an accountant login gets the money pages and nothing else", async ({
   await expect(
     accountant.getByRole("button", { name: "Import Fee History" }),
   ).toHaveCount(0);
+
+  // They take payments. Fee setup is theirs to see, not to change.
+  const viewOnly = accountant.getByText(
+    "You can view this, but only a school admin can change it.",
+  );
+  await expect(viewOnly).toHaveCount(0);
+  await expect(
+    accountant.getByPlaceholder("Search student by name or roll number..."),
+  ).toHaveCount(1);
+
+  await accountant.goto("/fees?tab=settings");
+  await expect(viewOnly).toBeVisible();
+  await expect(accountant.getByText("Tuition Fee").first()).toBeVisible();
+  for (const save of ["Save Late Fee Policy", "Save Fee Collection Policy"]) {
+    await expect(accountant.getByRole("button", { name: save })).toHaveCount(0);
+  }
+  await expect(accountant.getByLabel("Edit fee component")).toHaveCount(0);
+  await expect(
+    accountant.locator("form input:not(:disabled)").first(),
+  ).toHaveCount(0);
+
+  await accountant.screenshot({
+    path: testInfo.outputPath("fee-settings.png"),
+  });
+
+  await accountant.goto("/fees?tab=assignments");
+  await expect(viewOnly).toBeVisible();
+  await expect(
+    accountant.getByRole("main").locator("select").first(),
+  ).toBeDisabled();
+
+  await accountant.goto("/fees?tab=generator");
+  await expect(viewOnly).toBeVisible();
+  await expect(
+    accountant.getByRole("main").locator('button[type="submit"]'),
+  ).toBeDisabled();
+  await accountant.screenshot({
+    path: testInfo.outputPath("generate-fees.png"),
+  });
   await context.close();
 });

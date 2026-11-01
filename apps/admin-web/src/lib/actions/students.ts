@@ -40,6 +40,7 @@ const StudentSchema = z.object({
 
 import { can } from "@schoolos/types";
 import { getSchoolAccess, isError, requirePermission } from "@/lib/auth-guard";
+import { isAdmin } from "@/lib/session";
 import { actionErrorMessage } from "@/lib/action-errors";
 
 /** Adding, changing and opening a student's full profile. */
@@ -356,6 +357,9 @@ export async function deleteStudent(
 ) {
   const user = await getAdminSession();
   if (!user) return { error: "Unauthorized" };
+  if (options.waiveOpenCharges && !isAdmin(user.role)) {
+    return { error: "Only a school admin can waive fees" };
+  }
 
   try {
     const existing = await prisma.student.findFirst({

@@ -4,7 +4,11 @@ import { z } from "zod";
 import { prisma, FeeStatus, PaymentMethod, type Prisma } from "@schoolos/db";
 import { revalidatePath } from "next/cache";
 import { invalidateFeesCache, invalidateCache } from "@/lib/redis";
-import { requirePermission } from "@/lib/auth-guard";
+import {
+  isError,
+  requirePermission,
+  requireSchoolAdmin,
+} from "@/lib/auth-guard";
 import { allocateReceiptNumber } from "@/lib/fees/receipt-number";
 import { recomputeChargeStatus } from "@/lib/fees/charge-status";
 import { waiveChargeItemInTx } from "@/lib/fees/waive";
@@ -1136,8 +1140,9 @@ export async function getFeeReceiptDetails(
 
 /** B10: Waives what is still owed on a fee item (see `waiveChargeItemInTx`). */
 export async function waiveFeeChargeItem(itemId: string, waiverReason: string) {
-  const user = await getFinanceSession();
-  if (!user) return { error: "Unauthorized" };
+  // Waiving changes what's owed, so it's the school admin's. Others collect.
+  const user = await requireSchoolAdmin();
+  if (isError(user)) return { error: "Unauthorized" };
 
   const reason = (waiverReason ?? "").trim();
   if (reason.length < 3) {

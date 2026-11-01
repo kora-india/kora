@@ -119,7 +119,9 @@ export function MemberAccessDialog({
                     <label
                       key={option}
                       className={cn(
-                        "inline-flex h-7 cursor-pointer items-center rounded-md px-3 text-xs font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet-500",
+                        // relative keeps the hidden radio inside the list; loose,
+                        // it stretches the dialog and scrolls it when focused.
+                        "relative inline-flex h-7 cursor-pointer items-center rounded-md px-3 text-xs font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-violet-500",
                         level === option
                           ? "bg-background text-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground",

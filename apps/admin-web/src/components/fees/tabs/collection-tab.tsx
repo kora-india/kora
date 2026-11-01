@@ -51,6 +51,7 @@ export function CollectionTab({
   recentCharges = [],
   components,
   canEdit,
+  canManageSetup = false,
   transactions,
   school,
 }: any) {
@@ -1269,26 +1270,28 @@ export function CollectionTab({
                                                     ? "Partial"
                                                     : "Pending"}
                                                 </span>
-                                                {item.isLateFee && canEdit && (
-                                                  <button
-                                                    disabled={
-                                                      waivingItemId === item.id
-                                                    }
-                                                    onClick={() =>
-                                                      setWaiveTarget({
-                                                        id: item.id,
-                                                        label: `${item.componentName || "late fee"} (${charge.title})`,
-                                                      })
-                                                    }
-                                                    className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
-                                                  >
-                                                    {waivingItemId ===
-                                                      item.id && (
-                                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                                    )}
-                                                    Waive
-                                                  </button>
-                                                )}
+                                                {item.isLateFee &&
+                                                  canManageSetup && (
+                                                    <button
+                                                      disabled={
+                                                        waivingItemId ===
+                                                        item.id
+                                                      }
+                                                      onClick={() =>
+                                                        setWaiveTarget({
+                                                          id: item.id,
+                                                          label: `${item.componentName || "late fee"} (${charge.title})`,
+                                                        })
+                                                      }
+                                                      className="text-[10px] px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 font-medium flex items-center gap-1 disabled:opacity-50"
+                                                    >
+                                                      {waivingItemId ===
+                                                        item.id && (
+                                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                      )}
+                                                      Waive
+                                                    </button>
+                                                  )}
                                               </div>
                                             )}
                                           </td>

@@ -182,7 +182,7 @@ export default async function FeesPage(props: {
       transactions={JSON.parse(JSON.stringify(transactions))}
       school={JSON.parse(JSON.stringify(school))}
       canEdit={canEdit}
-      canImportBalances={isAdmin(user.role)}
+      canManageSetup={isAdmin(user.role)}
     />
   );
 }

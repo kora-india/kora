@@ -146,6 +146,8 @@ interface Props {
   canPromote?: boolean;
   /** School admins can bring fee history in with their students. */
   canImportHistory?: boolean;
+  /** Waiving what a student owes is the school admin's. */
+  canWaiveFees?: boolean;
   /** The search, class and section filters the server used to load `students`. */
   appliedFilters?: { q: string; classId: string; sectionId: string };
 }
@@ -158,6 +160,7 @@ export function StudentsContent({
   canEdit,
   canPromote = false,
   canImportHistory = false,
+  canWaiveFees = false,
   appliedFilters,
 }: Readonly<Props>) {
   const router = useRouter();
@@ -990,7 +993,7 @@ export function StudentsContent({
           confirmLabel="Remove"
           onConfirm={handleDelete}
         >
-          {deleteTargetOutstanding > 0 && (
+          {canWaiveFees && deleteTargetOutstanding > 0 && (
             <label className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-sm cursor-pointer">
               <input
                 type="checkbox"
@@ -1198,6 +1201,7 @@ export function StudentsContent({
                           <StudentFeeCollection
                             student={detailsModal.student}
                             canEdit={canEdit}
+                            canWaive={canWaiveFees}
                             onPaymentSuccess={() =>
                               refreshStudentDetails(detailsModal.student.id)
                             }

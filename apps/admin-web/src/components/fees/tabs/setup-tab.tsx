@@ -640,87 +640,86 @@ export function SetupTab({
               </div>
             </div>
 
-            <form
-              onSubmit={lateFeeForm.handleSubmit(onLateFeeSubmit)}
-              className="space-y-4"
-            >
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">
-                    Enable Automatic Late Fees
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Adds fine to unpaid fees past grace period
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    {...lateFeeForm.register("lateFeeEnabled")}
-                  />
-                  <div className="w-11 h-6 bg-muted-foreground/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
-                </label>
-              </div>
-
-              {lateFeeForm.watch("lateFeeEnabled") && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-3 pt-1"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <FormField label="Fine Amount (₹)" required>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="e.g. 200"
-                        {...lateFeeForm.register("lateFeeAmount")}
-                        className={inputCls}
-                      />
-                    </FormField>
-
-                    <FormField label="Charged" required>
-                      <select
-                        {...lateFeeForm.register("lateFeeFrequency")}
-                        className={selectCls}
-                      >
-                        <option value="MONTHLY">Every month overdue</option>
-                        <option value="WEEKLY">Every week overdue</option>
-                        <option value="DAILY">Every day overdue</option>
-                      </select>
-                    </FormField>
-
-                    <FormField label="Maximum Fine per Charge (₹)">
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder="No limit"
-                        {...lateFeeForm.register("maxLateFeeCap")}
-                        className={inputCls}
-                      />
-                    </FormField>
+            <form onSubmit={lateFeeForm.handleSubmit(onLateFeeSubmit)}>
+              <fieldset disabled={!canEdit} className="min-w-0 space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">
+                      Enable Automatic Late Fees
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Adds fine to unpaid fees past grace period
+                    </p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Fines also stop growing after 3 months, 5 weeks or 30 days
-                    overdue, and never exceed half of the original charge.
-                  </p>
-                </motion.div>
-              )}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      {...lateFeeForm.register("lateFeeEnabled")}
+                    />
+                    <div className="w-11 h-6 bg-muted-foreground/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                  </label>
+                </div>
 
-              {canEdit && (
-                <button
-                  type="submit"
-                  disabled={lateFeeForm.formState.isSubmitting}
-                  className="w-full h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
-                >
-                  {lateFeeForm.formState.isSubmitting && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  )}
-                  Save Late Fee Policy
-                </button>
-              )}
+                {lateFeeForm.watch("lateFeeEnabled") && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-3 pt-1"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <FormField label="Fine Amount (₹)" required>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="e.g. 200"
+                          {...lateFeeForm.register("lateFeeAmount")}
+                          className={inputCls}
+                        />
+                      </FormField>
+
+                      <FormField label="Charged" required>
+                        <select
+                          {...lateFeeForm.register("lateFeeFrequency")}
+                          className={selectCls}
+                        >
+                          <option value="MONTHLY">Every month overdue</option>
+                          <option value="WEEKLY">Every week overdue</option>
+                          <option value="DAILY">Every day overdue</option>
+                        </select>
+                      </FormField>
+
+                      <FormField label="Maximum Fine per Charge (₹)">
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="No limit"
+                          {...lateFeeForm.register("maxLateFeeCap")}
+                          className={inputCls}
+                        />
+                      </FormField>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Fines also stop growing after 3 months, 5 weeks or 30 days
+                      overdue, and never exceed half of the original charge.
+                    </p>
+                  </motion.div>
+                )}
+
+                {canEdit && (
+                  <button
+                    type="submit"
+                    disabled={lateFeeForm.formState.isSubmitting}
+                    className="w-full h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                  >
+                    {lateFeeForm.formState.isSubmitting && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    )}
+                    Save Late Fee Policy
+                  </button>
+                )}
+              </fieldset>
             </form>
           </div>
 
@@ -771,121 +770,122 @@ export function SetupTab({
               </div>
             </div>
 
-            <form
-              onSubmit={policyForm.handleSubmit(onPolicySubmit)}
-              className="space-y-4"
-            >
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground">
-                  Student Clearance Mode
-                </label>
-
-                <div className="grid grid-cols-1 gap-2.5">
-                  {/* Option 1: Full Only */}
-                  <label
-                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                      policyForm.watch("feePaymentMode") === "FULL_ONLY"
-                        ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
-                        : "bg-background hover:bg-muted/30 border-muted"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      value="FULL_ONLY"
-                      {...policyForm.register("feePaymentMode")}
-                      className="mt-1 text-violet-600 focus:ring-violet-500"
-                    />
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                        <span>1. Full Due Clearance Only</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-semibold">
-                          Strict
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Student can only clear each month&apos;s dues in full.
-                        Partial installment entries are disabled. Official
-                        clearance bill is issued immediately upon payment.
-                      </p>
-                    </div>
+            <form onSubmit={policyForm.handleSubmit(onPolicySubmit)}>
+              <fieldset disabled={!canEdit} className="min-w-0 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">
+                    Student Clearance Mode
                   </label>
 
-                  {/* Option 2: Allow Partial */}
-                  <label
-                    className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                      policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL"
-                        ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
-                        : "bg-background hover:bg-muted/30 border-muted"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      value="ALLOW_PARTIAL"
-                      {...policyForm.register("feePaymentMode")}
-                      className="mt-1 text-violet-600 focus:ring-violet-500"
-                    />
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                        <span>2. Allow Partial Month Payments</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">
-                          Flexible
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        Student can clear dues in partial installments. Issues a
-                        provisional dues invoice until the entire month&apos;s
-                        balance is cleared.
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Min Partial Payment Input */}
-              {policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL" && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2 pt-1"
-                >
-                  <FormField
-                    label="Minimum Partial Payment Percentage (%)"
-                    required
-                  >
-                    <div className="relative">
+                  <div className="grid grid-cols-1 gap-2.5">
+                    {/* Option 1: Full Only */}
+                    <label
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        policyForm.watch("feePaymentMode") === "FULL_ONLY"
+                          ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
+                          : "bg-background hover:bg-muted/30 border-muted"
+                      }`}
+                    >
                       <input
-                        type="number"
-                        step="1"
-                        min="0"
-                        max="100"
-                        placeholder="e.g. 80"
-                        {...policyForm.register("minPartialPaymentPercentage")}
-                        className={inputCls}
+                        type="radio"
+                        value="FULL_ONLY"
+                        {...policyForm.register("feePaymentMode")}
+                        className="mt-1 text-violet-600 focus:ring-violet-500"
                       />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Percentage of the month&apos;s total billed fee required
-                      per installment (e.g. 80%). If remaining due is less than
-                      or equal to this threshold, the student must clear the
-                      remaining balance in full.
-                    </p>
-                  </FormField>
-                </motion.div>
-              )}
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <span>1. Full Due Clearance Only</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-semibold">
+                            Strict
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Student can only clear each month&apos;s dues in full.
+                          Partial installment entries are disabled. Official
+                          clearance bill is issued immediately upon payment.
+                        </p>
+                      </div>
+                    </label>
 
-              {canEdit && (
-                <button
-                  type="submit"
-                  disabled={policyForm.formState.isSubmitting}
-                  className="w-full h-9 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
-                >
-                  {policyForm.formState.isSubmitting && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  )}
-                  Save Fee Collection Policy
-                </button>
-              )}
+                    {/* Option 2: Allow Partial */}
+                    <label
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL"
+                          ? "bg-violet-50/60 dark:bg-violet-950/30 border-violet-500/60 ring-1 ring-violet-500/30"
+                          : "bg-background hover:bg-muted/30 border-muted"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        value="ALLOW_PARTIAL"
+                        {...policyForm.register("feePaymentMode")}
+                        className="mt-1 text-violet-600 focus:ring-violet-500"
+                      />
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <span>2. Allow Partial Month Payments</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">
+                            Flexible
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          Student can clear dues in partial installments. Issues
+                          a provisional dues invoice until the entire
+                          month&apos;s balance is cleared.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Min Partial Payment Input */}
+                {policyForm.watch("feePaymentMode") === "ALLOW_PARTIAL" && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-2 pt-1"
+                  >
+                    <FormField
+                      label="Minimum Partial Payment Percentage (%)"
+                      required
+                    >
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          max="100"
+                          placeholder="e.g. 80"
+                          {...policyForm.register(
+                            "minPartialPaymentPercentage",
+                          )}
+                          className={inputCls}
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Percentage of the month&apos;s total billed fee required
+                        per installment (e.g. 80%). If remaining due is less
+                        than or equal to this threshold, the student must clear
+                        the remaining balance in full.
+                      </p>
+                    </FormField>
+                  </motion.div>
+                )}
+
+                {canEdit && (
+                  <button
+                    type="submit"
+                    disabled={policyForm.formState.isSubmitting}
+                    className="w-full h-9 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                  >
+                    {policyForm.formState.isSubmitting && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    )}
+                    Save Fee Collection Policy
+                  </button>
+                )}
+              </fieldset>
             </form>
           </div>
         </div>
