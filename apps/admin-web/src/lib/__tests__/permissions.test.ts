@@ -23,6 +23,7 @@ describe("resolvePermissions", () => {
 
   it("starts teachers where they were before permissions existed", () => {
     expect(resolvePermissions(UserRole.TEACHER, null)).toEqual({
+      attendanceImport: "none",
       students: "view",
       classes: "none",
       staff: "none",
@@ -120,5 +121,39 @@ describe("the editor's rules", () => {
     expect(
       permissionsProblem({ ...teacher, exams: "none", marks: "none" }),
     ).toBeNull();
+  });
+});
+
+describe("attendance import", () => {
+  it("is a yes-or-no switch, off until the admin allows it", () => {
+    expect(moduleLevels("attendanceImport")).toEqual(["none", "manage"]);
+    expect(ROLE_DEFAULT_PERMISSIONS[UserRole.TEACHER].attendanceImport).toBe(
+      "none",
+    );
+    expect(ROLE_DEFAULT_PERMISSIONS[UserRole.ACCOUNTANT].attendanceImport).toBe(
+      "none",
+    );
+    expect(FULL_ACCESS.attendanceImport).toBe("manage");
+  });
+
+  it("stays off for logins saved before it existed", () => {
+    expect(
+      resolvePermissions(UserRole.TEACHER, { attendance: "manage" })
+        .attendanceImport,
+    ).toBe("none");
+  });
+
+  it("can't reach further than marking attendance", () => {
+    const teacher = ROLE_DEFAULT_PERMISSIONS[UserRole.TEACHER];
+    expect(
+      permissionsProblem({ ...teacher, attendanceImport: "manage" }),
+    ).toBeNull();
+    expect(
+      permissionsProblem({
+        ...teacher,
+        attendance: "view",
+        attendanceImport: "manage",
+      }),
+    ).toBe("Attendance import needs Attendance set to Manage");
   });
 });

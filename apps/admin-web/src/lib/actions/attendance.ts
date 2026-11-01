@@ -8,6 +8,7 @@ import { attendanceDateError, parseAttendanceDate } from "@schoolos/utils";
 import { invalidateCache, invalidateStudentsCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { classLabel, logActivity } from "@/lib/activity";
+import { findTeacherSections, teachesSection } from "@/lib/teacher-sections";
 
 const AttendanceRecordSchema = z.object({
   studentId: z.string(),
@@ -48,26 +49,10 @@ export async function markAttendance(data: unknown) {
   const attendanceDate = parseAttendanceDate(date)!;
 
   if (user.role === "TEACHER") {
-    const teacher = await prisma.teacher.findFirst({
-      where: { userId: user.id, schoolId: user.schoolId },
-      include: {
-        assignedSections: true,
-        classTeacherOf: { select: { id: true } },
-      },
-    });
+    const teacher = await findTeacherSections(user.id, user.schoolId);
     if (!teacher) return { error: "Teacher record not found" };
 
-    const isDirectMatch =
-      teacher.assignedClassId === classId &&
-      (!teacher.assignedSectionId || teacher.assignedSectionId === sectionId);
-    const isSectionMatch = teacher.assignedSections.some(
-      (as) => as.classId === classId && as.sectionId === sectionId,
-    );
-    const isClassTeacher = teacher.classTeacherOf.some(
-      (ct) => ct.id === classId,
-    );
-
-    if (!isDirectMatch && !isSectionMatch && !isClassTeacher) {
+    if (!teachesSection(teacher, classId, sectionId)) {
       return {
         error:
           "You can only mark attendance for your assigned classes and sections",
@@ -114,6 +99,8 @@ export async function markAttendance(data: unknown) {
           status: r.status,
           remarks: r.remarks ?? null,
           markedById: user.id,
+          // Now someone's own record, so undoing an import leaves it.
+          importId: null,
         },
         create: {
           schoolId: user.schoolId,

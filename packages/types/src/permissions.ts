@@ -41,6 +41,12 @@ export const PERMISSION_MODULES = [
     manage: "Mark attendance; teachers only for their sections",
   },
   {
+    key: "attendanceImport",
+    label: "Attendance import",
+    view: null,
+    manage: "Upload past attendance; teachers only for their sections",
+  },
+  {
     key: "timetable",
     label: "Timetable",
     view: "See timetables",
@@ -152,7 +158,11 @@ export function isStaffRole(role: string): role is StaffRole {
 /** The levels a module offers. */
 export function moduleLevels(module: PermissionModule): AccessLevel[] {
   const definition = PERMISSION_MODULES.find((m) => m.key === module);
-  return definition?.manage ? ["none", "view", "manage"] : ["none", "view"];
+  return [
+    "none",
+    ...(definition?.view ? (["view"] as const) : []),
+    ...(definition?.manage ? (["manage"] as const) : []),
+  ];
 }
 
 /**
@@ -195,6 +205,13 @@ export function permissionsProblem(permissions: Permissions): string | null {
   // Marks are entered from the exam list.
   if (permissions.marks !== "none" && permissions.exams === "none") {
     return "Marks entry needs Exams set to View or Manage";
+  }
+  // An import saves attendance, so it can't reach further than marking does.
+  if (
+    permissions.attendanceImport !== "none" &&
+    permissions.attendance !== "manage"
+  ) {
+    return "Attendance import needs Attendance set to Manage";
   }
   return null;
 }

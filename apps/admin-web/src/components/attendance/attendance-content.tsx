@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Save,
   Loader2,
+  Upload,
 } from "lucide-react";
+import { ImportAttendanceDialog } from "./import-attendance-dialog";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useQueryState } from "@/hooks/use-query-state";
@@ -48,6 +50,8 @@ interface TodayRecord {
 }
 
 interface Props {
+  /** Can bring in past attendance from a filled template. */
+  canImport?: boolean;
   classes: ClassData[];
   todayRecords: TodayRecord[];
   weeklyAttendance?: {
@@ -99,6 +103,7 @@ export function AttendanceContent({
   assignedClassIds = [],
   assignedSectionIds = [],
   canMark = true,
+  canImport = false,
 }: Readonly<Props>) {
   const router = useRouter();
   // The local calendar day (toISOString would give yesterday before 05:30 IST).
@@ -121,6 +126,7 @@ export function AttendanceContent({
   const [savedCount, setSavedCount] = useState(0);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const isTeacher = userRole === "TEACHER";
   const teacherClassIds =
@@ -246,12 +252,30 @@ export function AttendanceContent({
 
   return (
     <div className="p-6 space-y-5 w-full">
-      <div>
-        <h1 className="text-2xl font-bold">Attendance</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Mark and track student attendance
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Attendance</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Mark and track student attendance
+          </p>
+        </div>
+        {canImport && (
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 h-9 px-4 bg-background border rounded-lg text-sm font-medium hover:bg-muted transition-colors self-start sm:self-auto"
+          >
+            <Upload className="w-4 h-4" />
+            Import Attendance
+          </button>
+        )}
       </div>
+      {canImport && (
+        <ImportAttendanceDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+        />
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

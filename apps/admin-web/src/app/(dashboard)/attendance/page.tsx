@@ -118,6 +118,7 @@ export default async function AttendancePage() {
       userId={user.id}
       assignedClassId={assignedClassId}
       assignedSectionId={assignedSectionId}
+      canImport={can(permissions, "attendanceImport", "manage")}
       assignedClassIds={assignedClassIds}
       assignedSectionIds={assignedSectionIds}
       canMark={can(permissions, "attendance", "manage")}

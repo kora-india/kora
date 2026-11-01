@@ -127,6 +127,8 @@ export async function POST(req: NextRequest) {
             status: rec.status as any,
             markedById: user.id,
             remarks: rec.remarks,
+            // Now someone's own record, so undoing an import leaves it.
+            importId: null,
           },
           create: {
             schoolId,

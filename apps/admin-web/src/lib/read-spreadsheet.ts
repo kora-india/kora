@@ -19,6 +19,14 @@ function readFile(file: File, asText: boolean) {
 export async function readSpreadsheet(
   file: File,
 ): Promise<{ headers: string[]; rows: SheetRow[] }> {
+  const [first] = await readSpreadsheetSheets(file);
+  return first;
+}
+
+/** Every sheet of a file, in order, read the way `readSpreadsheet` reads one. */
+export async function readSpreadsheetSheets(
+  file: File,
+): Promise<{ name: string; headers: string[]; rows: SheetRow[] }[]> {
   const { read, utils } = await import("xlsx");
   // A CSV is read as UTF-8 text, so Hindi names and headers arrive as
   // written; read as bytes they turned into "à¤à¤¾…". Excel files are read as
@@ -32,25 +40,28 @@ export async function readSpreadsheet(
   const workbook = isText
     ? read(data as string, { type: "string", raw: true })
     : read(data, { type: "array", raw: true });
-  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rawData = utils.sheet_to_json<Record<string, unknown>>(worksheet, {
-    defval: "",
-  });
 
-  // Every row has every column (defval), so the first row's keys are the
-  // headers, duplicates made unique by SheetJS ("Name_1").
-  const headers = Object.keys(rawData[0] ?? {});
-  const rows = rawData
-    .map((cells, index) => ({
-      cells,
-      // SheetJS keeps each row's 0-based line; the header is line 1.
-      sheetRow:
-        typeof (cells as { __rowNum__?: unknown }).__rowNum__ === "number"
-          ? (cells as { __rowNum__: number }).__rowNum__ + 1
-          : index + 2,
-    }))
-    .filter(({ cells }) =>
-      Object.values(cells).some((v) => String(v ?? "").trim() !== ""),
+  return workbook.SheetNames.map((name) => {
+    const rawData = utils.sheet_to_json<Record<string, unknown>>(
+      workbook.Sheets[name],
+      { defval: "" },
     );
-  return { headers, rows };
+
+    // Every row has every column (defval), so the first row's keys are the
+    // headers, duplicates made unique by SheetJS ("Name_1").
+    const headers = Object.keys(rawData[0] ?? {});
+    const rows = rawData
+      .map((cells, index) => ({
+        cells,
+        // SheetJS keeps each row's 0-based line; the header is line 1.
+        sheetRow:
+          typeof (cells as { __rowNum__?: unknown }).__rowNum__ === "number"
+            ? (cells as { __rowNum__: number }).__rowNum__ + 1
+            : index + 2,
+      }))
+      .filter(({ cells }) =>
+        Object.values(cells).some((v) => String(v ?? "").trim() !== ""),
+      );
+    return { name, headers, rows };
+  });
 }

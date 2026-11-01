@@ -78,6 +78,7 @@ model School {
   subscription                Subscription?
   teachers                    Teacher[]
   staff                       Staff[]
+  attendanceImports           AttendanceImport[]
   users                       User[]
   expenseCategories           ExpenseCategory[]
   expenses                    Expense[]
@@ -385,18 +386,52 @@ model Attendance {
   status     AttendanceStatus @default(PRESENT)
   markedById String
   remarks    String?
+  /// The import it came from. Cleared when someone changes the record, so
+  /// undoing the import can't take away their correction.
+  importId   String?
   createdAt  DateTime         @default(now())
   class      Class            @relation(fields: [classId], references: [id])
   markedBy   User             @relation(fields: [markedById], references: [id])
   school     School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   section    Section          @relation(fields: [sectionId], references: [id])
   student    Student          @relation(fields: [studentId], references: [id], onDelete: NoAction)
+  import     AttendanceImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
 
   @@unique([studentId, date])
   @@index([schoolId, date])
+  @@index([importId])
   @@index([classId, sectionId, date])
   @@index([schoolId, classId, date, status])
   @@map("attendances")
+}
+
+/// Past attendance brought in from a filled template, one section at a time.
+model AttendanceImport {
+  id            String       @id @default(cuid())
+  schoolId      String
+  classId       String
+  sectionId     String
+  className     String
+  sectionName   String
+  /// "YYYY-MM"
+  fromMonth     String
+  toMonth       String
+  fileName      String?
+  studentCount  Int
+  dayCount      Int
+  recordCount   Int
+  /// Days the file had that were already marked in Kora.
+  skippedCount  Int          @default(0)
+  createdById   String?
+  createdByName String
+  undoneAt      DateTime?
+  undoneById    String?
+  createdAt     DateTime     @default(now())
+  school        School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  records       Attendance[]
+
+  @@index([schoolId, createdAt])
+  @@map("attendance_imports")
 }
 
 model Fee {

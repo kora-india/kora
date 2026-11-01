@@ -57,6 +57,52 @@ test("the school admin opens fees to a teacher and closes attendance", async ({
   await context.close();
 });
 
+test("a teacher can import attendance only once the admin allows it", async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const context = await newContext(browser, baseURL);
+  const teacherPage = await context.newPage();
+  await signIn(teacherPage, "rahul@test-dps.com", "test1234");
+  await teacherPage.goto("/attendance");
+  await expect(
+    teacherPage.getByRole("heading", { name: "Attendance", exact: true }),
+  ).toBeVisible();
+  await expect(
+    teacherPage.getByRole("button", { name: "Import Attendance" }),
+  ).toHaveCount(0);
+
+  await signIn(page, SEEDED.schoolAdmin.email, SEEDED.schoolAdmin.password);
+  await page.goto("/settings/team");
+  await page
+    .getByRole("button", { name: "Edit access for Rahul Verma" })
+    .click();
+  const dialog = page.getByRole("dialog");
+
+  // An import saves attendance, so it can't go further than marking does.
+  await setAccess(dialog, "Attendance", "View");
+  await setAccess(dialog, "Attendance import", "Manage");
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Attendance import needs Attendance set to Manage",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Save access" }),
+  ).toBeDisabled();
+
+  await setAccess(dialog, "Attendance", "Manage");
+  await dialog.getByRole("button", { name: "Save access" }).click();
+  await expect(page.getByText("Rahul Verma's access saved")).toBeVisible();
+
+  // Allowed, but only for their own sections, and this teacher has none.
+  await teacherPage.reload();
+  await teacherPage.getByRole("button", { name: "Import Attendance" }).click();
+  await expect(
+    teacherPage.getByRole("dialog").getByText(/no class sections/),
+  ).toBeVisible();
+  await context.close();
+});
+
 test("the access dialog stays in place while a module low in the list changes", async ({
   page,
 }, testInfo) => {

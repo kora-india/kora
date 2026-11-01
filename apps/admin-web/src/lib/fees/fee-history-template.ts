@@ -46,7 +46,7 @@ export interface StudentsHistoryTemplate {
 const MONTH_COLOURS = ["FFEDE9FE", "FFE0F2FE"];
 const HEADER_COLOUR = "FFF3F4F6";
 
-const fillOf = (argb: string) => ({
+export const fillOf = (argb: string) => ({
   type: "pattern" as const,
   pattern: "solid" as const,
   fgColor: { argb },
@@ -190,7 +190,7 @@ export async function buildStudentsHistoryWorkbook(
   return book;
 }
 
-async function saveWorkbook(
+export async function saveWorkbook(
   book: Awaited<ReturnType<typeof buildHistoryWorkbook>>,
   fileName: string,
 ) {

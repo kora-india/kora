@@ -105,7 +105,8 @@ export async function POST(req: NextRequest) {
     data.records.map((rec) =>
       prisma.attendance.upsert({
         where: { studentId_date: { studentId: rec.studentId, date } },
-        update: { status: rec.status, markedById: user.id },
+        // importId: now the teacher's own record, so undoing an import leaves it.
+        update: { status: rec.status, markedById: user.id, importId: null },
         create: {
           schoolId,
           studentId: rec.studentId,
