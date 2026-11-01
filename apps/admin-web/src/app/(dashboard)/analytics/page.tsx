@@ -2,12 +2,15 @@ import { auth } from "@schoolos/auth";
 import { prisma } from "@schoolos/db";
 import { redirect } from "next/navigation";
 import { AnalyticsContent } from "@/components/analytics/analytics-content";
+import { AnalyticsFilterBar } from "@/components/analytics/analytics-filter-bar";
 import { getCache } from "@/lib/redis";
 import { getPlanCatalog } from "@/lib/plan-catalog";
 import { cheapestPlanWith } from "@/lib/plans";
 import { can } from "@schoolos/types";
 import { getPermissions } from "@/lib/auth-guard";
 import { getAnalyticsData } from "@/lib/reports/analytics";
+import { resolveAnalyticsView } from "@/lib/reports/analytics-query";
+import { calendarDateInTimeZone, resolveTimeZone } from "@/lib/fees/timezone";
 
 export const metadata = { title: "Analytics" };
 
@@ -15,7 +18,9 @@ import { SuperAdminAnalytics } from "@/components/analytics/super-admin-analytic
 import { getSuperAdminAnalyticsData } from "@/lib/actions/super-admin";
 import { UserRole } from "@schoolos/types";
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const user = session.user;
@@ -73,11 +78,68 @@ export default async function AnalyticsPage() {
     );
   }
 
-  const data = await getCache(
-    `cache:${schoolId}:analytics`,
-    () => getAnalyticsData(schoolId, school?.timezone),
-    300, // 5 minutes TTL
-  );
+  const [sessions, classes] = await Promise.all([
+    prisma.academicSession.findMany({
+      where: { schoolId },
+      orderBy: { startDate: "desc" },
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        isCurrent: true,
+      },
+    }),
+    prisma.class.findMany({
+      where: { schoolId },
+      orderBy: { grade: "asc" },
+      select: {
+        id: true,
+        name: true,
+        sections: {
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        },
+      },
+    }),
+  ]);
+  const today = calendarDateInTimeZone(resolveTimeZone(school?.timezone));
+  const sessionOptions = sessions.map(({ startDate, endDate, ...s }) => ({
+    ...s,
+    start: startDate.toISOString().slice(0, 10),
+    end: endDate.toISOString().slice(0, 10),
+  }));
+  const view = resolveAnalyticsView((await props.searchParams) ?? {}, {
+    sessions: sessionOptions,
+    classes,
+    today,
+  });
 
-  return <AnalyticsContent {...data} />;
+  const load = () =>
+    getAnalyticsData(schoolId, school?.timezone, {
+      range: view.range,
+      previous: view.previous,
+      classId: view.query.classId === "all" ? null : view.query.classId,
+      sectionId: view.query.sectionId === "all" ? null : view.query.sectionId,
+    });
+  // Filtered views are few and quick to work out; the opening view is cached.
+  const data = view.isDefault
+    ? await getCache(`cache:${schoolId}:analytics:overview`, load, 300) // 5 minutes TTL
+    : await load();
+
+  return (
+    <AnalyticsContent
+      {...data}
+      summary={view.summary}
+      compareLabel={view.compareLabel}
+      filterBar={
+        <AnalyticsFilterBar
+          query={view.query}
+          defaults={view.defaults}
+          sessions={sessionOptions.filter((s) => s.start <= today)}
+          classes={classes}
+        />
+      }
+    />
+  );
 }

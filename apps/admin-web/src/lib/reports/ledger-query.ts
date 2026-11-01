@@ -68,10 +68,10 @@ const STREAMS: LedgerStream[] = ["all", "inflow", "outflow", "advance"];
 
 type Params = Record<string, string | string[] | undefined>;
 
-const first = (v: string | string[] | undefined) =>
+export const first = (v: string | string[] | undefined) =>
   (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 
-const isIsoDate = (v: string) =>
+export const isIsoDate = (v: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(v) &&
   new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
 
@@ -120,13 +120,13 @@ export function ledgerQueryToSearch(query: LedgerQuery): string {
   return s ? `?${s}` : "";
 }
 
-const shift = (isoDate: string, days: number) => {
+export const shift = (isoDate: string, days: number) => {
   const d = new Date(`${isoDate}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
 
-const monthBounds = (year: number, month: number) => {
+export const monthBounds = (year: number, month: number) => {
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 0));
   return {

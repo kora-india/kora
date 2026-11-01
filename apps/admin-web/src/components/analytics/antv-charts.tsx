@@ -77,6 +77,7 @@ export function AntvRevenueAreaChart({
       },
       x: {
         gridLineDash: [3, 3],
+        labelAutoHide: true,
       },
     },
     tooltip: {
@@ -130,6 +131,9 @@ export function AntvAttendanceLineChart({
         labelFormatter: (v: number) => `${v}%`,
         gridLineDash: [3, 3],
       },
+      x: {
+        labelAutoHide: true,
+      },
     },
     style: {
       stroke: "#10b981",
@@ -181,7 +185,8 @@ export function AntvFeePieChart({ data }: Readonly<FeePieProps>) {
     innerRadius: 0.62,
     radius: 0.9,
     label: {
-      text: (d: any) => `${d.percentage}%`,
+      // Slices this small are in the legend; their labels would overlap.
+      text: (d: any) => (d.percentage >= 3 ? `${d.percentage}%` : ""),
       style: {
         fontWeight: "bold",
         fontSize: 11,

@@ -16,6 +16,13 @@ export default function AnalyticsLoading() {
         <Sk className="h-9 w-32 rounded-lg" />
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <Sk className="h-8 w-44" />
+        <Sk className="h-8 w-40" />
+        <Sk className="h-8 w-36" />
+      </div>
+
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (

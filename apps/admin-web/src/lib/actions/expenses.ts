@@ -88,7 +88,7 @@ export async function createExpense(data: unknown) {
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
       invalidateLedgerCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
     ]);
     revalidatePath("/expenses");
     revalidatePath("/dashboard");
@@ -145,7 +145,7 @@ export async function deleteExpense(id: string) {
       invalidateCache(`cache:${user.schoolId}:expenses:list`),
       invalidateLedgerCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
     ]);
     revalidatePath("/expenses");
     revalidatePath("/dashboard");

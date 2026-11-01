@@ -1305,8 +1305,13 @@ describe(`a school year of fees, expenses and pay (seed ${SEED})`, () => {
       .toBe(activeOpen);
 
     // The analytics page: the same money as the dashboard, over six months.
-    const analytics = await getAnalyticsData(schoolId, TZ);
     const sixMonths = recentMonths(6, TZ);
+    const analytics = await getAnalyticsData(schoolId, TZ, {
+      range: {
+        from: `${sixMonths[0].key}-01`,
+        to: "2099-12-31",
+      },
+    });
     const collectedSix = await monthlyCollections(schoolId, sixMonths, TZ);
     const pendingSix = await monthlyPendingDues(schoolId, sixMonths);
     expect

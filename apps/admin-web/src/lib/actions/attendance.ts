@@ -132,7 +132,7 @@ export async function markAttendance(data: unknown) {
     await Promise.all([
       invalidateStudentsCache(user.schoolId),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
     ]);
     revalidatePath("/attendance");
     revalidatePath("/dashboard");

@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 
 interface Props {
+  /** The filters, and what they currently show in words. */
+  filterBar: React.ReactNode;
+  summary: string;
+  /** What the revenue change is measured against. */
+  compareLabel: string;
   revenueData: { month: string; collected: number; pending: number }[];
   revenueAreaData: { month: string; type: string; amount: number }[];
   attendanceData: { month: string; rate: number; totalRecords?: number }[];
@@ -29,8 +34,8 @@ interface Props {
     totalRevenue: number;
     revenueChangePct: number | null;
     feeCollectionRate: number;
-    paidFeeCount: number;
-    totalFeeCount: number;
+    totalBilled: number;
+    totalPaid: number;
     avgAttendanceRate: number;
     avgPresentPerDay: number;
     newEnrolments: number;
@@ -39,6 +44,9 @@ interface Props {
 }
 
 export function AnalyticsContent({
+  filterBar,
+  summary,
+  compareLabel,
   revenueData,
   revenueAreaData,
   attendanceData,
@@ -46,14 +54,19 @@ export function AnalyticsContent({
   paymentMethods,
   metrics,
 }: Readonly<Props>) {
+  const hasAttendanceData = attendanceData.some(
+    (d) => (d.totalRecords ?? 0) > 0 || d.rate > 0,
+  );
+  const hasBilling = metrics.totalBilled > 0;
+
   const keyMetrics = [
     {
       label: "Total Revenue",
       value: formatCurrency(metrics.totalRevenue),
       sub:
         metrics.revenueChangePct === null
-          ? "This month"
-          : `${metrics.revenueChangePct >= 0 ? "+" : ""}${metrics.revenueChangePct}% vs last month`,
+          ? "In this period"
+          : `${metrics.revenueChangePct >= 0 ? "+" : ""}${metrics.revenueChangePct}% ${compareLabel}`,
       color:
         metrics.revenueChangePct === null || metrics.revenueChangePct >= 0
           ? "text-emerald-600 dark:text-emerald-400"
@@ -63,16 +76,21 @@ export function AnalyticsContent({
     },
     {
       label: "Fee Collection Rate",
-      value: `${metrics.feeCollectionRate}%`,
-      sub: `${metrics.paidFeeCount} paid items of ${metrics.totalFeeCount}`,
+      // Nothing billed isn't 0% collected, and nothing marked isn't 0% present.
+      value: hasBilling ? `${metrics.feeCollectionRate}%` : "—",
+      sub: hasBilling
+        ? `${formatCurrency(metrics.totalPaid)} of ${formatCurrency(metrics.totalBilled)} billed`
+        : "Nothing billed in this period",
       color: "text-violet-600 dark:text-violet-400",
       icon: TrendingUp,
       bg: "bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400",
     },
     {
       label: "Avg Attendance",
-      value: `${metrics.avgAttendanceRate}%`,
-      sub: `${metrics.avgPresentPerDay} avg present/day`,
+      value: hasAttendanceData ? `${metrics.avgAttendanceRate}%` : "—",
+      sub: hasAttendanceData
+        ? `${metrics.avgPresentPerDay} avg present/day`
+        : "Not marked in this period",
       color: "text-blue-600 dark:text-blue-400",
       icon: CalendarCheck,
       bg: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
@@ -80,7 +98,7 @@ export function AnalyticsContent({
     {
       label: "Enrolled Students",
       value: `${metrics.activeStudentCount}`,
-      sub: `+${metrics.newEnrolments} joined in last 30 days`,
+      sub: `+${metrics.newEnrolments} joined in this period`,
       color: "text-amber-600 dark:text-amber-400",
       icon: Users,
       bg: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
@@ -88,9 +106,6 @@ export function AnalyticsContent({
   ];
 
   const hasRevenueData = revenueAreaData.some((d) => d.amount > 0);
-  const hasAttendanceData = attendanceData.some(
-    (d) => (d.totalRecords ?? 0) > 0 || d.rate > 0,
-  );
   const hasFeeDistribution =
     feeDistribution.length > 0 && feeDistribution.some((d) => d.value > 0);
   const hasPaymentMethods =
@@ -100,10 +115,10 @@ export function AnalyticsContent({
     <div className="p-6 space-y-6 w-full">
       <div id="tour-analytics-header">
         <h1 className="text-2xl font-bold">Analytics & Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Real-time institutional performance metrics and financial intelligence
-        </p>
+        <p className="text-muted-foreground text-sm mt-1">Showing {summary}</p>
       </div>
+
+      {filterBar}
 
       {/* Top Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -152,8 +167,7 @@ export function AnalyticsContent({
                 Collection & Dues Trend
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly revenue collected vs outstanding pending balance (AntV
-                Area)
+                Money collected, and dues still pending by due date
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
@@ -161,9 +175,8 @@ export function AnalyticsContent({
                 <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />{" "}
                 Collected
               </span>
-              <span className="flex items-center gap-1 text-amber-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />{" "}
-                Pending
+              <span className="flex items-center gap-1 text-red-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Pending
               </span>
             </div>
           </div>
@@ -171,7 +184,7 @@ export function AnalyticsContent({
           {hasRevenueData ? (
             <AntvRevenueAreaChart data={revenueAreaData} />
           ) : (
-            <EmptyChart label="No recorded fee transactions in the last 6 months" />
+            <EmptyChart label="No fee transactions in this period" />
           )}
         </motion.div>
 
@@ -189,19 +202,23 @@ export function AnalyticsContent({
                 Attendance Rate Trend
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Monthly student presence rate progression across all classes
-                (AntV Line)
+                Share of students marked present
               </p>
             </div>
-            <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-              {metrics.avgAttendanceRate}% Current
-            </span>
+            {hasAttendanceData && (
+              <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                {metrics.avgAttendanceRate}% average
+              </span>
+            )}
           </div>
 
+          {/* A day or month nobody marked isn't 0% present. */}
           {hasAttendanceData ? (
-            <AntvAttendanceLineChart data={attendanceData} />
+            <AntvAttendanceLineChart
+              data={attendanceData.filter((d) => (d.totalRecords ?? 0) > 0)}
+            />
           ) : (
-            <EmptyChart label="No attendance marked in the last 6 months" />
+            <EmptyChart label="No attendance marked in this period" />
           )}
         </motion.div>
       </div>
@@ -221,7 +238,7 @@ export function AnalyticsContent({
                 Distribution
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Breakdown of fee structures by component type (AntV Donut)
+                What was billed, by fee head
               </p>
             </div>
           </div>
@@ -229,7 +246,7 @@ export function AnalyticsContent({
           {hasFeeDistribution ? (
             <AntvFeePieChart data={feeDistribution} />
           ) : (
-            <EmptyChart label="No fee component structures configured yet" />
+            <EmptyChart label="No fees billed in this period" />
           )}
         </motion.div>
 
@@ -254,7 +271,7 @@ export function AnalyticsContent({
           {hasPaymentMethods ? (
             <AntvPaymentMethodsBarChart data={paymentMethods} />
           ) : (
-            <EmptyChart label="No completed payments recorded yet" />
+            <EmptyChart label="No payments in this period" />
           )}
         </motion.div>
       </div>

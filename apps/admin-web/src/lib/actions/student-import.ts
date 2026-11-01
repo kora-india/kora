@@ -469,7 +469,7 @@ async function importStudentRows(
         invalidateCache(`cache:${schoolId}:students:*`),
         invalidateCache(`cache:${schoolId}:classes:*`),
         invalidateCache(`cache:${schoolId}:dashboard`),
-        invalidateCache(`cache:${schoolId}:analytics`),
+        invalidateCache(`cache:${schoolId}:analytics:overview`),
       ]);
       revalidatePath("/students");
       revalidatePath("/fees");

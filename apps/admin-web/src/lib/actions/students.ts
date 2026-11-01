@@ -240,7 +240,7 @@ export async function createStudent(data: unknown) {
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
     ]);
     revalidatePath("/students");
     revalidatePath("/fees");
@@ -315,7 +315,7 @@ export async function updateStudent(id: string, data: unknown) {
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
     ]);
     revalidatePath("/students");
     revalidatePath("/fees");
@@ -411,7 +411,7 @@ export async function deleteStudent(
     await Promise.all([
       invalidateCache(`cache:${user.schoolId}:students:*`),
       invalidateCache(`cache:${user.schoolId}:dashboard`),
-      invalidateCache(`cache:${user.schoolId}:analytics`),
+      invalidateCache(`cache:${user.schoolId}:analytics:overview`),
       invalidateCache(`cache:${user.schoolId}:transport:*`),
       ...(waivedCount > 0 ? [invalidateFeesCache(user.schoolId)] : []),
     ]);
