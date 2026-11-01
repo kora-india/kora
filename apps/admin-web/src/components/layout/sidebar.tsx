@@ -425,8 +425,8 @@ export function Sidebar({
               className="space-y-0.5"
             >
               {section && (
-                // The same height either way, so toggling the rail doesn't
-                // move the rows: the heading fades into a short rule.
+                // Both stay in place, so the heading fades into a short rule
+                // without changing the height of the section.
                 <div aria-hidden className="relative h-6">
                   <span
                     className={cn(
