@@ -13,6 +13,14 @@ import { createStudent, updateStudent } from "@/lib/actions/students";
 import { getNextAdmissionNumber } from "@/lib/actions/admission-settings";
 import { AdmissionFormatModal } from "@/components/students/admission-format-modal";
 import { useLoadScript, Autocomplete } from "@react-google-maps/api";
+import {
+  APAAR_PROBLEM,
+  PAN_PROBLEM,
+  isApaarId,
+  isPan,
+  normalizeApaar,
+  normalizePan,
+} from "@/lib/student-ids";
 
 const Schema = z.object({
   name: z.string().min(2, "Required"),
@@ -30,6 +38,15 @@ const Schema = z.object({
   pincode: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
+  // Checked as typed; the server stores them cleaned up (PanSchema).
+  panNumber: z
+    .string()
+    .optional()
+    .refine((v) => !v?.trim() || isPan(normalizePan(v)), PAN_PROBLEM),
+  apaarId: z
+    .string()
+    .optional()
+    .refine((v) => !v?.trim() || isApaarId(normalizeApaar(v)), APAAR_PROBLEM),
 });
 
 type FormData = z.infer<typeof Schema>;
@@ -154,6 +171,8 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
         pincode: student.pincode ?? "",
         city: student.city ?? "",
         state: student.state ?? "",
+        panNumber: student.panNumber ?? "",
+        apaarId: student.apaarId ?? "",
       });
     } else if (open) {
       reset({
@@ -172,6 +191,8 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
         pincode: "",
         city: "",
         state: "",
+        panNumber: "",
+        apaarId: "",
       });
       loadNextAdmissionNo();
     }
@@ -341,6 +362,42 @@ export function StudentDialog({ open, onOpenChange, student, classes }: Props) {
               <option value="O+">O+</option>
               <option value="O-">O-</option>
             </select>
+          </FormField>
+
+          <FormField
+            label="APAAR ID"
+            htmlFor="student-apaar"
+            error={errors.apaarId?.message}
+          >
+            <input
+              id="student-apaar"
+              {...register("apaarId")}
+              className={inputCls}
+              inputMode="numeric"
+              maxLength={16}
+              placeholder="12-digit APAAR ID"
+            />
+          </FormField>
+
+          <FormField
+            label="Student PAN Number"
+            htmlFor="student-pan"
+            error={errors.panNumber?.message}
+          >
+            <input
+              id="student-pan"
+              {...register("panNumber", {
+                setValueAs: (v: string) => (v ? normalizePan(v) : v),
+              })}
+              onInput={(e) => {
+                const input = e.currentTarget;
+                input.value = input.value.toUpperCase();
+              }}
+              className={`${inputCls} uppercase`}
+              maxLength={12}
+              autoCapitalize="characters"
+              placeholder="ABCDE1234F"
+            />
           </FormField>
 
           <FormField label="Date of Birth" error={errors.dateOfBirth?.message}>

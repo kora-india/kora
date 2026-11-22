@@ -1149,6 +1149,30 @@ export function StudentsContent({
                                 : "Inactive"}
                             </p>
                           </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium uppercase mb-1">
+                              APAAR ID
+                            </p>
+                            <p className="text-sm font-medium font-mono">
+                              {detailsModal.student.apaarId || (
+                                <span className="font-sans text-muted-foreground">
+                                  Not added
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium uppercase mb-1">
+                              PAN Number
+                            </p>
+                            <p className="text-sm font-medium font-mono">
+                              {detailsModal.student.panNumber || (
+                                <span className="font-sans text-muted-foreground">
+                                  Not added
+                                </span>
+                              )}
+                            </p>
+                          </div>
                           <div className="col-span-2 pt-4 border-t mt-2">
                             <h4 className="text-sm font-bold mb-3">
                               Parent Details

@@ -36,12 +36,15 @@ const StudentSchema = z.object({
   pincode: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
+  panNumber: PanSchema,
+  apaarId: ApaarIdSchema,
 });
 
 import { can } from "@schoolos/types";
 import { getSchoolAccess, isError, requirePermission } from "@/lib/auth-guard";
 import { isAdmin } from "@/lib/session";
 import { actionErrorMessage } from "@/lib/action-errors";
+import { ApaarIdSchema, PanSchema, duplicateField } from "@/lib/student-ids";
 
 /** Adding, changing and opening a student's full profile. */
 async function getAdminSession() {
@@ -83,9 +86,53 @@ async function activeRollHolder(
   return holder?.name ?? null;
 }
 
-function duplicateStudentError(e: any, admissionNumber: string) {
-  if (e?.code !== "P2002") return null;
-  return `Admission number ${admissionNumber} is already used in your school`;
+function duplicateStudentError(
+  e: any,
+  data: {
+    admissionNumber: string;
+    panNumber?: string | null;
+    apaarId?: string | null;
+  },
+) {
+  switch (duplicateField(e)) {
+    case null:
+      return null;
+    case "panNumber":
+      return `PAN ${data.panNumber} is already used by another student in your school`;
+    case "apaarId":
+      return `APAAR ID ${data.apaarId} is already used by another student in your school`;
+    default:
+      return `Admission number ${data.admissionNumber} is already used in your school`;
+  }
+}
+
+/**
+ * The student who already has this PAN or APAAR ID in the school, as a
+ * message, so a clash is explained before saving.
+ */
+async function idHolderProblem(
+  schoolId: string,
+  ids: { panNumber?: string | null; apaarId?: string | null },
+  excludeStudentId?: string,
+): Promise<string | null> {
+  const not = excludeStudentId ? { id: { not: excludeStudentId } } : {};
+  if (ids.panNumber) {
+    const holder = await prisma.student.findFirst({
+      where: { schoolId, panNumber: ids.panNumber, ...not },
+      select: { name: true },
+    });
+    if (holder) return `PAN ${ids.panNumber} is already used by ${holder.name}`;
+  }
+  if (ids.apaarId) {
+    const holder = await prisma.student.findFirst({
+      where: { schoolId, apaarId: ids.apaarId, ...not },
+      select: { name: true },
+    });
+    if (holder) {
+      return `APAAR ID ${ids.apaarId} is already used by ${holder.name}`;
+    }
+  }
+  return null;
 }
 
 export async function searchStudents(query: string = "", limit: number = 25) {
@@ -196,11 +243,15 @@ export async function createStudent(data: unknown) {
       error: `Roll number ${parsed.data.rollNumber} is already used by ${rollHolder} in this section`,
     };
   }
+  const idProblem = await idHolderProblem(user.schoolId, parsed.data);
+  if (idProblem) return { error: idProblem };
 
   try {
     const student = await prisma.student.create({
       data: {
         ...rest,
+        panNumber: rest.panNumber ?? null,
+        apaarId: rest.apaarId ?? null,
         schoolId: user.schoolId,
         parentEmail: parentEmail || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
@@ -255,7 +306,7 @@ export async function createStudent(data: unknown) {
     });
     return { success: true, id: student.id };
   } catch (e: any) {
-    const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
+    const duplicate = duplicateStudentError(e, parsed.data);
     if (duplicate) return { error: duplicate };
     return { error: actionErrorMessage(e) };
   }
@@ -301,6 +352,13 @@ export async function updateStudent(id: string, data: unknown) {
     };
   }
 
+  const idProblem = await idHolderProblem(
+    user.schoolId,
+    parsed.data,
+    existing.id,
+  );
+  if (idProblem) return { error: idProblem };
+
   const { dateOfBirth, parentEmail, ...rest } = parsed.data;
 
   try {
@@ -308,6 +366,8 @@ export async function updateStudent(id: string, data: unknown) {
       where: { id: existing.id },
       data: {
         ...rest,
+        panNumber: rest.panNumber ?? null,
+        apaarId: rest.apaarId ?? null,
         parentEmail: parentEmail || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
       },
@@ -339,7 +399,7 @@ export async function updateStudent(id: string, data: unknown) {
     });
     return { success: true, id: student.id };
   } catch (e: any) {
-    const duplicate = duplicateStudentError(e, parsed.data.admissionNumber);
+    const duplicate = duplicateStudentError(e, parsed.data);
     if (duplicate) return { error: duplicate };
     return { error: actionErrorMessage(e) };
   }
@@ -438,7 +498,7 @@ export async function getStudentDetails(id: string) {
 
   try {
     const student = await getCache(
-      `cache:${user.schoolId}:students:details:v5:${id}`,
+      `cache:${user.schoolId}:students:details:v6:${id}`,
       async () => {
         const s = await prisma.student.findFirst({
           where: { id, schoolId: user.schoolId },

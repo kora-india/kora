@@ -24,6 +24,7 @@ import {
 } from "@/lib/student-import-helpers";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { logActivity } from "@/lib/activity";
+import { ApaarIdSchema, PanSchema } from "@/lib/student-ids";
 
 /** Spreadsheets give numbers for phones and pincodes; read them as text. */
 const cell = <T extends z.ZodTypeAny>(schema: T) =>
@@ -64,6 +65,8 @@ const importStudentSchema = z.object({
   city: optional,
   state: optional,
   pincode: optional,
+  panNumber: PanSchema,
+  apaarId: ApaarIdSchema,
 });
 
 type ImportRow = z.infer<typeof importStudentSchema> & { rowNumber: number };
@@ -317,6 +320,28 @@ async function importStudentRows(
           trackRoll(s.sectionId, s.rollNumber, s.name);
         }
 
+        // A PAN or APAAR ID belongs to one student in the school.
+        const fileIds = (key: "panNumber" | "apaarId") =>
+          resolved.map((r) => r[key]).filter((v): v is string => !!v);
+        const idHolders = await tx.student.findMany({
+          where: {
+            schoolId,
+            OR: [
+              { panNumber: { in: fileIds("panNumber") } },
+              { apaarId: { in: fileIds("apaarId") } },
+            ],
+          },
+          select: { panNumber: true, apaarId: true, name: true },
+        });
+        const panHolders = new Map(
+          idHolders
+            .filter((h) => h.panNumber)
+            .map((h) => [h.panNumber!, h.name]),
+        );
+        const apaarHolders = new Map(
+          idHolders.filter((h) => h.apaarId).map((h) => [h.apaarId!, h.name]),
+        );
+
         const usedInFile = new Set<string>();
         let candidateIndex = 0;
         let lastSequenceUsed: number | null = null;
@@ -360,6 +385,19 @@ async function importStudentRows(
             }
           }
 
+          const idClash =
+            (row.panNumber && panHolders.has(row.panNumber)
+              ? `PAN ${row.panNumber} already belongs to ${panHolders.get(row.panNumber)}.`
+              : null) ??
+            (row.apaarId && apaarHolders.has(row.apaarId)
+              ? `APAAR ID ${row.apaarId} already belongs to ${apaarHolders.get(row.apaarId)}.`
+              : null);
+          if (idClash) {
+            failed++;
+            errors.push(`Row ${row.rowNumber}: ${idClash}`);
+            continue;
+          }
+
           let rollNumber = row.rollNumber?.trim();
           if (rollNumber) {
             const holder = rollHolders.get(
@@ -398,6 +436,9 @@ async function importStudentRows(
 
           usedInFile.add(admissionNumber);
           trackRoll(row.sectionId, rollNumber, row.name);
+          // Later rows of the file can't reuse this student's IDs.
+          if (row.panNumber) panHolders.set(row.panNumber, row.name);
+          if (row.apaarId) apaarHolders.set(row.apaarId, row.name);
           toImport.push({
             schoolId,
             classId: row.classId,
@@ -415,6 +456,8 @@ async function importStudentRows(
             city: row.city || null,
             state: row.state || null,
             pincode: row.pincode || null,
+            panNumber: row.panNumber ?? null,
+            apaarId: row.apaarId ?? null,
             isActive: true,
           });
         }

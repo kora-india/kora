@@ -271,6 +271,10 @@ model Student {
   city            String?
   state           String?
   photoUrl        String?
+  /// PAN, as ABCDE1234F. Optional; one student's within a school.
+  panNumber       String?
+  /// APAAR ID (12 digits). Optional; one student's within a school.
+  apaarId         String?
   isActive        Boolean                @default(true)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
@@ -291,6 +295,9 @@ model Student {
 
   // D3: admission numbers are unique within a school, not across all schools.
   @@unique([schoolId, admissionNumber])
+  // Each PAN and APAAR ID belongs to one student in a school; blanks repeat.
+  @@unique([schoolId, panNumber])
+  @@unique([schoolId, apaarId])
   // D4: roll numbers are per section and only need to be unique among active
   // students (withdrawn students keep theirs); enforced in the student actions.
   @@index([sectionId, rollNumber])

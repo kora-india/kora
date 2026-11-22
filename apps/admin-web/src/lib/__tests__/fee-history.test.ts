@@ -218,8 +218,10 @@ describe("blank template columns", () => {
 
   it("has the student, then each fee head and the rest for each month", () => {
     expect(headers.slice(0, 2)).toEqual(["Admission Number", "Student Name"]);
-    expect(headers).toHaveLength(15 + 2 * 7);
-    expect(headers.slice(15, 22)).toEqual([
+    // 17 student columns (ending with APAAR ID and PAN Number), then months.
+    expect(headers.slice(15, 17)).toEqual(["APAAR ID", "PAN Number"]);
+    expect(headers).toHaveLength(17 + 2 * 7);
+    expect(headers.slice(17, 24)).toEqual([
       "Apr 2026 Tuition Fee (₹)",
       "Apr 2026 Examination Fees (₹)",
       "Apr 2026 Late Fee (₹)",

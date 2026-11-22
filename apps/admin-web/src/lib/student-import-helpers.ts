@@ -117,7 +117,9 @@ export type ImportField =
   | "address"
   | "city"
   | "state"
-  | "pincode";
+  | "pincode"
+  | "panNumber"
+  | "apaarId";
 
 /**
  * Which field a column fills, read from its header the way a person would:
@@ -137,6 +139,9 @@ export function importFieldForHeader(header: string): ImportField | null {
     words.some((w) => h.includes(` ${w} `) || h.includes(` ${w}s `));
   const student = has("student", "child", "pupil");
 
+  // IDs first: "Student PAN No." is a PAN, not a student's name.
+  if (has("apaar", "apar", "aapar")) return "apaarId";
+  if (has("pan") || h.includes(" permanent account ")) return "panNumber";
   if (has("phone", "mobile", "contact", "cell", "whatsapp", "tel", "telephone"))
     return student ? "studentPhone" : "parentPhone";
   if (has("email", "e mail", "mail"))
@@ -195,6 +200,8 @@ export const IMPORT_FIELD_LABELS: Record<ImportField, string> = {
   city: "City",
   state: "State",
   pincode: "Pincode",
+  panNumber: "PAN number",
+  apaarId: "APAAR ID",
 };
 
 export const IMPORT_FIELDS = Object.keys(IMPORT_FIELD_LABELS) as ImportField[];
@@ -326,7 +333,9 @@ export type ImportRowValues = Partial<
     | "address"
     | "city"
     | "state"
-    | "pincode",
+    | "pincode"
+    | "panNumber"
+    | "apaarId",
     string
   >
 >;
@@ -369,11 +378,24 @@ export function normalizeImportRow(
     city: cells.city,
     state: cells.state,
     pincode: cells.pincode,
+    panNumber: cells.panNumber,
+    apaarId: cells.apaarId,
   };
   return Object.fromEntries(
     Object.entries(values).filter(([, v]) => v !== undefined),
   ) as ImportRowValues;
 }
+
+/**
+ * Whether a row says anything about a student beyond its class and section.
+ * A section's template has those two filled down the sheet; the rows nobody
+ * used have nothing else and aren't students.
+ */
+export const hasStudentDetails = (row: ImportRowValues) =>
+  Object.entries(row).some(
+    ([key, value]) =>
+      key !== "class" && key !== "section" && value !== undefined,
+  );
 
 /** Roll numbers compared as a school would: "04" and "4" are the same roll. */
 export function rollNumberKey(roll: string): string {

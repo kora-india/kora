@@ -8,6 +8,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  Download,
   FileSpreadsheet,
   Loader2,
   Sparkles,
@@ -23,6 +24,7 @@ import {
   classMatchKey,
   describeColumn,
   guessColumnMapping,
+  hasStudentDetails,
   isImportField,
   missingImportColumns,
   normalizeImportRow,
@@ -69,6 +71,34 @@ export function ImportStudentsDialog({
   const [loading, setLoading] = useState(false);
   const [globalClassId, setGlobalClassId] = useState("");
   const [globalSectionId, setGlobalSectionId] = useState("");
+  // "" for every class, or "classId|sectionId" for one section's list.
+  const [templateFor, setTemplateFor] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      const [classId, sectionId] = templateFor.split("|");
+      const cls = classes.find((c) => c.id === classId);
+      const section = cls?.sections.find((s) => s.id === sectionId);
+      const { downloadStudentsTemplate } =
+        await import("@/lib/students-template");
+      await downloadStudentsTemplate({
+        classes: classes.map((c) => ({
+          name: c.name,
+          sections: c.sections.map((s) => s.name),
+        })),
+        forSection:
+          cls && section
+            ? { className: cls.name, section: section.name }
+            : undefined,
+      });
+    } catch {
+      toast.error("Couldn't make the template. Try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const [report, setReport] = useState<{
     imported: number;
@@ -163,12 +193,14 @@ export function ImportStudentsDialog({
     }));
   };
 
+  // A section's template has Class and Section filled down the sheet; rows
+  // with nothing else in them are unused, not students.
   const parsedData = useMemo(
     () =>
-      sheetRows.map(({ cells, sheetRow }) => ({
-        ...normalizeImportRow(cells, mapping),
-        sheetRow,
-      })),
+      sheetRows.flatMap(({ cells, sheetRow }) => {
+        const values = normalizeImportRow(cells, mapping);
+        return hasStudentDetails(values) ? [{ ...values, sheetRow }] : [];
+      }),
     [sheetRows, mapping],
   );
   const missingColumns = missingImportColumns(mapping);
@@ -267,7 +299,7 @@ export function ImportStudentsDialog({
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className="flex flex-col items-center justify-center py-12"
+                className="flex flex-col items-center justify-center py-8"
               >
                 <div
                   className="w-full max-w-lg p-12 border-2 border-dashed rounded-xl flex flex-col items-center text-center cursor-pointer hover:bg-muted/30 transition-colors"
@@ -297,6 +329,48 @@ export function ImportStudentsDialog({
                     ref={fileInputRef}
                     onChange={handleFileUpload}
                   />
+                </div>
+
+                <div className="w-full max-w-lg mt-6 rounded-xl border bg-muted/20 p-4">
+                  <p className="text-sm font-semibold">
+                    Need a file to fill in?
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Download the student template: every column the import
+                    reads, including APAAR ID and PAN, with drop-downs for
+                    class, section, gender and blood group. Pick a section to
+                    get its list with Class and Section already filled in.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                    <select
+                      aria-label="Template for"
+                      value={templateFor}
+                      onChange={(e) => setTemplateFor(e.target.value)}
+                      className="h-9 flex-1 min-w-0 px-3 rounded-lg border bg-background text-sm"
+                    >
+                      <option value="">All classes</option>
+                      {classes.flatMap((c) =>
+                        c.sections.map((s) => (
+                          <option key={s.id} value={`${c.id}|${s.id}`}>
+                            {c.name} – {s.name}
+                          </option>
+                        )),
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={downloadTemplate}
+                      disabled={downloading}
+                      className="inline-flex items-center justify-center gap-2 h-9 px-4 border rounded-lg bg-background text-sm font-medium hover:bg-muted disabled:opacity-60"
+                    >
+                      {downloading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Download template
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}

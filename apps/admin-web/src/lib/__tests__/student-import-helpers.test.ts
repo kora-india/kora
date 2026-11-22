@@ -7,6 +7,7 @@ import {
   guessColumnMapping,
   importFieldForHeader,
   missingImportColumns,
+  hasStudentDetails,
   normalizeImportRow,
   parseImportDate,
   rollNumberKey,
@@ -288,5 +289,63 @@ describe("rollNumberKey", () => {
   it("treats leading zeros as the same roll", () => {
     expect(rollNumberKey("04")).toBe(rollNumberKey("4"));
     expect(rollNumberKey(" A12 ")).toBe("a12");
+  });
+});
+
+describe("student IDs in a spreadsheet", () => {
+  it("finds the APAAR ID and PAN columns however they're headed", () => {
+    expect(
+      [
+        "APAAR ID",
+        "Apaar Id",
+        "APAR ID",
+        "AAPAR No.",
+        "Student APAAR ID",
+        "PAN",
+        "PAN Number",
+        "Student PAN No.",
+        "Permanent Account Number",
+      ].map(importFieldForHeader),
+    ).toEqual([
+      "apaarId",
+      "apaarId",
+      "apaarId",
+      "apaarId",
+      "apaarId",
+      "panNumber",
+      "panNumber",
+      "panNumber",
+      "panNumber",
+    ]);
+  });
+
+  it("doesn't take words that only contain 'pan' for a PAN", () => {
+    expect(importFieldForHeader("Company")).toBeNull();
+    expect(importFieldForHeader("Panchayat")).toBeNull();
+  });
+
+  it("carries them through a row", () => {
+    expect(
+      normalizeImportRow({
+        "Student Name": "Asha",
+        "APAAR ID": "123456789012",
+        "PAN Number": "abcde1234f",
+      }),
+    ).toEqual({
+      name: "Asha",
+      apaarId: "123456789012",
+      panNumber: "abcde1234f",
+    });
+  });
+});
+
+describe("hasStudentDetails", () => {
+  it("skips a template row with only its class and section filled in", () => {
+    expect(hasStudentDetails({ class: "Class 5", section: "A" })).toBe(false);
+    expect(hasStudentDetails({})).toBe(false);
+    expect(
+      hasStudentDetails({ class: "Class 5", section: "A", name: "Asha" }),
+    ).toBe(true);
+    expect(hasStudentDetails({ parentPhone: "9876543210" })).toBe(true);
   });
 });

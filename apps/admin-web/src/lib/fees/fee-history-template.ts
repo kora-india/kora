@@ -154,7 +154,7 @@ export async function buildStudentsHistoryWorkbook(
     // The same text columns as the filled template, and numbers that Excel
     // would otherwise cut short.
     if (
-      /^(Admission Number|Roll Number|Date of Birth|Parent Phone|Pincode)$| (Paid On|Receipt)$/.test(
+      /^(Admission Number|Roll Number|Date of Birth|Parent Phone|Pincode|APAAR ID|PAN Number)$| (Paid On|Receipt)$/.test(
         header,
       )
     ) {

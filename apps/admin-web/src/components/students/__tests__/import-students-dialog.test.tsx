@@ -10,7 +10,12 @@ import { ImportStudentsDialog } from "../import-students-dialog";
 const mocks = vi.hoisted(() => ({
   suggestImportMapping: vi.fn(),
   bulkImportStudents: vi.fn(),
+  downloadStudentsTemplate: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@/lib/students-template", () => ({
+  downloadStudentsTemplate: mocks.downloadStudentsTemplate,
 }));
 
 vi.mock("@/lib/actions/import-mapping", () => ({
@@ -236,5 +241,74 @@ describe("ImportStudentsDialog column matching", () => {
     expect(fieldFor("F/N")).toHaveValue("motherName");
     const fColumn = fieldFor("F/N").closest("div")!;
     expect(within(fColumn).queryByTitle("Suggested by AI")).toBeNull();
+  });
+});
+
+describe("ImportStudentsDialog template", () => {
+  beforeAll(() => {
+    MotionGlobalConfig.skipAnimations = true;
+  });
+
+  beforeEach(() => {
+    mocks.downloadStudentsTemplate.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("downloads the whole school's template by default", async () => {
+    const user = userEvent.setup();
+    render(
+      <ImportStudentsDialog open onOpenChange={vi.fn()} classes={classes} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Download template" }));
+    expect(mocks.downloadStudentsTemplate).toHaveBeenCalledWith({
+      classes: [{ name: "Class 4", sections: ["A"] }],
+      forSection: undefined,
+    });
+  });
+
+  it("downloads one section's list with its class and section", async () => {
+    const user = userEvent.setup();
+    render(
+      <ImportStudentsDialog open onOpenChange={vi.fn()} classes={classes} />,
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Template for"),
+      "Class 4 – A",
+    );
+    await user.click(screen.getByRole("button", { name: "Download template" }));
+    expect(mocks.downloadStudentsTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forSection: { className: "Class 4", section: "A" },
+      }),
+    );
+  });
+
+  it("says so when the template can't be made", async () => {
+    mocks.downloadStudentsTemplate.mockRejectedValue(new Error("no"));
+    const user = userEvent.setup();
+    render(
+      <ImportStudentsDialog open onOpenChange={vi.fn()} classes={classes} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Download template" }));
+    await waitFor(() =>
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        "Couldn't make the template. Try again.",
+      ),
+    );
+  });
+
+  it("ignores a section template's rows that only have Class and Section", async () => {
+    await upload(
+      [
+        "Student Name,Class,Section,Parent Name,Parent Phone,APAAR ID,PAN Number",
+        "Asha Verma,Class 4,A,Ravi Verma,9416940224,123456789012,ABCDE1234F",
+        ",Class 4,A,,,,",
+        ",Class 4,A,,,,",
+      ].join("\n"),
+    );
+    expect(screen.getByText(/Preview Data/).textContent).toBe(
+      "Preview Data (1 records)",
+    );
+    expect(fieldFor("APAAR ID").value).toBe("apaarId");
+    expect(fieldFor("PAN Number").value).toBe("panNumber");
   });
 });

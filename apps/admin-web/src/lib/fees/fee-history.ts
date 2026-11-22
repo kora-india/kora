@@ -91,6 +91,8 @@ export const STUDENT_TEMPLATE_HEADERS = [
   "City",
   "State",
   "Pincode",
+  "APAAR ID",
+  "PAN Number",
 ];
 
 /** The columns after a month's fee heads in a blank template. */
@@ -113,7 +115,7 @@ export const STUDENT_HISTORY_INSTRUCTIONS = [
   "There is one row for each student: their details first, then a group of columns for each month.",
   "1. Student Name, Class, Section, Parent Name and Parent Phone are needed for every student.",
   "2. Admission Number is needed for any student with fees or payments. Use each one once.",
-  "3. Date of Birth and Paid On are written as DD/MM/YYYY.",
+  "3. Date of Birth and Paid On are written as DD/MM/YYYY. APAAR ID (12 digits) and PAN Number (like ABCDE1234F) can be left blank.",
   "4. Each fee head: what was billed that month. Leave it blank for a fee that wasn't billed.",
   "5. Late Fee: the late fee charged that month. Type 0 if there was none.",
   "6. Paid: what was paid for that month. Leave it blank if nothing was paid.",
