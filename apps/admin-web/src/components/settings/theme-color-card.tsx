@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@schoolos/utils";
 import {
@@ -63,24 +63,31 @@ export function ThemeColorCard({ current }: Readonly<{ current: ThemeColor }>) {
 
   return (
     <SettingsCard
+      icon={Palette}
       title="Theme Color"
-      description="Buttons, links and highlights use this color for everyone at your school, in Kora and in the teacher app."
+      description="Choose a theme color for your school portal and the teacher app."
     >
       <div
         role="radiogroup"
         aria-label="Theme color"
-        className="grid grid-cols-4 gap-2 sm:grid-cols-8"
+        className="grid grid-cols-4 gap-3 2xl:grid-cols-5"
       >
         {THEME_COLOR_KEYS.map((color) => {
           const isSelected = color === selected;
+          const hex = brandHex(color);
           return (
             <label
               key={color}
               className={cn(
-                "flex cursor-pointer flex-col items-center gap-2 rounded-lg p-2 text-xs font-medium transition-colors hover:bg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                "relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border bg-background px-1 py-3.5 text-xs sm:text-sm font-medium transition-colors hover:bg-muted/60 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
                 isSelected ? "text-foreground" : "text-muted-foreground",
                 saving && "cursor-wait",
               )}
+              style={
+                isSelected
+                  ? { borderColor: hex, backgroundColor: `${hex}14` }
+                  : undefined
+              }
             >
               <input
                 type="radio"
@@ -98,24 +105,23 @@ export function ThemeColorCard({ current }: Readonly<{ current: ThemeColor }>) {
                 disabled={saving !== null}
                 className="sr-only"
               />
+              {isSelected && saving !== color && (
+                <span
+                  aria-hidden
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-white ring-2 ring-card"
+                  style={{ backgroundColor: hex }}
+                >
+                  <Check className="h-3 w-3" strokeWidth={3} />
+                </span>
+              )}
               <span
                 aria-hidden
                 data-swatch
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-background transition-[box-shadow,transform] duration-300",
-                  isSelected && "scale-110 ring-2",
-                )}
-                style={
-                  {
-                    backgroundColor: brandHex(color),
-                    "--tw-ring-color": brandHex(color),
-                  } as React.CSSProperties
-                }
+                className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-white shadow-sm"
+                style={{ backgroundColor: hex }}
               >
-                {saving === color ? (
+                {saving === color && (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  isSelected && <Check className="h-4 w-4" />
                 )}
               </span>
               {THEME_COLORS[color].label}

@@ -25,6 +25,7 @@ export default async function SchoolProfilePage() {
       email: true,
       subdomain: true,
       plan: true,
+      logoUrl: true,
       themeColor: true,
     },
   });

@@ -50,6 +50,7 @@ export function TeamAccessContent({
   return (
     <>
       <SettingsCard
+        icon={ShieldCheck}
         title="Team & access"
         description="Choose what each teacher and accountant can see and change. To add or remove someone, go to Teachers & Staff. School admins always have full access."
         action={

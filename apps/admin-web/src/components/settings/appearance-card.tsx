@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun, SunMoon } from "lucide-react";
 import { cn } from "@schoolos/utils";
 import type { ColorMode } from "@schoolos/types";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -23,6 +23,7 @@ export function AppearanceCard() {
 
   return (
     <SettingsCard
+      icon={SunMoon}
       title="Appearance"
       description="Light or dark, or System to follow your device. Saved to your account, so it applies wherever you sign in."
     >

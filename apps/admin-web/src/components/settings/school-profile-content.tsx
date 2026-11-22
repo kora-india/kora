@@ -1,12 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Loader2 } from "lucide-react";
+import {
+  BookOpen,
+  Building2,
+  Loader2,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  type LucideIcon,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { cn } from "@schoolos/utils";
 import { FormField, inputCls } from "@/components/ui/form-field";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { AdmissionNumberConfigCard } from "@/components/settings/admission-number-config-card";
@@ -32,6 +42,7 @@ interface Props {
     email: string | null;
     subdomain: string;
     plan: string;
+    logoUrl: string | null;
     themeColor: ThemeColor;
   };
   canEdit: boolean;
@@ -62,61 +73,62 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
     router.refresh();
   };
 
-  const fields: { label: string; value: string | null }[] = [
-    { label: "School Name", value: school.name },
-    { label: "Address", value: school.address },
-    { label: "Phone", value: school.phone },
-    { label: "Email", value: school.email },
+  const rows: { label: string; value: string | null; icon: LucideIcon }[] = [
+    { label: "Address", value: school.address, icon: MapPin },
+    { label: "Phone", value: school.phone, icon: Phone },
+    { label: "Email", value: school.email, icon: Mail },
   ];
 
-  return (
-    <div className="space-y-6">
-      <SettingsCard
-        title="School Profile"
-        description={`School ID ${school.subdomain} · ${school.plan} plan`}
-        action={
-          canEdit && !editing ? (
-            <button
-              type="button"
-              onClick={() => {
-                form.reset({
-                  name: school.name,
-                  address: school.address ?? "",
-                  phone: school.phone ?? "",
-                  email: school.email ?? "",
-                });
-                setEditing(true);
-              }}
-              className="flex items-center gap-2 h-8 px-3 border rounded-lg text-xs font-medium hover:bg-muted transition-colors flex-shrink-0"
-            >
-              <Pencil className="w-3.5 h-3.5" /> Edit
-            </button>
-          ) : undefined
-        }
-      >
-        {editing ? (
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              label="School Name"
-              error={form.formState.errors.name?.message}
-              required
-            >
-              <input
-                {...form.register("name")}
-                className={inputCls}
-                placeholder="School name"
-              />
-            </FormField>
-            <FormField
-              label="Address"
-              error={form.formState.errors.address?.message}
-            >
-              <input
-                {...form.register("address")}
-                className={inputCls}
-                placeholder="School address"
-              />
-            </FormField>
+  const profileCard = (
+    <SettingsCard
+      id="tour-settings-profile"
+      icon={Building2}
+      title="School Profile"
+      description="Basic information about your school."
+      action={
+        canEdit && !editing ? (
+          <button
+            type="button"
+            onClick={() => {
+              form.reset({
+                name: school.name,
+                address: school.address ?? "",
+                phone: school.phone ?? "",
+                email: school.email ?? "",
+              });
+              setEditing(true);
+            }}
+            className="flex items-center gap-2 h-9 px-4 border rounded-lg bg-background text-sm font-medium shadow-sm hover:bg-muted transition-colors flex-shrink-0 self-start"
+          >
+            <Pencil className="w-4 h-4" /> Edit
+          </button>
+        ) : undefined
+      }
+    >
+      {editing ? (
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            label="School Name"
+            error={form.formState.errors.name?.message}
+            required
+          >
+            <input
+              {...form.register("name")}
+              className={inputCls}
+              placeholder="School name"
+            />
+          </FormField>
+          <FormField
+            label="Address"
+            error={form.formState.errors.address?.message}
+          >
+            <input
+              {...form.register("address")}
+              className={inputCls}
+              placeholder="School address"
+            />
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               label="Phone"
               error={form.formState.errors.phone?.message}
@@ -138,50 +150,99 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
                 placeholder="Contact email"
               />
             </FormField>
-            <div className="flex gap-2 justify-end pt-1 border-t">
-              <button
-                type="button"
-                onClick={() => setEditing(false)}
-                className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={form.formState.isSubmitting}
-                className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
-              >
-                {form.formState.isSubmitting && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                )}
-                Save Changes
-              </button>
+          </div>
+          <div className="flex gap-2 justify-end pt-4 border-t">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="h-9 px-4 border rounded-lg text-sm hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={form.formState.isSubmitting}
+              className="h-9 px-5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+            >
+              {form.formState.isSubmitting && (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              )}
+              Save Changes
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div>
+          <div className="flex items-center gap-4 pb-5">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-violet-50 dark:bg-violet-950/40">
+              {school.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- uploaded logo on Cloudinary
+                <img
+                  src={school.logoUrl}
+                  alt={`${school.name} logo`}
+                  className="h-full w-full object-contain p-2"
+                />
+              ) : (
+                <BookOpen
+                  className="h-9 w-9 text-violet-600 dark:text-violet-300"
+                  aria-hidden
+                />
+              )}
             </div>
-          </form>
-        ) : (
-          <dl className="divide-y">
-            {fields.map((f) => (
+            <div className="min-w-0">
+              <p className="text-lg font-semibold leading-tight break-words">
+                {school.name}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="rounded-md bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                  {school.plan} Plan
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  School ID{" "}
+                  <span className="font-mono text-foreground/80">
+                    {school.subdomain}
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <dl className="divide-y border-t">
+            {rows.map((row) => (
               <div
-                key={f.label}
-                className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                key={row.label}
+                className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-0.5 py-3 last:pb-0 sm:grid-cols-[auto_7rem_minmax(0,1fr)]"
               >
-                <dt className="text-xs font-medium text-muted-foreground">
-                  {f.label}
-                </dt>
-                <dd className="text-sm">
-                  {f.value || (
-                    <span className="text-muted-foreground">Not set</span>
+                <row.icon
+                  className="mt-0.5 h-4 w-4 text-muted-foreground"
+                  aria-hidden
+                />
+                <dt className="text-sm text-muted-foreground">{row.label}</dt>
+                <dd className="col-start-2 text-sm font-medium break-words sm:col-start-auto">
+                  {row.value || (
+                    <span className="font-normal text-muted-foreground">
+                      Not set
+                    </span>
                   )}
                 </dd>
               </div>
             ))}
           </dl>
-        )}
-      </SettingsCard>
+        </div>
+      )}
+    </SettingsCard>
+  );
 
-      {canEdit && <ThemeColorCard current={school.themeColor} />}
+  return (
+    <div className="space-y-6">
+      <div
+        className={cn("grid gap-6 items-start", canEdit && "lg:grid-cols-2")}
+      >
+        {profileCard}
+        {canEdit && <ThemeColorCard current={school.themeColor} />}
+      </div>
 
-      <AdmissionNumberConfigCard canEdit={canEdit} />
+      {/* Only admins can read the format; others would see placeholder values. */}
+      {canEdit && <AdmissionNumberConfigCard canEdit variant="page" />}
     </div>
   );
 }
