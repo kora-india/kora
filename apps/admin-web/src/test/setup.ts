@@ -1,9 +1,33 @@
 import { vi } from "vitest";
 import dotenv from "dotenv";
+import fs from "fs";
 import path from "path";
 
 // Load .env.test if present (local test config kept out of git)
 dotenv.config({ path: path.resolve(__dirname, "../../.env.test") });
+
+// Prisma Client loads the real .env files into process.env when it starts,
+// which put live keys (Gemini, Razorpay, Cloudinary, the cron secret, the
+// backup database) into every test and let tests call those services. Prisma
+// never overwrites a variable that is already set, so each setting in those
+// files starts out as "" here, like e2e/env.ts does for the end-to-end run.
+// .env.test's values (loaded above) and the shell's own stay as they are.
+const ROOT = path.resolve(__dirname, "../../../..");
+for (const file of [
+  "apps/admin-web/.env",
+  "apps/admin-web/.env.local",
+  "packages/db/.env",
+  "packages/db/prisma/.env",
+  ".env",
+]) {
+  const full = path.join(ROOT, file);
+  if (!fs.existsSync(full)) continue;
+  for (const key of Object.keys(dotenv.parse(fs.readFileSync(full)))) {
+    if (key !== "NODE_ENV" && process.env[key] === undefined) {
+      process.env[key] = "";
+    }
+  }
+}
 
 // Ensure safe test database fallback (prevents accidental production connection)
 if (!process.env.DATABASE_URL) {

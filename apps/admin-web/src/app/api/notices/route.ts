@@ -4,6 +4,10 @@ import { prisma } from "@schoolos/db";
 import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
 import { logActivity } from "@/lib/activity";
+import {
+  isNoticeTargetAllowed,
+  NOTICE_CLASS_NOT_FOUND,
+} from "@/lib/notice-target";
 
 const NoticeSchema = z.object({
   title: z.string().min(2),
@@ -22,8 +26,20 @@ export async function POST(req: NextRequest) {
   }
   const user = access;
 
-  const body = await req.json();
-  const data = NoticeSchema.parse(body);
+  const parsed = NoticeSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message ?? "Invalid notice" },
+      { status: 400 },
+    );
+  }
+  const data = parsed.data;
+  if (!(await isNoticeTargetAllowed(user.schoolId, data.targetClassId))) {
+    return NextResponse.json(
+      { error: NOTICE_CLASS_NOT_FOUND },
+      { status: 400 },
+    );
+  }
 
   const notice = await prisma.notice.create({
     data: {

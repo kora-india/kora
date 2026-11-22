@@ -7,6 +7,10 @@ import { z } from "zod";
 import { invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { logActivity } from "@/lib/activity";
+import {
+  isNoticeTargetAllowed,
+  NOTICE_CLASS_NOT_FOUND,
+} from "@/lib/notice-target";
 
 const NoticeSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -30,6 +34,11 @@ export async function createNotice(data: unknown) {
   if (!parsed.success) return { error: parsed.error.errors[0].message };
 
   try {
+    if (
+      !(await isNoticeTargetAllowed(user.schoolId, parsed.data.targetClassId))
+    ) {
+      return { error: NOTICE_CLASS_NOT_FOUND };
+    }
     const notice = await prisma.notice.create({
       data: {
         ...parsed.data,
@@ -69,6 +78,11 @@ export async function updateNotice(id: string, data: unknown) {
 
     if (user.role === "TEACHER" && existing.publishedById !== user.id) {
       return { error: "You can only edit your own notices" };
+    }
+    if (
+      !(await isNoticeTargetAllowed(user.schoolId, parsed.data.targetClassId))
+    ) {
+      return { error: NOTICE_CLASS_NOT_FOUND };
     }
 
     await prisma.notice.update({
