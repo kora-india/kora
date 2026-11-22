@@ -786,6 +786,12 @@ const CASES: Record<string, Case> = {
   "settings.updateSchoolProfile": {
     call: () => settings.updateSchoolProfile({ name: "Renamed School" }),
   },
+  "settings.updateSchoolLogo": {
+    call: () =>
+      settings.updateSchoolLogo(
+        "https://res.cloudinary.com/demo/image/upload/v1/kora_logos/logo.png",
+      ),
+  },
   "settings.updateSchoolThemeColor": {
     call: () => settings.updateSchoolThemeColor("purple"),
   },

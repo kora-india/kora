@@ -9,6 +9,7 @@ import { invalidateCache } from "@/lib/redis";
 import { actionErrorMessage } from "@/lib/action-errors";
 import { isError, requireSchoolAdmin } from "@/lib/auth-guard";
 import { logActivity } from "@/lib/activity";
+import { LogoUrlSchema } from "@/lib/logo-url";
 
 const UpdateSchoolProfileSchema = z.object({
   name: z.string().min(3, "School name must be at least 3 characters"),
@@ -85,6 +86,39 @@ export async function updateSchoolThemeColor(
       module: "settings",
       summary: "Changed the school's theme color",
       details: { color: parsed.data },
+    });
+    return { success: true };
+  } catch (e: any) {
+    return { error: actionErrorMessage(e) };
+  }
+}
+
+/**
+ * Sets the school's logo to one just uploaded (api/upload), or removes it
+ * with null. School admins only.
+ */
+export async function updateSchoolLogo(
+  logoUrl: unknown,
+): Promise<{ success: true; error?: never } | { error: string }> {
+  const user = await requireSchoolAdmin();
+  if (isError(user)) return { error: user.error };
+
+  const parsed = LogoUrlSchema.nullable().safeParse(logoUrl);
+  if (!parsed.success) return { error: parsed.error.errors[0].message };
+
+  try {
+    await prisma.school.update({
+      where: { id: user.schoolId },
+      data: { logoUrl: parsed.data },
+    });
+    await invalidateCache(`cache:${user.schoolId}:school:*`);
+    revalidatePath("/settings/school-profile");
+    await logActivity(user, {
+      action: "settings.school_logo",
+      module: "settings",
+      summary: parsed.data
+        ? "Changed the school logo"
+        : "Removed the school logo",
     });
     return { success: true };
   } catch (e: any) {

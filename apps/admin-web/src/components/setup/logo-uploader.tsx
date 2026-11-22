@@ -3,17 +3,10 @@
 import { useRef, useState } from "react";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { cn } from "@schoolos/utils";
+import { LOGO_HINT, LOGO_TYPES, uploadLogo } from "@/lib/logo-upload";
 import { messageId } from "./setup-fields";
 
-export const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
-export const LOGO_MAX_BYTES = 5 * 1024 * 1024;
-
-/** Why a file can't be used as the logo, or null when it can. */
-export function logoFileProblem(file: File) {
-  if (!LOGO_TYPES.includes(file.type)) return "Use a PNG, JPG or WebP image.";
-  if (file.size > LOGO_MAX_BYTES) return "The logo can be up to 5 MB.";
-  return null;
-}
+export { LOGO_MAX_BYTES, LOGO_TYPES, logoFileProblem } from "@/lib/logo-upload";
 
 export function LogoUploader({
   value,
@@ -26,25 +19,12 @@ export function LogoUploader({
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
-    const problem = logoFileProblem(file);
-    if (problem) {
-      setError(problem);
-      return;
-    }
     setError(null);
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (res.ok && data.url) onChange(data.url);
-      else setError(data.error || "We couldn't upload the logo. Try again.");
-    } catch {
-      setError("We couldn't upload the logo. Check your connection.");
+      const result = await uploadLogo(file);
+      if ("url" in result) onChange(result.url);
+      else setError(result.error);
     } finally {
       setIsUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -133,7 +113,7 @@ export function LogoUploader({
               : "text-muted-foreground",
           )}
         >
-          {error ?? "PNG, JPG or WebP, up to 5 MB. You can also drop it here."}
+          {error ?? `${LOGO_HINT} You can also drop it here.`}
         </p>
       </div>
     </div>

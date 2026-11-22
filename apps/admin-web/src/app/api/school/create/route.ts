@@ -9,6 +9,7 @@ import {
 } from "@/lib/ratelimit";
 import { getClientIp } from "@/lib/ip";
 import { z } from "zod";
+import { LogoUrlSchema } from "@/lib/logo-url";
 import { seedStarterData } from "@/lib/onboarding";
 import {
   applyPaidMonth,
@@ -41,7 +42,7 @@ const SetupSchema = z.object({
   phone: z.string().min(10),
   email: z.string().email(),
   website: z.string().optional(),
-  logoUrl: z.string().optional(),
+  logoUrl: LogoUrlSchema.optional().or(z.literal("")),
   schoolType: z.string().optional(),
   board: z.string().optional(),
   mediumOfInstruction: z.string().optional(),

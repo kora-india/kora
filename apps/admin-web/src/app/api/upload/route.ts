@@ -70,6 +70,46 @@ const tooLarge = () =>
     { status: 413 },
   );
 
+/** Sends the image to Cloudinary, where it's kept at most 500 px. */
+function sendToCloudinary(buffer: Buffer) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: "kora_logos",
+          allowed_formats: ["jpg", "png", "jpeg", "webp"],
+          transformation: [{ width: 500, height: 500, crop: "limit" }],
+          timeout: 30_000,
+        },
+        (error, result) => (error ? reject(error) : resolve(result)),
+      )
+      .end(buffer);
+  });
+}
+
+const NETWORK_ERRORS = [
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+];
+
+function isNetworkError(err: unknown) {
+  const e = err as {
+    code?: string;
+    message?: string;
+    http_code?: number;
+    name?: string;
+  };
+  return (
+    NETWORK_ERRORS.includes(e?.code ?? "") ||
+    NETWORK_ERRORS.some((code) => e?.message?.includes(code)) ||
+    e?.name === "TimeoutError" ||
+    e?.http_code === 499
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -120,25 +160,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // Upload to Cloudinary using a Promise wrapper
-    const uploadResult = await new Promise((resolve, reject) => {
-      cloudinary.uploader
-        .upload_stream(
-          {
-            folder: "kora_logos",
-            allowed_formats: ["jpg", "png", "jpeg", "webp"],
-            transformation: [{ width: 500, height: 500, crop: "limit" }],
-          },
-          (error, result) => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve(result);
-            }
-          },
-        )
-        .end(buffer);
-    });
+    // A dropped connection to Cloudinary is worth one more try.
+    let uploadResult: unknown;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        uploadResult = await sendToCloudinary(buffer);
+        break;
+      } catch (err) {
+        if (attempt >= 2 || !isNetworkError(err)) throw err;
+        uploadLogger.warn({ err }, "Cloudinary upload dropped; retrying once");
+      }
+    }
 
     return NextResponse.json({
       success: true,

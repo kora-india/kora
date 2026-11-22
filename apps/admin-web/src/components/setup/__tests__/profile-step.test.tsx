@@ -131,12 +131,12 @@ describe("ProfileStep", () => {
         "Use a PNG, JPG or WebP image.",
       ],
       [
-        "a file over 5 MB",
+        "a file over 10 MB",
         () =>
-          new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.png", {
+          new File([new Uint8Array(10 * 1024 * 1024 + 1)], "big.png", {
             type: "image/png",
           }),
-        "The logo can be up to 5 MB.",
+        "The logo can be up to 10 MB.",
       ],
     ])("refuses %s before uploading", async (_, file, message) => {
       const fetchMock = vi.fn();

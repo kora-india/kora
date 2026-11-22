@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  BookOpen,
   Building2,
   Loader2,
   Mail,
@@ -21,6 +20,7 @@ import { FormField, inputCls } from "@/components/ui/form-field";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { AdmissionNumberConfigCard } from "@/components/settings/admission-number-config-card";
 import { ThemeColorCard } from "@/components/settings/theme-color-card";
+import { SchoolLogoEditor } from "@/components/settings/school-logo-editor";
 import { updateSchoolProfile } from "@/lib/actions/settings";
 import type { ThemeColor } from "@schoolos/types";
 
@@ -173,23 +173,13 @@ export function SchoolProfileContent({ school, canEdit }: Readonly<Props>) {
         </form>
       ) : (
         <div>
-          <div className="flex items-center gap-4 pb-5">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-violet-50 dark:bg-violet-950/40">
-              {school.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- uploaded logo on Cloudinary
-                <img
-                  src={school.logoUrl}
-                  alt={`${school.name} logo`}
-                  className="h-full w-full object-contain p-2"
-                />
-              ) : (
-                <BookOpen
-                  className="h-9 w-9 text-violet-600 dark:text-violet-300"
-                  aria-hidden
-                />
-              )}
-            </div>
-            <div className="min-w-0">
+          <div className="flex items-start gap-4 pb-5">
+            <SchoolLogoEditor
+              schoolName={school.name}
+              logoUrl={school.logoUrl}
+              canEdit={canEdit}
+            />
+            <div className="min-w-0 pt-3">
               <p className="text-lg font-semibold leading-tight break-words">
                 {school.name}
               </p>
