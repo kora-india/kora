@@ -27,6 +27,17 @@ import { auth } from "@schoolos/auth";
 import { FULL_ACCESS, ROLE_DEFAULT_PERMISSIONS } from "@schoolos/types";
 
 vi.mock("server-only", () => ({}));
+// Cloudinary's network calls are faked; its signing code is the real one.
+vi.mock("cloudinary", async (importOriginal) => {
+  const real = await importOriginal<typeof import("cloudinary")>();
+  real.v2.api.resource = (async () => ({
+    format: "pdf",
+    bytes: 1000,
+    type: "private",
+  })) as any;
+  real.v2.uploader.destroy = (async () => ({ result: "ok" })) as any;
+  return real;
+});
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
   captureMessage: vi.fn(),
@@ -56,6 +67,7 @@ import * as attendance from "../actions/attendance";
 import * as classes from "../actions/classes";
 import * as exams from "../actions/exams";
 import * as expenses from "../actions/expenses";
+import * as employeeRecords from "../actions/employee-records";
 import * as feeAllocator from "../actions/fee-allocator";
 import * as feeGenerator from "../actions/fee-generator";
 import * as feeHistory from "../actions/fee-history";
@@ -99,6 +111,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   classes,
   exams,
   expenses,
+  "employee-records": employeeRecords,
   "fee-allocator": feeAllocator,
   "fee-generator": feeGenerator,
   "fee-history": feeHistory,
@@ -411,6 +424,51 @@ const CASES: Record<string, Case> = {
   },
 
   // expenses
+  // employee-records
+  "employee-records.getEmployeeRecords": {
+    call: (t) =>
+      employeeRecords.getEmployeeRecords({ type: "teacher", id: t.teacher }),
+  },
+  "employee-records.getEmployeeRecords#staff": {
+    call: (t) =>
+      employeeRecords.getEmployeeRecords({ type: "staff", id: t.staff }),
+  },
+  "employee-records.saveEmployeeDetails": {
+    call: (t) =>
+      employeeRecords.saveEmployeeDetails(
+        { type: "teacher", id: t.teacher },
+        { panNumber: "CCCCC3333C", bankAccountNumber: "001234567890" },
+      ),
+  },
+  "employee-records.saveEmployeeDetails#staff": {
+    call: (t) =>
+      employeeRecords.saveEmployeeDetails(
+        { type: "staff", id: t.staff },
+        { bankIfsc: "HDFC0001234" },
+      ),
+  },
+  "employee-records.startDocumentUpload": {
+    call: (t) =>
+      employeeRecords.startDocumentUpload(
+        { type: "staff", id: t.staff },
+        {
+          kind: "CERTIFICATE",
+          fileName: "degree.pdf",
+          size: 1000,
+          type: "application/pdf",
+        },
+      ),
+  },
+  "employee-records.finishDocumentUpload": {
+    call: (t) => employeeRecords.finishDocumentUpload(t.pendingDocument),
+  },
+  "employee-records.getDocumentLink": {
+    call: (t) => employeeRecords.getDocumentLink(t.document),
+  },
+  "employee-records.deleteDocument": {
+    call: (t) => employeeRecords.deleteDocument(t.document),
+  },
+
   "expenses.createExpenseCategory": {
     call: () => expenses.createExpenseCategory({ name: "Sports" }),
   },
@@ -1344,6 +1402,10 @@ describe("cross-school isolation", () => {
   beforeAll(async () => {
     process.env.RAZORPAY_KEY_SECRET = RAZORPAY_SECRET;
     process.env.CRON_SECRET = "tenant-cron-secret";
+    process.env.CLOUDINARY_CLOUD_NAME = "tenant-cloud";
+    process.env.CLOUDINARY_API_KEY = "tenant-key";
+    process.env.CLOUDINARY_API_SECRET = "tenant-cloud-secret";
+    process.env.DATA_ENCRYPTION_KEY = "tenant-isolation-data-key-32-chars-long";
     A = await seedSchool("A", run, CANARY);
     baselineA = await snapshotSchool(A.school);
     idsA = idsOf(baselineA, A.school);

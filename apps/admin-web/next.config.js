@@ -51,6 +51,8 @@ const nextConfig = {
     "pino",
     "pino-pretty",
     "exceljs",
+    // Server-only (uploads and staff documents); bundling it costs build memory.
+    "cloudinary",
   ],
 
   // In a monorepo, Prisma lives outside the app folder; set tracing root so Vercel

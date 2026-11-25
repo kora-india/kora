@@ -78,6 +78,8 @@ model School {
   subscription                Subscription?
   teachers                    Teacher[]
   staff                       Staff[]
+  employeeDetails             EmployeeDetails[]
+  employeeDocuments           EmployeeDocument[]
   attendanceImports           AttendanceImport[]
   users                       User[]
   expenseCategories           ExpenseCategory[]
@@ -331,6 +333,8 @@ model Teacher {
   assignedSections  TeacherSection[]
   timetableSlots    TimetableSlot[]
   salarySlips       SalarySlip[]
+  details           EmployeeDetails?
+  documents         EmployeeDocument[]
   school            School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -378,9 +382,73 @@ model Staff {
   updatedAt     DateTime  @updatedAt
   school        School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  details       EmployeeDetails?
+  documents     EmployeeDocument[]
 
   @@index([schoolId])
   @@map("staff")
+}
+
+/// A teacher's or a staff member's ID and bank details: one row for one of
+/// them (the database checks it's exactly one). Kept apart from Teacher and
+/// Staff so the lists that load those never load these.
+model EmployeeDetails {
+  id                   String   @id @default(cuid())
+  schoolId             String
+  teacherId            String?  @unique
+  staffId              String?  @unique
+  panNumber            String?
+  /// Encrypted (lib/field-crypto); the last four digits are kept to show.
+  aadhaarEncrypted     String?
+  aadhaarLast4         String?
+  uanNumber            String?
+  bankAccountHolder    String?
+  bankName             String?
+  /// Encrypted (lib/field-crypto); the last four digits are kept to show.
+  bankAccountEncrypted String?
+  bankAccountLast4     String?
+  bankIfsc             String?
+  upiId                String?
+  updatedById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  school               School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher              Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff                Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@map("employee_details")
+}
+
+/// A document kept for a teacher or a staff member (Aadhaar card, marksheet,
+/// certificate…). The file is a private Cloudinary upload, opened only
+/// through short-lived signed links; it's PENDING until the server has
+/// checked what was uploaded.
+model EmployeeDocument {
+  id             String   @id @default(cuid())
+  schoolId       String
+  teacherId      String?
+  staffId        String?
+  /// lib/employee-details DOCUMENT_KINDS
+  kind           String
+  title          String?
+  fileName       String
+  /// pdf, jpg, png or webp, as Cloudinary read the file.
+  format         String?
+  bytes          Int?
+  publicId       String   @unique
+  status         String   @default("PENDING")
+  uploadedById   String?
+  uploadedByName String
+  createdAt      DateTime @default(now())
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  teacher        Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  staff          Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([teacherId])
+  @@index([staffId])
+  @@map("employee_documents")
 }
 
 model Attendance {

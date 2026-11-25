@@ -161,6 +161,55 @@ export async function seedSchool(
   t.staff = staff.id;
   t.helper = helper.id;
 
+  // ID and bank details, and documents (one kept, one still uploading).
+  await prisma.employeeDetails.create({
+    data: {
+      schoolId: id,
+      teacherId: teacher.id,
+      panNumber: tag === "A" ? "AAAAA1111A" : "BBBBB2222B",
+      aadhaarEncrypted: `v1.d.fixture.${tag}.only`,
+      aadhaarLast4: tag === "A" ? "1111" : "2222",
+      bankAccountHolder: label("Account holder"),
+      bankName: label("Bank"),
+      bankAccountLast4: "4321",
+      bankIfsc: "SBIN0001234",
+    },
+  });
+  await prisma.employeeDetails.create({
+    data: { schoolId: id, staffId: staff.id, bankName: label("Staff bank") },
+  });
+  const document = (status: string, n: number) =>
+    prisma.employeeDocument.create({
+      data: {
+        schoolId: id,
+        teacherId: teacher.id,
+        kind: "MARKSHEET",
+        title: label(`Marksheet ${n}`),
+        fileName: `marks-${n}.pdf`,
+        format: "pdf",
+        bytes: 1000,
+        publicId: `kora_documents/${id}/doc-${n}`,
+        status,
+        uploadedById: admin.id,
+        uploadedByName: label("admin"),
+      },
+    });
+  t.document = (await document("READY", 1)).id;
+  t.pendingDocument = (await document("PENDING", 2)).id;
+  await prisma.employeeDocument.create({
+    data: {
+      schoolId: id,
+      staffId: staff.id,
+      kind: "AADHAAR",
+      fileName: "aadhaar.jpg",
+      format: "jpg",
+      bytes: 500,
+      publicId: `kora_documents/${id}/doc-3`,
+      status: "READY",
+      uploadedByName: label("admin"),
+    },
+  });
+
   const student = (n: number, sectionRow = section, classRow = klass) =>
     prisma.student.create({
       data: {

@@ -51,13 +51,19 @@ const FEATURES: Feature[] = [
       "CLOUDINARY_API_KEY",
       "CLOUDINARY_API_SECRET",
     ],
-    effect: "school logos can't be uploaded",
+    effect: "school logos and staff documents can't be uploaded",
   },
   {
     name: "Super admin",
     vars: ["SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD"],
     effect:
       "the super admin login isn't created or updated from the environment",
+  },
+  {
+    name: "Data encryption",
+    vars: ["DATA_ENCRYPTION_KEY"],
+    effect:
+      "staff Aadhaar and bank account numbers are encrypted with a key made from AUTH_SECRET, so changing AUTH_SECRET would make them unreadable",
   },
   {
     name: "AI timetable (Gemini)",
@@ -98,6 +104,11 @@ export function checkEnv(env: Env = process.env) {
   }
   if (env.SMTP_PORT && !/^\d+$/.test(env.SMTP_PORT)) {
     warnings.push("SMTP_PORT must be a number");
+  }
+  if (env.DATA_ENCRYPTION_KEY && env.DATA_ENCRYPTION_KEY.trim().length < 32) {
+    warnings.push(
+      "DATA_ENCRYPTION_KEY is short and isn't used; use at least 32 random characters",
+    );
   }
   if (env.CRON_SECRET && env.CRON_SECRET.length < 16) {
     warnings.push("CRON_SECRET is short; use at least 16 random characters");

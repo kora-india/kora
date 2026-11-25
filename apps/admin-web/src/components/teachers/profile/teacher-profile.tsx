@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   FileText,
+  FolderLock,
   IndianRupee,
   MoreVertical,
   Pencil,
@@ -39,13 +40,15 @@ import { OverviewTab } from "./overview-tab";
 import { ClassesTab } from "./classes-tab";
 import { initials, type ProfileSchool, type ProfileTeacher } from "./types";
 import { describeReleasedAssignments } from "../released-assignments";
+import { EmployeeRecords } from "../employee-records";
 
-const TABS = ["overview", "classes", "payroll"] as const;
+const TABS = ["overview", "classes", "payroll", "documents"] as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABELS: Record<Tab, string> = {
   overview: "Overview",
   classes: "Classes",
   payroll: "Payroll",
+  documents: "Documents & IDs",
 };
 
 interface Props {
@@ -208,6 +211,10 @@ export function TeacherProfile({
                 <IndianRupee className="w-3.5 h-3.5" />
                 <span>View Payroll</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTab("documents")}>
+                <FolderLock className="w-3.5 h-3.5" />
+                <span>Documents &amp; IDs</span>
+              </DropdownMenuItem>
               {teacher.isActive && (
                 <>
                   <DropdownMenuSeparator />
@@ -271,6 +278,12 @@ export function TeacherProfile({
           />
         )}
         {tab === "classes" && <ClassesTab teacher={teacher} />}
+        {tab === "documents" && (
+          <EmployeeRecords
+            owner={{ type: "teacher", id: teacher.id }}
+            name={teacher.name}
+          />
+        )}
         {tab === "payroll" && (
           <PayrollTab
             slips={slips}

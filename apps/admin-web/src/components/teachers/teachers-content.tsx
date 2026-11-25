@@ -21,6 +21,7 @@ import {
   FileText,
   UserX,
   KeyRound,
+  FolderLock,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ import { useRouter } from "next/navigation";
 import { useQueryTab, useQueryState } from "@/hooks/use-query-state";
 import { TeacherDialog } from "./teacher-dialog";
 import { StaffDialog } from "./staff-dialog";
+import { EmployeeRecordsDialog } from "./employee-records";
 import { isAccountant } from "@/lib/staff-occupation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteTeacher } from "@/lib/actions/teachers";
@@ -132,6 +134,10 @@ export function TeachersContent({
     "closed",
   );
   const [editStaff, setEditStaff] = useState<any>(null);
+  const [recordsFor, setRecordsFor] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [deleteStaffTarget, setDeleteStaffTarget] = useState<any>(null);
 
   // Teacher filtering
@@ -390,6 +396,14 @@ export function TeachersContent({
                             <span>View Profile</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/teachers/${t.id}?tab=documents`)
+                            }
+                          >
+                            <FolderLock className="w-3.5 h-3.5" />
+                            <span>Documents &amp; IDs</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => {
                               setEditTeacher(t);
                               setTeacherDialog("edit");
@@ -604,7 +618,7 @@ export function TeachersContent({
                               <MoreVertical className="w-3.5 h-3.5" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuItem
                               onClick={() => {
                                 setEditStaff(s);
@@ -613,6 +627,14 @@ export function TeachersContent({
                             >
                               <Pencil className="w-3.5 h-3.5" />
                               <span>Edit</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setRecordsFor({ id: s.id, name: s.name })
+                              }
+                            >
+                              <FolderLock className="w-3.5 h-3.5" />
+                              <span>Documents &amp; IDs</span>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -752,6 +774,14 @@ export function TeachersContent({
           }
         }}
         staff={editStaff}
+      />
+
+      {/* A staff member's ID, bank details and documents */}
+      <EmployeeRecordsDialog
+        open={recordsFor !== null}
+        onOpenChange={(open) => !open && setRecordsFor(null)}
+        owner={recordsFor ? { type: "staff", id: recordsFor.id } : null}
+        name={recordsFor?.name ?? ""}
       />
 
       {/* Confirm Delete Teacher Modal */}
