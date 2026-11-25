@@ -9,7 +9,16 @@ const nextConfig: NextConfig = {
     "@schoolos/db",
     "@schoolos/auth",
   ],
+  // Prisma stays a Node package (not bundled), and its query engine for
+  // Vercel's Linux is copied into each server function, as in admin-web.
+  // Without this, a pnpm monorepo on Vercel can't find the engine at runtime.
+  serverExternalPackages: ["@prisma/client", ".prisma/client"],
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  outputFileTracingIncludes: {
+    "**": [
+      "../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node",
+    ],
+  },
   experimental: {
     serverActions: { allowedOrigins: ["localhost:3001"] },
   },

@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -45,7 +47,8 @@ export default async function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
-      <body>
+      {/* The same font as the admin app (packages/config tailwind font-sans). */}
+      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans`}>
         {brandStyles && (
           <style dangerouslySetInnerHTML={{ __html: brandStyles }} />
         )}
