@@ -293,7 +293,7 @@ export function DashboardContent({
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Monthly revenue collected vs operational expenses & pending
-                  balances (AntV Area)
+                  balances
                 </p>
               </div>
               <div className="flex items-center gap-3 text-xs font-medium">

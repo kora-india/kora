@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { formatCurrency } from "@schoolos/utils";
 import { Spin } from "antd";
 import { useBrandHex } from "@/components/layout/brand";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 
 // Dynamically import AntV Charts with ssr: false for Next.js
 const Area = dynamic(
@@ -92,6 +93,8 @@ export function AntvRevenueAreaChart({
       fillOpacity: 0.4,
       lineWidth: 2.5,
     },
+    // Both pages that use this chart show their own legend beside it.
+    legend: false,
     interaction: {
       tooltip: true,
     },
@@ -232,10 +235,13 @@ export function AntvPaymentMethodsBarChart({
   if (!mounted) return <ChartLoader />;
 
   const config = {
-    data,
+    // "Bank transfer", not "BANK_TRANSFER".
+    data: data.map((d) => ({ ...d, method: paymentMethodLabel(d.method) })),
     xField: "method",
     yField: "amount",
     colorField: "method",
+    // The method names are already under the bars.
+    legend: false,
     scale: {
       color: {
         range: [
@@ -260,9 +266,13 @@ export function AntvPaymentMethodsBarChart({
     },
     label: {
       text: (d: any) => formatCurrency(Number(d.amount)),
+      // Above the bar: grey text inside a coloured bar couldn't be read.
+      position: "top",
       style: {
         fontSize: 11,
         fill: "#6b7280",
+        textBaseline: "bottom",
+        dy: -4,
       },
     },
     tooltip: {
